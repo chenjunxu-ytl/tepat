@@ -26,6 +26,17 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+if sys.stdout is not None and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if sys.stderr is not None and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if getattr(sys, "frozen", False):  # PyInstaller 打包后的资源路径
     _ROOT = sys._MEIPASS  # noqa: SLF001
@@ -394,44 +405,64 @@ def prpm_fetch(url: str, timeout: float = 15.0) -> str:
 
 def _prpm_definition(page: str) -> str:
     """从 PRPM Cari1 页面提取首条释义（Kamus Dewan/Pelajar 条目文本，
-    截断 300 字）。Anna server._prpm_extract 的精简版：只取 Maklumat
-    Kata 段去标签后的开头。"""
-    m = re.search(r"Maklumat Kata(.{0,6000}?)(?:Juga ditemukan dalam:|<footer|$)",
-                  page, re.DOTALL)
-    if not m:
+    截断 300 字）。仅在真正有条目时提取，不把'Carian kata tiada...'当作释义。"""
+    m_td = re.search(r'class="tdclass"[^>]*>(.*?)</td>', page, re.DOTALL)
+    if not m_td:
         return ""
-    seg = re.sub(r"<[^>]+>", " ", m.group(1))
-    seg = seg.replace("&nbsp;", " ").replace("&amp;", "&")
-    seg = re.sub(r"\s+", " ", seg).strip()
-    return seg[:300]
+    td_text = re.sub(r"<[^>]+>", " ", m_td.group(1))
+    td_text = td_text.replace("&nbsp;", " ").replace("&amp;", "&")
+    td_text = re.sub(r"\s+", " ", td_text).strip()
+    if "Carian kata tiada di dalam kamus terkini" in td_text or "Tiada maklumat" in td_text:
+        return ""
+    if not td_text:
+        return ""
+    m_def = re.search(r"Definisi\s*:\s*(.*)", td_text)
+    if m_def:
+        return m_def.group(1).strip()[:300]
+    return td_text[:300]
 
 
 def prpm_lookup(word: str) -> dict:
     """三态 + 释义: {'status': 'hit'|'miss'|'unreachable', 'definition': str}"""
     cached = cache_get_full(word)
     if cached:
-        return {"word": word, "status": cached["status"],
-                "definition": cached.get("definition") or "",
-                "from_cache": True}
+        # 防御旧缓存坏条目：若记录为 hit 且包含 Carian kata tiada，视为无效重新查询
+        if cached["status"] == "hit" and "Carian kata tiada" in (cached.get("definition") or ""):
+            cached = None
+        else:
+            return {"word": word, "status": cached["status"],
+                    "definition": cached.get("definition") or "",
+                    "from_cache": True}
     with _prpm_lock:
         url = "https://prpm.dbp.gov.my/Cari1?keyword=" + urllib.parse.quote(word)
         try:
             page = prpm_fetch(url)
         except PrpmUnavailable as e:
             return {"word": word, "status": "unreachable", "note": str(e)[:150]}
-        # 存在性判据（对照真实页面 2026-10-01 校准）：
-        # miss 页含 "Tiada maklumat tesaurus/kamus..." 且无源计数；
-        # hit 页有词条正文 + "Juga ditemukan dalam" 源列表。
-        no_result = bool(re.search(r"Tiada maklumat", page))
-        has_sources = "Juga ditemukan" in page
-        hit = has_sources or (not no_result and "Maklumat Kata" in page
-                              and len(page) > 22000)
-        status = "hit" if hit else "miss"
-        definition = _prpm_definition(page) if hit else ""
+        
+        # 存在性精准判据：
+        # 1. Kamus 条目区判断
+        m_td = re.search(r'class="tdclass"[^>]*>(.*?)</td>', page, re.DOTALL)
+        td_text = re.sub(r"<[^>]+>", " ", m_td.group(1)) if m_td else ""
+        td_text = re.sub(r"\s+", " ", td_text).strip()
+        has_no_kamus = ("Carian kata tiada di dalam kamus terkini" in td_text) or \
+                       ("Tiada maklumat" in td_text) or len(td_text) == 0
+
+        # 2. Tesaurus 区判断
+        m_tes = re.search(r'lblTesaurus[^>]*>(.*?)</span>', page, re.DOTALL)
+        tes_text = re.sub(r"<[^>]+>", " ", m_tes.group(1)) if m_tes else ""
+        has_no_tesaurus = ("Tiada maklumat tesaurus" in tes_text) or len(tes_text.strip()) == 0
+
+        # 两边都没有 → 确实无此词条 (miss)
+        has_entry = not (has_no_kamus and has_no_tesaurus)
+        status = "hit" if has_entry else "miss"
+        definition = _prpm_definition(page) if status == "hit" else ""
+
         cache_put(word, status, definition)
         time.sleep(1.0)  # 串行限流：请求间 ≥1s
         return {"word": word, "status": status, "url": url,
                 "definition": definition}
+
 
 
 # ── HTTP ──
@@ -512,7 +543,7 @@ tray_icon = None  # main() 里赋值；/api/health 暴露给 UI 探测
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="tepat — 词存在性高亮")
+    ap = argparse.ArgumentParser(description="tepat - pemeriksa kewujudan kata")
     ap.add_argument("--port", type=int, default=8377)
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--no-tray", action="store_true",
