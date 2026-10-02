@@ -1,0 +1,63 @@
+/* content.css — Tepat UI */
+.bmc-bar {
+  position: fixed; z-index: 2147483646;
+  background: #1f2937; color: #fff; border-radius: 8px;
+  padding: 4px 6px; display: flex; gap: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  transform: translateX(-50%);
+  font: 13px "Segoe UI", system-ui, sans-serif;
+}
+.bmc-bar button { white-space: nowrap; }
+.bmc-b {
+  border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  font: 13px "Segoe UI", system-ui, sans-serif; background: #374151; color: #fff;
+}
+.bmc-b:hover { background: #4b5563; }
+.bmc-b.bmc-check { background: #059669; }
+.bmc-b.bmc-check:hover { background: #047857; }
+
+.bmc-panel {
+  position: fixed; z-index: 2147483647;
+  left: 16px; top: 80px; width: 420px; max-width: calc(100vw - 32px);
+  max-height: 70vh; display: flex; flex-direction: column;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  font: 14px/1.5 "Segoe UI", system-ui, sans-serif; color: #111;
+}
+.bmc-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid #e5e7eb;
+  font-weight: 600; background: #f9fafb; border-radius: 12px 12px 0 0;
+}
+.bmc-x { border: none; background: none; cursor: pointer; font-size: 15px; color: #6b7280; }
+.bmc-body { padding: 12px 14px; overflow-y: auto; }
+.bmc-loading, .bmc-clean { color: #6b7280; padding: 8px 0; }
+.bmc-err { color: #b91c1c; padding: 8px 0; }
+.bmc-body h4 { margin: 12px 0 4px; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+.bmc-item {
+  padding: 6px 8px; border-radius: 8px; margin: 3px 0; border: 1px solid transparent;
+}
+.bmc-item.deep  { background: #fee2e2; border-color: #fecaca; }
+.bmc-item.mid   { background: #ffedd5; border-color: #fed7aa; }
+.bmc-item.low   { background: #fef9c3; border-color: #fde68a; }
+.bmc-def { margin-top: 4px; font-size: 12px; color: #374151; font-style: italic; }
+.bmc-kamus {
+  border: 1px solid #d1d5db; background: #fff; border-radius: 6px;
+  padding: 1px 8px; cursor: pointer; font-size: 12px; margin-left: 6px;
+}
+.bmc-kamus:hover { background: #f3f4f6; }
+.bmc-k-hit   { color: #166534; font-weight: 600; margin-left: 6px; }
+.bmc-k-miss  { color: #991b1b; font-weight: 600; margin-left: 6px; }
+.bmc-k-unreach { color: #52525b; margin-left: 6px; }
+.bmc-foot { margin-top: 10px; font-size: 11px; color: #9ca3af; }
+.bmc-raise-form label { display: block; margin: 8px 0; font-size: 13px; color: #374151; }
+.bmc-sel {
+  background: #f3f4f6; border-radius: 6px; padding: 8px; margin-top: 4px;
+  font: 13px/1.5 Consolas, monospace; max-height: 100px; overflow-y: auto;
+}
+.bmc-raise-form select, .bmc-raise-form textarea {
+  width: 100%; margin-top: 4px; padding: 6px; border: 1px solid #d1d5db;
+  border-radius: 6px; font: 13px "Segoe UI", system-ui, sans-serif;
+}
+.bmc-row { display: flex; gap: 8px; margin-top: 10px; }
+.bmc-msg { color: #059669; font-size: 13px; margin-top: 6px; }

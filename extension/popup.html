@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px "Segoe UI", system-ui, sans-serif; width: 280px; margin: 0; padding: 12px; }
+  h3 { margin: 0 0 8px; font-size: 14px; }
+  .row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
+  .muted { color: #6b7280; font-size: 12px; }
+  #status { font-size: 12px; margin-top: 10px; }
+  .ok { color: #059669; } .bad { color: #b91c1c; }
+  button { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; background: #f9fafb; }
+  button:hover { background: #f3f4f6; }
+  #export[disabled] { opacity: .5; cursor: default; }
+  .hint { margin-top: 10px; font-size: 11px; color: #9ca3af; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h3>Tepat</h3>
+<div class="row">
+  <span>PRPM 词典查询</span>
+  <input type="checkbox" id="prpm">
+</div>
+<div class="row">
+  <span>日志条数: <b id="nlog">0</b></span>
+</div>
+<div class="row">
+  <button id="export">导出日志 JSON</button>
+  <button id="clear">清空</button>
+</div>
+<div id="status"></div>
+<p class="hint">选中网页文字 → 浮条「Semak / Raise Error」<br>快捷键 Ctrl+Shift+B 检查当前选区。<br>需要 Tepat.exe 在本机运行。</p>
+<script>
+const API = 'http://127.0.0.1:8377';
+const $ = (s) => document.querySelector(s);
+
+chrome.storage.sync.get({ prpmEnabled: true }, (s) => { $('#prpm').checked = s.prpmEnabled; });
+$('#prpm').onchange = () => chrome.storage.sync.set({ prpmEnabled: $('#prpm').checked });
+
+function refreshN() {
+  chrome.storage.local.get({ log: [] }, (s) => { $('#nlog').textContent = s.log.length; $('#export').disabled = !s.log.length; });
+}
+refreshN();
+
+$('#export').onclick = () => {
+  chrome.storage.local.get({ log: [] }, (s) => {
+    const blob = new Blob([JSON.stringify(s.log, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `bm-checker-log-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+};
+$('#clear').onclick = () => {
+  if (confirm('清空全部已 raise 的日志？')) { chrome.storage.local.set({ log: [] }, refreshN); }
+};
+
+// exe 存活探测
+fetch(API + '/api/health').then(r => r.json()).then(h => {
+  $('#status').innerHTML = `<span class="ok">✓ exe 在运行（${h.words.toLocaleString()} 词）</span>`;
+}).catch(() => {
+  $('#status').innerHTML = '<span class="bad">✗ Tepat.exe 未运行</span>';
+});
+</script>
+</body>
+</html>

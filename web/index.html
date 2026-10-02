@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<title>PRPM Checker — Penyemak Kewujudan Kata</title>
+<style>
+  :root {
+    --bg: #fafafa; --panel: #fff; --border: #ddd;
+    --red: #fee2e2; --red-border: #dc2626; --red-text: #991b1b;
+    --yellow: #fef9c3; --yellow-border: #ca8a04; --yellow-text: #854d0e;
+    --gray: #e5e7eb; --gray-border: #9ca3af; --gray-text: #4b5563;
+    --spell: #fee2e2; --spell-border: #b91c1c; --spell-text: #7f1d1d;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; background: var(--bg); color: #111; }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 20px;
+           display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 16px; margin: 0; }
+  #status { font-size: 12px; color: #666; }
+  #status.err { color: var(--red-border); font-weight: 600; }
+  main { max-width: 900px; margin: 20px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
+  #input { width: 100%; height: 180px; padding: 12px; font: 14px/1.6 Consolas, monospace;
+           border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+  #controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { padding: 8px 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+           cursor: pointer; font-size: 14px; }
+  button:hover { background: #f0f0f0; }
+  #legend { font-size: 12px; color: #555; display: flex; gap: 14px; flex-wrap: wrap; }
+  mark { padding: 0 3px; border-radius: 4px; cursor: pointer; border-bottom: 2px solid; }
+  mark.m-spelling { background: var(--spell); border-color: var(--spell-border); color: var(--spell-text); }
+  mark.m-cold { background: var(--red); border-color: var(--red-border); color: var(--red-text); }
+  mark.m-dicthit { background: var(--yellow); border-color: var(--yellow-border); color: var(--yellow-text); }
+  mark.m-miss { background: var(--red); border-color: var(--red-border); color: var(--red-text); }
+  mark.m-unverified { background: var(--gray); border-color: var(--gray-border); color: var(--gray-text); }
+  mark.checked-pending { opacity: 0.6; }
+  #output { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 16px; min-height: 120px; line-height: 1.9; font-size: 15px; white-space: pre-wrap; }
+  #output .placeholder { color: #999; }
+  #tip { font-size: 12px; color: #666; }
+  .kw { font-size: 11px; font-weight: 600; margin-left: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PRPM Checker</h1>
+  <span id="status">memuatkan…</span>
+  <span id="legend">
+    <span><mark class="m-spelling">ejaan salah</mark> cadangan ada</span>
+    <span><mark class="m-cold">kata tidak dikenali</mark></span>
+    <span><mark class="m-dicthit">kamus ada</mark></span>
+    <span><mark class="m-miss">tiada entri</mark></span>
+    <span><mark class="m-unverified">tak disahkan</mark></span>
+  </span>
+</header>
+<main>
+  <textarea id="input" placeholder="Tampal teks di sini, kemudian tekan Semak…"></textarea>
+  <div id="controls">
+    <button id="btn-check">Semak</button>
+    <button id="btn-clear">Kosongkan</button>
+    <label><input type="checkbox" id="auto-prpm" checked> semak PRPM automatik</label>
+    <span id="tip">Klik perkataan yang ditanda untuk semak PRPM.</span>
+  </div>
+  <div id="output"><span class="placeholder">Hasil akan muncul di sini.</span></div>
+  <div id="sentences" style="display:none">
+    <h3 style="font-size:13px;color:#555;margin:4px 0">Ketumpatan jahatan sejuk (per ayat)</h3>
+    <div id="sent-list" style="display:flex;flex-direction:column;gap:4px"></div>
+  </div>
+</main>
+<script>
+const API = location.origin;
+const statusEl = document.getElementById('status');
+const inputEl = document.getElementById('input');
+const outEl = document.getElementById('output');
+let prpmState = {};  // word -> {status, pending}
+let lastWords = [];
+
+fetch(API + '/api/health').then(r => r.json()).then(h => {
+  statusEl.textContent = h.words.toLocaleString() + ' kata dalam korpus';
+}).catch(() => { statusEl.textContent = 'server tiada'; statusEl.className = 'err'; });
+
+function clsFor(w) {
+  const st = prpmState[w];
+  if (!st) return w._suggestion ? 'm-spelling' : 'm-cold';
+  if (st.pending) return 'm-cold checked-pending';
+  return {hit: 'm-dicthit', miss: 'm-miss', unreachable: 'm-unverified'}[st.status] || 'm-cold';
+}
+
+function render() {
+  if (!lastWords.length) { outEl.innerHTML = '<span class="placeholder">Hasil akan muncul di sini.</span>'; return; }
+  const frag = document.createDocumentFragment();
+  for (const tok of lastWords) {
+    if (tok.mark) {
+      const m = document.createElement('mark');
+      m.className = clsFor(tok);
+      m.textContent = tok.text;
+      const st = prpmState[tok.word];
+      if (st && !st.pending && st.status === 'hit') m.appendChild(Object.assign(document.createElement('span'), {className: 'kw', textContent: '✓K'}));
+      if (st && !st.pending && st.status === 'miss') m.appendChild(Object.assign(document.createElement('span'), {className: 'kw', textContent: '✗K'}));
+      if (st && !st.pending && st.status === 'unreachable') m.appendChild(Object.assign(document.createElement('span'), {className: 'kw', textContent: '?'}));
+      if (tok.suggestion) m.title = 'Cadangan: ' + tok.suggestion;
+      m.onclick = () => checkPrpm(tok.word, true);
+      frag.appendChild(m);
+    } else {
+      frag.appendChild(document.createTextNode(tok.text));
+    }
+  }
+  outEl.innerHTML = '';
+  outEl.appendChild(frag);
+}
+
+async function doScan() {
+  const text = inputEl.value;
+  if (!text.trim()) return;
+  prpmState = {};
+  const res = await fetch(API + '/api/scan', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text})
+  }).then(r => r.json()).catch(() => null);
+  if (!res) { statusEl.textContent = 'scan gagal'; statusEl.className = 'err'; return; }
+
+  // tokenize identically to server WORD_RE, build token stream over raw text
+  const re = /[a-zà-öø-ÿā-žʼ'-]+/gi;
+  const flagged = new Map(res.cold_words.map(c => [c.word, c]));
+  lastWords = [];
+  let idx = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[0];
+    const w = raw.toLowerCase().replace(/^[-']+|[-']+$/g, '');
+    if (m.index > idx) lastWords.push({text: text.slice(idx, m.index), mark: false});
+    const f = flagged.get(w);
+    if (f) lastWords.push({text: raw, mark: true, word: w, suggestion: f.suggestion});
+    else lastWords.push({text: raw, mark: false});
+    idx = m.index + raw.length;
+  }
+  if (idx < text.length) lastWords.push({text: text.slice(idx), mark: false});
+  render();
+  renderSentences(res.sentences);
+
+  if (document.getElementById('auto-prpm').checked) {
+    const uniq = [...new Set(res.cold_words.filter(c => c.reason === 'cold').map(c => c.word))];
+    // serial queue, no flood
+    for (const w of uniq.slice(0, 20)) await checkPrpm(w, false);
+  }
+}
+
+async function checkPrpm(word, force) {
+  const st = prpmState[word];
+  if (st && st.pending) return;
+  if (st && !force && !st.pending) return;
+  prpmState[word] = {pending: true};
+  render();
+  try {
+    const r = await fetch(API + '/api/prpm', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({word})
+    }).then(r => r.json());
+    prpmState[word] = {status: r.status};
+  } catch {
+    prpmState[word] = {status: 'unreachable'};
+  }
+  render();
+}
+
+document.getElementById('btn-check').onclick = doScan;
+document.getElementById('btn-clear').onclick = () => { inputEl.value = ''; lastWords = []; prpmState = {}; render(); renderSentences([]); };
+
+// sentence cold-seam density rendering
+function renderSentences(sents) {
+  const box = document.getElementById('sentences');
+  const list = document.getElementById('sent-list');
+  if (!sents || !sents.length) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  list.innerHTML = '';
+  for (const s of sents) {
+    const div = document.createElement('div');
+    const bar = document.createElement('div');
+    const density = s.density;
+    const color = density >= 0.4 ? '#dc2626' : density >= 0.2 ? '#ca8a04' : '#16a34a';
+    bar.style.cssText = `height:8px;width:${Math.round(density*100)}%;background:${color};border-radius:4px;margin-top:2px`;
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:11px;color:#555;margin-top:2px';
+    label.textContent = `A${s.idx}: ${s.cold_seams}/${s.total_seams} jahatan sejuk (${Math.round(density*100)}%) — ${s.text.slice(0,80)}`;
+    div.appendChild(bar); div.appendChild(label);
+    list.appendChild(div);
+  }
+}
+
+// in doScan, after render(): renderSentences(res.sentences)
+
+// 方案2: double-click any word (highlighted or not) → full check (corpus + PRPM)
+outEl.ondblclick = async (ev) => {
+  const sel = window.getSelection();
+  const word = (sel ? sel.toString() : '').trim().toLowerCase().replace(/^[-']+|[-']+$/g, '');
+  if (!word || /\s/.test(word)) return;
+  const tipEl = document.getElementById('tip');
+  tipEl.textContent = `“${word}” — menyemak…`;
+  try {
+    const r = await fetch(API + '/api/check', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({word})
+    }).then(r => r.json());
+    let msg = `“${word}”: `;
+    if (r.in_corpus) msg += 'dikenali (dalam senarai kata)';
+    else if (r.prpm) msg += {hit: 'tidak dikenali, tetapi ADA dalam kamus PRPM',
+                             miss: 'tidak dikenali & TIADA dalam kamus PRPM',
+                             unreachable: 'PRPM tak dapat dihubungi — belum disahkan'}[r.prpm.status] || '?';
+    tipEl.textContent = msg;
+  } catch { tipEl.textContent = 'semakan gagal'; }
+};
+</script>
+</body>
+</html>

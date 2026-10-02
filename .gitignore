@@ -1,0 +1,25 @@
+# build artifacts
+dist/
+build/
+__pycache__/
+*.spec
+prpm-checker.spec
+
+# large data files (regenerable; shipped in the release zip instead)
+words.txt
+bigrams.txt.xz
+
+# session/debug scripts
+_*.ps1
+traycheck.ps1
+traytest.py
+exe_icon_check.png
+
+# env & secrets — never push
+.env
+.env.*
+*.env
+
+# OneDrive / OS noise
+~$*
+desktop.ini
