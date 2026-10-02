@@ -26,11 +26,13 @@ def digest(path):
 
 def archive(path, entries, *, evidence_digest=None):
     staging = path.with_suffix('.zip.part')
+    print(f'Packing {path.name}', flush=True)
     with zipfile.ZipFile(staging, 'x', compression=zipfile.ZIP_DEFLATED,
                          compresslevel=3, allowZip64=True) as bundle:
         for source, name in entries:
             size = source.stat().st_size
-            print(f'Packing {name} ({size:,} bytes)', flush=True)
+            if size > 100_000_000:
+                print(f'  {name}: {size:,} bytes', flush=True)
             with source.open('rb') as incoming, bundle.open(name, 'w', force_zip64=True) as outgoing:
                 copied = 0
                 next_report = size / 4
@@ -59,7 +61,7 @@ def prepare(app_dir, output):
     if git(BASE, 'status', '--porcelain'):
         raise ValueError('Commit checker changes before preparing a release')
     puzzle = BASE.parent / 'puzzle'
-    if git(puzzle, 'status', '--porcelain', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json'):
+    if git(puzzle, 'status', '--porcelain', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json'):
         raise ValueError('Commit the corpus tools and policy sources first')
     extension = json.loads((BASE / 'extension/manifest.json').read_text(encoding='utf-8'))
     if extension.get('version_name') != TAG.removeprefix('v'):
@@ -110,7 +112,7 @@ def prepare(app_dir, output):
 
     extension_files = git(BASE, 'ls-files', '--', 'extension').splitlines()
     archive(output / f'tepat-{TAG}-chrome.zip', [(BASE / name, name) for name in extension_files] + documents)
-    corpus_files = git(puzzle, 'ls-files', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json').splitlines()
+    corpus_files = git(puzzle, 'ls-files', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json').splitlines()
     archive(output / f'tepat-{TAG}-corpus-tools.zip', [(puzzle / name, 'puzzle/' + name) for name in corpus_files] + documents)
 
     assets = sorted(path for path in output.iterdir() if path.is_file())
