@@ -20,7 +20,7 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
       id: 'bmc-check',
       parentId: 'bmc-root',
-      title: '✓ Semak kewujudan kata (korpus)',
+      title: '✓ Semak bahasa (bukti + peraturan)',
       contexts: ['selection']
     });
     chrome.contextMenus.create({
@@ -43,9 +43,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// ── 快捷键 Ctrl+Shift+B：检查当前选区 ──
+// ── 快捷键触发（chrome.commands）──
 chrome.commands.onCommand.addListener(async (cmd) => {
   if (cmd !== 'check-selection') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) chrome.tabs.sendMessage(tab.id, { type: 'check-selection' }).catch(() => {});
+  if (!tab?.id || !tab.url) return;
+  if (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) return;
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: 'check-selection' });
+  } catch {
+    // 若页面打开时间较早未加载新 content.js，动态注入兜底
+    try {
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content.css'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['results.js', 'content.js'] });
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tab.id, { type: 'check-selection' }).catch(() => {});
+      }, 100);
+    } catch {}
+  }
 });

@@ -1,70 +1,129 @@
-# Tepat — Pemeriksa Kewujudan Kata Bahasa Melayu
+# Tepat v2 — source-aware Malay checker
 
-马来语词存在性检查器：**把可疑的词高亮出来让人调查，不替人下结论**。
+Current release: **2.0.0-preview.1**, for evaluation. Grammar coverage is limited
+and contextual reminders still need human review. See [release notes](RELEASE_NOTES.md)
+and the [portable installation guide](INSTALL.md).
 
-逻辑源自 AnnAgent 的 mech_flags 机械层（零频词检测 + ms/id 后缀规则 + 词缀剥离），
-外包成独立桌面工具：`tepat.exe`（本地服务）+ Chrome 扩展（右键检查）。
+Local Python service + Chrome extension. Highlights investigateable spelling,
+terminology/register and grammar signals, with source evidence. Manual rules run
+independently of dictionary and corpus matches. No automatic replacement.
 
-## 组成
+## Run
 
-```
-tepat.exe（双击即用，~48MB 单文件）
- ├─ 848k 本地词表（puzzle 语料 words 表）
- ├─ 5.2M bigram 表（句子冷密度，c≥2）
- ├─ 17 条语法规则正则（Anna rule_book 同源）+ 329 条错误搭配 blacklist
- ├─ PRPM 在线词典查询（本地 sqlite 缓存 + 1 词/秒限流）
- └─ 系统托盘（左键/右键菜单：Buka UI / Keluar）
+From this directory:
 
-extension/（Chrome 扩展，可选）
- └─ 选中文字 → 右键 → Tepat 菜单：
-     📖 Semak PRPM / ✓ Semak kewujudan kata / ✗ Raise Error
-     raise 的错误存本地日志，popup 可导出 JSON
+```powershell
+python server.py
 ```
 
-## 使用
+Open http://127.0.0.1:8377. For Chrome, reload `extension/` as an unpacked extension,
+then refresh the target page. Select text and use **Semak bahasa**, or use Alt+S.
+The extension can scan the first 30,000 UTF-16 units of page text, with exact
+occurrence highlights. The standalone page supports formal/informal register.
+The service must be running; if an old Tepat owns port 8377, close it first.
 
-1. 双击 `tepat.exe` → 托盘出现图标（服务在 127.0.0.1:8377）
-2. 右键托盘 → **Buka UI** → 网页版检查器（贴文本检查）
-3. 或安装 Chrome 扩展（`chrome://extensions` → Load unpacked → 选 `extension/`），
-   在任意网页选中马来文右键检查
-4. **Keluar** 完全退出
+## Evidence build
 
-单实例：已在运行时再次双击不会产生第二个实例/托盘。
-
-## 检查层级（置信度浅→深）
-
-| 层 | 判据 | 标记 |
-|---|---|---|
-| blacklist bigram | 人工确认的错误搭配 | 🔴 深 |
-| 语法规则 high | 结构性错误（双 pemeri、yang mana） | 🔴 深 |
-| ms/id 后缀规律 | mengerahken→mengerahkan 型 | 🔴 深+建议 |
-| 零频词 | 语料 848k 词表查无 | 🟠 中 → 可选 PRPM 三态 |
-| 语法规则 medium/low | 上下文相关/宽网提醒 | 🟠/🟡 |
-| 句子冷密度 | bigram 支持率 <40% 的句子 | 🟡 浅 |
-
-PRPM 三态语义：✓ 词典有 / ✗ 无词条 / ? 不可达（**未验证 ≠ 拼错**）。
-
-## 已知边界
-
-- 只查"词是否存在"，不查"用得对不对"（deraf 型真词误用不在能力范围）
-- 语料含英语词（BM 现实文本夹英文是常态，策略是放行）
-- Hansard 议会语料的 OCR 错词经编辑距离过滤，长尾残留已知
-- PRPM 查询需要网络；离线时词表层照常工作
-
-## 构建
-
-```
-build.bat        # PyInstaller onefile + 词表/bigram/规则/图标
+```powershell
+python sync_indo.py
+python build_evidence.py --review-root ../puzzle/corpus/clean-review/20261002-v3
 ```
 
-词表再生成：`puzzle/ngrams2.db` 的 `words` 表导出（见 AnnAgent 主仓）。
+Builds `data/evidence.sqlite` atomically through `evidence.building.sqlite`.
+Incomplete builds cannot be loaded. A failed build leaves staging for inspection;
+choose a new output or inspect/remove only that staging file before retrying.
+Raw data, legacy `puzzle/ngrams2.db`, `words.txt` and `bigrams.txt.xz` are preserved.
 
-## 数据与规则维护
+- DBP: 26,915 identity-supported headword candidates, dictionary definitions as
+  reference, 1,029 candidate example records.
+- TD: 865 positive example records; negative/starred examples never enter counts.
+  Explanation references can be searched locally.
+- Bench: only 39 approved nonempty training correction responses. Original
+  responses and holdout never enter counts. A response can contain many sentences.
+- Wiki: 2,324,200 structurally cleaned sentence candidates; language/grammar are
+  unverified. Supplemental evidence remains distinct from DBP/TD/Bench.
+- Hansard: retained by the cleaning pipeline for reference; excluded from this
+  runtime evidence index.
 
-- `rules.json` — 语法规则/后缀映射/词缀表（**外置热改**：改完重启 exe 生效，无需重打包）
-- `blacklist.json` — 错误搭配表（同上）
-- 印尼特有词黑名单与用户 raise 闭环见 AnnAgent 主仓 `puzzle/indo_blacklist.md`
+The builder stores unigram, bigram and trigram occurrence/document counts,
+including single occurrences and function words, and an example with provenance.
+Exact repeated sentences are deduplicated within a source. N-grams never cross
+sentence, punctuation, unsupported-script, number or document boundaries.
+Dictionary attestation, corpus observation and unknown forms are distinct states.
+A known root is a clue requiring morphology review, never automatic proof that
+an arbitrary derived form is grammatical.
 
-## License
+## Rules and Indonesian candidates
 
-内部工具。PRPM 词典数据来源：DBP（prpm.dbp.gov.my），仅作查询引用。
+`rules.json` stays editable. Each rule has a unique `entry_id`, a rule-book `id`,
+category, register, regex, confidence, source and optional exception patterns.
+Bad regex/shape entries are skipped and reported. Add `examples.trigger` and
+`examples.clear` when extending a rule. Existing context-dependent regex matches
+are reminders, not universal grammar verdicts. Adjacent repeated pemeri is the
+remaining narrow high-confidence pattern.
+Low-confidence manual reminders and sentence usage-density clues remain in the
+results panel without inline highlights; actionable rules still mark exact spans.
+
+`puzzle/indo_blacklist.md` and its JSON companion are the maintained source;
+`sync_indo.py` checks agreement and produces `indo_words.json` for distribution.
+Current policy: 293 Indonesian candidates, 56 uncertain forms, nine shared Malay
+SMS abbreviations, five ambiguous chat/unit forms. Candidates retain the original
+research status; they have not all been freshly normatively verified. Shared
+abbreviations are classified using DBP's SMS guide:
+https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf
+
+Indonesian candidates run independently, even if they exist in Wiki or the old
+wordlist. Two-letter/digit forms are supported. Formal SMS reminders differ from
+Indonesian reminders; title case and punctuation protect `Dr.`. Suggested
+counterparts require local DBP attestation and are never applied automatically.
+The old automatically derived `blacklist.json` is preserved as a historical
+artifact, but is not loaded by the checker or distributed in new builds. Its
+generator marked all original bigrams when a correction changed the token count,
+including combinations preserved verbatim in the corrected sentence. Even a
+changed combination cannot establish a context-free grammar rule. Validated
+patterns belong in the independently maintained rules, with trigger/clear examples.
+
+## Checking scope
+
+Every result reports spelling/terminology/grammar coverage and `factuality:
+not_checked`. A low-frequency combination or absent dictionary entry is an
+investigation clue. No result certifies the whole sentence as correct.
+
+This version uses local contextual evidence and manual rules. It does not run a
+semantic language model or an autonomous web research agent. **Bukti tempatan**
+retrieves DBP definitions/examples and TD references. **PRPM** performs a manual
+online lookup; **Cari sumber** opens a Google search when clicked. Network/layout
+failures remain unverified. Explicit dictionary misses are not spelling verdicts.
+Legacy PRPM cache entries are invalidated; new hits expire after 30 days and misses
+after one day.
+
+## Validation and package
+
+```powershell
+python -m unittest test_evidence test_checker -v
+node test_results.js
+.\build.bat
+```
+
+The portable app is `dist/tepat-v2/tepat-v2.exe`. Keep its entire folder together;
+the database is intentionally outside the binary. External copies of rules and
+word policy beside the exe override bundled copies; restart after editing.
+Do not use the old `tepat.spec` for this version.
+
+After committing both the checker and its sibling corpus-cleaning repository,
+prepare the portable app, Chrome extension, corpus tools and checksums with:
+
+```powershell
+python prepare_release.py
+```
+
+The output is under `releases/v2.0.0-preview.1/`. Preparation reads the existing
+completed database and verifies Zip64 archives; it does not rebuild evidence or
+publish to GitHub. The app archive includes the database and the entire runtime.
+
+Tests cover source counts, deduplication, prohibited negative/holdout ingestion,
+function words, single occurrence support, independent rule/Indonesian matching,
+short/digit forms, register/title contexts, Unicode offsets, span overlaps, API
+failure states, and PRPM parsing/cache failures. They verify engineering behavior,
+not comprehensive linguistic accuracy. Long-distance meaning, rare correct forms,
+uncaught Indonesian forms, new terminology and factual claims remain limitations.

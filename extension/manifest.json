@@ -1,16 +1,34 @@
 {
   "manifest_version": 3,
   "name": "Tepat — Pemeriksa Bahasa Melayu",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "version_name": "2.0.0-preview.1",
   "description": "Sorot perkataan/struktur mencurigakan dalam Bahasa Melayu. Semakan kewujudan kata + PRPM + peraturan tatabahasa. Perlu Tepat.exe berjalan di localhost.",
-  "permissions": ["storage", "activeTab", "contextMenus"],
-  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "results.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -31,8 +49,18 @@
     "128": "icons/icon128.png"
   },
   "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S"
+      },
+      "description": "Buka menu Tepat"
+    },
     "check-selection": {
-      "suggested_key": { "default": "Ctrl+Shift+B" },
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
       "description": "Semak teks yang dipilih"
     }
   }

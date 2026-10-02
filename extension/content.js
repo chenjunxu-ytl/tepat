@@ -22,7 +22,31 @@
   let panel = null;
   let currentMode = 'prpm'; // 'prpm' | 'check' | 'raise'
   let isPinned = false;
+  let isAutoGrab = false;
+  let lastGrabbedText = '';
   let outsideClickListener = null;
+
+  // 划词自动送入：当 isAutoGrab 激活且弹窗处于打开状态时，用户在页面上选中文本即自动送入并查询
+  document.addEventListener('mouseup', () => {
+    if (!isAutoGrab || !panel) return;
+    setTimeout(() => {
+      const sel = getPageSelection();
+      if (!sel || sel.length < 2 || sel === lastGrabbedText) return;
+      lastGrabbedText = sel;
+      const input = panel.querySelector('.bmc-search-input');
+      if (input) input.value = sel;
+      const btnGrab = panel.querySelector('.bmc-grab-btn');
+      if (btnGrab) {
+        btnGrab.classList.add('bmc-btn-pop');
+        setTimeout(() => btnGrab.classList.remove('bmc-btn-pop'), 300);
+      }
+      if (currentMode === 'check' || sel.includes(' ') || sel.length > 25) {
+        runCheck(sel, false);
+      } else {
+        runPrpm(sel, false);
+      }
+    }, 10);
+  });
 
   function removeUI() {
     if (outsideClickListener) {
@@ -32,11 +56,37 @@
     panel?.remove();
     panel = null;
     isPinned = false;
+    lastGrabbedText = '';
   }
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') removeUI();
-  });
+  // 页面内快捷键 Alt+S（使用捕获阶段 capture: true，防止被网页框架拦截）
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      removeUI();
+      return;
+    }
+    const isAltS = (e.altKey && !e.ctrlKey && !e.metaKey) &&
+      (e.key === 's' || e.key === 'S' || e.code === 'KeyS');
+
+    if (isAltS) {
+      e.preventDefault();
+      e.stopPropagation();
+      const sel = getPageSelection();
+      if (sel && sel.length >= 2) {
+        if (sel.includes(' ') || sel.length > 25) {
+          runCheck(sel);
+        } else {
+          runPrpm(sel);
+        }
+      } else {
+        if (panel) {
+          removeUI();
+        } else {
+          openBlankPanel();
+        }
+      }
+    }
+  }, true);
 
   // ── 点击弹窗外部关闭 ──
   function attachOutsideClick() {
@@ -56,6 +106,13 @@
     }, 80);
   }
 
+  // 净化文本：去除不可见软连字符、零宽空格、BOM 等干扰字符
+  function sanitizeText(s) {
+    return String(s ?? '')
+      .replace(/[\u00AD\u200B-\u200D\uFEFF]/g, '')
+      .trim();
+  }
+
   // 获取当前页面选区（支持网页普通文本与 input/textarea 选区）
   function getPageSelection() {
     let sel = window.getSelection()?.toString() || '';
@@ -69,7 +126,7 @@
         }
       }
     }
-    return sel.trim();
+    return sanitizeText(sel);
   }
 
   // ── 拖拽移动 ──
@@ -174,26 +231,31 @@
       btnPin.title = isPinned ? 'Nyahsemat tetingkap (klik luar untuk tutup)' : 'Sematkan tetingkap (jangan tutup bila klik luar)';
     };
 
+    if (isAutoGrab) {
+      btnGrab.classList.add('bmc-grab-active');
+      btnGrab.title = 'Mod auto-ambil AKTIF (pilih teks di laman untuk semak terus). Klik untuk matikan.';
+    }
+
     btnGrab.onclick = () => {
-      const sel = getPageSelection();
-      if (sel) {
-        input.value = sel;
-        btnGrab.classList.add('bmc-btn-pop');
-        setTimeout(() => btnGrab.classList.remove('bmc-btn-pop'), 300);
-        if (currentMode === 'check' || sel.includes(' ')) {
-          runCheck(sel, false);
-        } else {
-          runPrpm(sel, false);
+      isAutoGrab = !isAutoGrab;
+      btnGrab.classList.toggle('bmc-grab-active', isAutoGrab);
+      btnGrab.classList.add('bmc-btn-pop');
+      setTimeout(() => btnGrab.classList.remove('bmc-btn-pop'), 300);
+
+      if (isAutoGrab) {
+        btnGrab.title = 'Mod auto-ambil AKTIF (pilih teks di laman untuk semak terus). Klik untuk matikan.';
+        const sel = getPageSelection();
+        if (sel && sel.length >= 2) {
+          lastGrabbedText = sel;
+          input.value = sel;
+          if (currentMode === 'check' || sel.includes(' ') || sel.length > 25) {
+            runCheck(sel, false);
+          } else {
+            runPrpm(sel, false);
+          }
         }
       } else {
-        btnGrab.classList.add('bmc-btn-shake');
-        setTimeout(() => btnGrab.classList.remove('bmc-btn-shake'), 400);
-        const origPlaceholder = input.placeholder;
-        input.placeholder = 'Sila pilih teks di laman dahulu!';
-        input.focus();
-        setTimeout(() => {
-          if (input) input.placeholder = origPlaceholder;
-        }, 1800);
+        btnGrab.title = 'Aktifkan mod auto-ambil teks (pilih teks terus dihantar ke sini)';
       }
     };
 
@@ -223,7 +285,8 @@
     btnPrpm.onclick = triggerPrpm;
     btnScan.onclick = triggerScan;
 
-    // 默认放在右上
+    // 默认放在右上并强制最高 z-index 防覆盖
+    panel.style.setProperty('z-index', '2147483647', 'important');
     panel.style.right = '20px';
     panel.style.top = '80px';
     panel.style.left = 'auto';
@@ -232,6 +295,23 @@
     setupDraggable(panel.querySelector('.bmc-head'), panel);
     attachOutsideClick();
 
+    return panel;
+  }
+
+  function openBlankPanel() {
+    panel = mkPanel('Tepat — Semakan', '', 'prpm');
+    const b = panelBody();
+    if (b) {
+      b.innerHTML = `
+        <div class="bmc-item" style="text-align:center;padding:16px 12px;color:#64748b;">
+          <div style="font-size:22px;margin-bottom:6px;">📖</div>
+          <div style="font-weight:600;color:#1e293b;margin-bottom:4px;">Taip perkataan atau ayat di atas</div>
+          <div style="font-size:12px;">Tekan <b>PRPM</b> untuk semak kamus atau <b>Semak</b> untuk tatabahasa.</div>
+        </div>
+      `;
+    }
+    const input = panel.querySelector('.bmc-search-input');
+    if (input) setTimeout(() => input.focus(), 60);
     return panel;
   }
 
@@ -254,19 +334,29 @@
 
   // ── PRPM 检索浮层 ──
   async function runPrpm(text, shouldCreatePanel = true) {
-    const rawWords = text.toLowerCase().split(/[^\p{L}'-]+/u)
-      .map(w => w.trim())
+    const cleanText = sanitizeText(text);
+    let rawWords = cleanText.toLowerCase().split(/[^\p{L}'-]+/u)
+      .map(w => w.trim().replace(/^[-']+|[-']+$/g, ''))
       .filter(w => w.length >= 2 && w.length <= 40);
+
+    // 如果选区切分出了多个短片段，但它们拼合起来是一个整词（音节连字符断词的情况），
+    // 且整词长度在合理范围内，把拼合后的词排在最前查验
+    const joinedForm = rawWords.join('');
+    if (rawWords.length > 1 && joinedForm.length <= 35 && !rawWords.every((w, i, arr) => i === 0 || w === arr[0])) {
+      // 非简单重叠词（如 buku-buku），尝试合并完整词
+      rawWords.unshift(joinedForm);
+    }
+
     const words = [...new Set(rawWords)].slice(0, 8);
     if (!words.length) return;
 
     const title = words.length === 1 ? `PRPM — ${words[0]}` : `PRPM (${words.length} kata)`;
     if (shouldCreatePanel || !panel) {
-      panel = mkPanel(title, text, 'prpm');
+      panel = mkPanel(title, cleanText, 'prpm');
     } else {
       currentMode = 'prpm';
       panel.querySelector('.bmc-title-text').textContent = title;
-      panel.querySelector('.bmc-search-input').value = text;
+      panel.querySelector('.bmc-search-input').value = cleanText;
     }
 
     const b = panelBody();
@@ -290,14 +380,28 @@
         }).then(x => x.json());
 
         el.classList.remove('bmc-item-pending');
-        if (r.status === 'hit') {
+        const isSuggestion = r.status === 'warn' ||
+          (r.definition && /adakah anda bermaksud/i.test(r.definition));
+
+        if (isSuggestion) {
+          el.classList.add('bmc-item-warn');
+          el.querySelector('.bmc-item-main').innerHTML = `
+            <span class="bmc-word">${esc(w)}</span>
+            <span class="bmc-badge bmc-badge-warn" title="Cadangan perkataan terdekat">?</span>
+          `;
+          if (r.definition) {
+            el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">${esc(r.definition)}</div>`);
+          } else {
+            el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">Tiada entri tepat, ada cadangan berkaitan</div>`);
+          }
+        } else if (r.status === 'hit') {
           el.classList.add('bmc-item-hit');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word">${esc(w)}</span>
             <span class="bmc-badge bmc-badge-hit" title="Wujud dalam PRPM">✓</span>
           `;
           if (r.definition) {
-            el.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(r.definition)}…</div>`);
+            el.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(r.definition)}</div>`);
           }
         } else if (r.status === 'miss') {
           el.classList.add('bmc-item-miss');
@@ -328,12 +432,13 @@
 
   // ── 检查浮层 (Scan) ──
   async function runCheck(text, shouldCreatePanel = true) {
+    const cleanText = sanitizeText(text);
     if (shouldCreatePanel || !panel) {
-      panel = mkPanel('Hasil Semakan', text, 'check');
+      panel = mkPanel('Hasil Semakan', cleanText, 'check');
     } else {
       currentMode = 'check';
       panel.querySelector('.bmc-title-text').textContent = 'Hasil Semakan';
-      panel.querySelector('.bmc-search-input').value = text;
+      panel.querySelector('.bmc-search-input').value = cleanText;
     }
 
     panelBody().innerHTML = cuteLoader('Menganalisis teks…');
@@ -342,7 +447,7 @@
       r = await fetch(`${API}/api/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text: cleanText })
       }).then(x => x.json());
     } catch {
       panelBody().innerHTML = `
@@ -353,112 +458,29 @@
       `;
       return;
     }
-    renderCheck(r, text);
+    renderCheck(r, cleanText);
   }
 
   function renderCheck(r, text) {
-    const b = panelBody();
-    const secs = [];
-
-    // 黑名单搭配（确认为错）
-    const bl = (r.blacklist_hits || []).map(h => `
-      <div class="bmc-item bmc-item-miss">
-        <div class="bmc-item-main">
-          <div><span class="bmc-tag bmc-tag-err">Salah</span> <b class="bmc-word-err">${esc(h.bigram)}</b></div>
-          <span class="bmc-badge bmc-badge-miss">✗</span>
-        </div>
-        <div class="bmc-miss-note">Gabungan perkataan ini disahkan tidak tepat.</div>
-      </div>
-    `);
-
-    // 机械拼写错误
-    const sp = (r.cold_words || []).filter(c => c.reason === 'spelling').map(c => `
-      <div class="bmc-item bmc-item-miss">
-        <div class="bmc-item-main">
-          <div>
-            <span class="bmc-tag bmc-tag-err">Ejaan</span>
-            <b class="bmc-word-err">${esc(c.word)}</b>
-            ${c.suggestion ? `<span class="bmc-arrow">→</span> <b class="bmc-sug">${esc(c.suggestion)}</b>` : ''}
-          </div>
-          <div class="bmc-actions">
-            ${prpmBtn(c.word)}
-            <span class="bmc-badge bmc-badge-miss">✗</span>
-          </div>
-        </div>
-      </div>
-    `);
-
-    // 高置信度语法规则
-    const hi = (r.rule_hits || []).filter(h => h.conf === 'high').map(h => `
-      <div class="bmc-item bmc-item-miss">
-        <div class="bmc-item-main">
-          <div><span class="bmc-tag bmc-tag-err">${esc(h.rule)}</span> <b>${esc(h.span)}</b></div>
-          <span class="bmc-badge bmc-badge-miss">✗</span>
-        </div>
-        <div class="bmc-miss-note">${esc(h.note)}</div>
-      </div>
-    `);
-
-    // 未知生僻词 (cold)
-    const cold = (r.cold_words || []).filter(c => c.reason === 'cold').map(c => `
-      <div class="bmc-item bmc-item-warn">
-        <div class="bmc-item-main">
-          <div><span class="bmc-tag bmc-tag-warn">Jarang</span> <b>${esc(c.word)}</b></div>
-          <div class="bmc-actions">
-            ${prpmBtn(c.word)}
-          </div>
-        </div>
-        <div class="bmc-warn-note">Perkataan tidak ditemui dalam korpus.</div>
-      </div>
-    `);
-
-    // 中置信度语法规则
-    const med = (r.rule_hits || []).filter(h => h.conf === 'medium').map(h => `
-      <div class="bmc-item bmc-item-warn">
-        <div class="bmc-item-main">
-          <div><span class="bmc-tag bmc-tag-warn">${esc(h.rule)}</span> <b>${esc(h.span)}</b></div>
-        </div>
-        <div class="bmc-warn-note">${esc(h.note)}</div>
-      </div>
-    `);
-
-    // 低置信度提醒
-    const lo = (r.rule_hits || []).filter(h => h.conf === 'low').map(h => `
-      <div class="bmc-item bmc-item-info">
-        <div class="bmc-item-main">
-          <div><span class="bmc-tag bmc-tag-info">${esc(h.rule)}</span> <b>${esc(h.span)}</b></div>
-        </div>
-        <div class="bmc-info-note">${esc(h.note)}</div>
-      </div>
-    `);
-
-    // 句子冷密度
-    const dens = (r.sentences || []).filter(s => s.total_seams >= 3 && s.density >= 0.6).map(s => `
-      <div class="bmc-item bmc-item-info">
-        <div class="bmc-item-main">
-          <div><span class="bmc-tag bmc-tag-info">Ayat ${s.idx + 1}</span> <b>Gabungan kata ganjil</b></div>
-          <span class="bmc-badge bmc-badge-info">${Math.round(s.density * 100)}%</span>
-        </div>
-        <div class="bmc-info-note">Banyak pasangan kata dalam ayat ini jarang ditemui dalam korpus; disarankan semak struktur ayat.</div>
-      </div>
-    `);
-
-    if (bl.length) secs.push(`<div class="bmc-sec-title bmc-sec-err">Gabungan Tidak Sah</div>${bl.join('')}`);
-    if (sp.length) secs.push(`<div class="bmc-sec-title bmc-sec-err">Ejaan Mencurigakan</div>${sp.join('')}`);
-    if (hi.length) secs.push(`<div class="bmc-sec-title bmc-sec-err">Kesalahan Tatabahasa</div>${hi.join('')}`);
-    if (cold.length) secs.push(`<div class="bmc-sec-title bmc-sec-warn">Kata Tidak Dikenali</div>${cold.join('')}`);
-    if (med.length) secs.push(`<div class="bmc-sec-title bmc-sec-warn">Perlu Konteks</div>${med.join('')}`);
-    if (lo.length) secs.push(`<div class="bmc-sec-title bmc-sec-info">Peringatan</div>${lo.join('')}`);
-    if (dens.length) secs.push(`<div class="bmc-sec-title bmc-sec-info">Struktur Ayat</div>${dens.join('')}`);
-
-    b.innerHTML = secs.length
-      ? secs.join('') + `<div class="bmc-foot">${(r.cold_words || []).length} kata jarang · ${(r.rule_hits || []).length} peraturan dikesan</div>`
-      : `<div class="bmc-clean-box">
-          <div class="bmc-clean-icon">✓</div>
-          <div class="bmc-clean-title">Tiada Isu Dikesan</div>
-          <div class="bmc-clean-desc">Semua perkataan wujud dalam korpus dan mematuhi peraturan mekanikal.</div>
-        </div>`;
+    panelBody().innerHTML = TepatResults.html(r);
   }
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest?.('.bmc-evidence-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(`${API}/api/evidence`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:btn.dataset.q})}).then(x=>x.json());
+      const rows = [];
+      for (const d of r.lexical?.definitions || []) rows.push(`<div><b>${esc(d.dictionary_source || 'DBP')}</b>: ${esc(d.cleaned_text)}</div>`);
+      for (const ex of r.lexical?.examples || []) rows.push(`<div><b>${esc(ex.source)}</b>: ${esc(ex.text)}</div>`);
+      for (const ref of r.references || []) rows.push(`<div><b>${esc(ref.source)}</b>: ${esc(ref.text.slice(0,500))}</div>`);
+      let target = btn.closest('.bmc-item').querySelector('.bmc-local-evidence');
+      if (!target) { target=document.createElement('div');target.className='bmc-local-evidence';btn.closest('.bmc-item').appendChild(target); }
+      target.innerHTML = rows.length ? rows.join('') : 'Tiada bukti tempatan ditemui; semak sumber luar.';
+    } catch { showToast('Bukti tempatan tidak dapat dimuatkan.',3000); }
+    finally { btn.disabled=false; }
+  });
 
   function prpmBtn(word) {
     if (!prpmEnabled) return '';
@@ -485,14 +507,26 @@
     }
 
     const item = btn.closest('.bmc-item');
-    if (r.status === 'hit') {
+    const isSuggestion = r.status === 'warn' ||
+      (r.definition && /adakah anda bermaksud/i.test(r.definition));
+
+    if (isSuggestion) {
+      btn.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'bmc-badge bmc-badge-warn',
+        title: 'Cadangan perkataan terdekat',
+        textContent: '?'
+      }));
+      if (r.definition && item) {
+        item.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">${esc(r.definition)}</div>`);
+      }
+    } else if (r.status === 'hit') {
       btn.replaceWith(Object.assign(document.createElement('span'), {
         className: 'bmc-badge bmc-badge-hit',
         title: 'Wujud dalam PRPM',
         textContent: '✓'
       }));
       if (r.definition && item) {
-        item.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(r.definition)}…</div>`);
+        item.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(r.definition)}</div>`);
       }
     } else if (r.status === 'miss') {
       btn.replaceWith(Object.assign(document.createElement('span'), {
@@ -570,6 +604,117 @@
     return body.slice(Math.max(0, i - radius), i + needle.length + radius);
   }
 
+  // ── 全页扫描高亮 (Imbas Seluruh Halaman) ──
+  let activeHighlights = [];
+
+  function clearPageHighlights() {
+    const allHls = document.querySelectorAll('.bmc-hl');
+    allHls.forEach(span => {
+      const parent = span.parentNode;
+      if (parent) {
+        const textNode = document.createTextNode(span.textContent);
+        parent.replaceChild(textNode, span);
+        parent.normalize(); // 合并相邻文本节点，彻底恢复原始 DOM
+      }
+    });
+    activeHighlights = [];
+    document.querySelector('.bmc-toast')?.remove();
+  }
+
+  function showToast(html, duration = 6000) {
+    document.querySelector('.bmc-toast')?.remove();
+    const toast = document.createElement('div');
+    toast.className = 'bmc-toast';
+    toast.style.setProperty('z-index', '2147483647', 'important');
+    toast.innerHTML = `
+      <div style="display:flex;align-items:center;">
+        <span>${html}</span>
+      </div>
+      <span class="bmc-toast-close" title="Tutup">✕</span>
+    `;
+    toast.querySelector('.bmc-toast-close').onclick = () => toast.remove();
+    document.documentElement.appendChild(toast);
+    if (duration > 0) {
+      setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+      }, duration);
+    }
+  }
+
+  async function scanFullPage() {
+    clearPageHighlights();
+    showToast('Sedang mengimbas teks seluruh halaman…', 0);
+
+    // 收集页面文本节点（放宽限制，只要含字母或符号且非脚本/系统控件即可）
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node) {
+          const val = node.nodeValue;
+          if (!val || !val.trim() || val.trim().length < 2) return NodeFilter.FILTER_REJECT;
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          const tag = parent.tagName;
+          if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
+          if (parent.closest('.bmc-panel, .bmc-toast')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    const textNodes = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      textNodes.push(n);
+    }
+
+    // Send raw text and retain exact UTF-16 ranges; do not mark identical words
+    // elsewhere on the page when only one occurrence needs review.
+    let fullText = '';
+    const nodes = [];
+    for (const node of textNodes) {
+      if (fullText.length >= 30000) break;
+      const start = fullText.length;
+      const raw = node.nodeValue.slice(0,30000-start);
+      nodes.push({node,start,raw});
+      fullText += raw + '\n';
+    }
+    fullText = fullText.slice(0,30000);
+    if (!fullText.trim()) { showToast('Tiada teks sesuai ditemui.',3000);return; }
+    let r;
+    try {
+      r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fullText})}).then(x=>x.json());
+      if (r.error || r.engine!=='evidence-v2') throw new Error(r.error || 'Versi Tepat perlu dikemas kini.');
+    } catch (e) { showToast(esc(e.message || 'Semakan tidak selesai.'),4000);return; }
+    let hitCount=0;
+    for (const {node,start,raw} of nodes) {
+      if (!node.parentNode) continue;
+      const parts=TepatResults.segments(raw,r.issues || [],start);
+      if (!parts.some(p=>p.level)) continue;
+      const frag=document.createDocumentFragment();
+      for (const part of parts) {
+        if (!part.level) {frag.appendChild(document.createTextNode(part.text));continue;}
+        const span=document.createElement('span');
+        span.className='bmc-hl '+({error:'bmc-hl-err',warning:'bmc-hl-warn',info:'bmc-hl-info'}[part.level]);
+        span.textContent=part.text;
+        span.title=part.notes.join(' · ');
+        span.onclick=e=>{e.stopPropagation();runCheck(part.text);};
+        frag.appendChild(span);activeHighlights.push(span);hitCount++;
+      }
+      // Preserve the unscanned tail of a node at the 30,000-character limit.
+      if (node.nodeValue.length>raw.length) frag.appendChild(document.createTextNode(node.nodeValue.slice(raw.length)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    showToast(`Imbasan sehingga 30,000 aksara: <b>${hitCount}</b> bahagian ditandakan. Fakta belum disemak.
+      <button id="bmc-btn-clear-hl" style="margin-left:8px;padding:2px 8px;">Padam Serlah</button>`,12000);
+
+    setTimeout(() => {
+      const btn = document.querySelector('#bmc-btn-clear-hl');
+      if (btn) btn.onclick = () => clearPageHighlights();
+    }, 50);
+  }
+
   // ── 消息监听与快捷键 ──
   chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
     if (m.type === 'context-prpm') {
@@ -582,8 +727,38 @@
       showRaiseForm(m.text || '');
       sendResponse({ ok: true });
     } else if (m.type === 'check-selection') {
-      const text = getSelection()?.toString().trim();
-      if (text && text.length >= 2) runCheck(text);
+      const text = getPageSelection();
+      if (text && text.length >= 2) {
+        if (text.includes(' ') || text.length > 25) {
+          runCheck(text);
+        } else {
+          runPrpm(text);
+        }
+      } else {
+        if (panel) {
+          removeUI();
+        } else {
+          openBlankPanel();
+        }
+      }
+      sendResponse({ ok: true });
+    } else if (m.type === 'open-panel') {
+      const sel = getPageSelection();
+      if (sel) {
+        if (sel.includes(' ') || sel.length > 25) {
+          runCheck(sel);
+        } else {
+          runPrpm(sel);
+        }
+      } else {
+        openBlankPanel();
+      }
+      sendResponse({ ok: true });
+    } else if (m.type === 'scan-full-page') {
+      scanFullPage();
+      sendResponse({ ok: true });
+    } else if (m.type === 'clear-highlights') {
+      clearPageHighlights();
       sendResponse({ ok: true });
     }
     return false;

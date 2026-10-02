@@ -1,66 +1,192 @@
 <!DOCTYPE html>
-<html>
+<html lang="ms">
 <head>
 <meta charset="utf-8">
 <style>
-  body { font: 13px "Segoe UI", system-ui, sans-serif; width: 280px; margin: 0; padding: 12px; }
-  h3 { margin: 0 0 8px; font-size: 14px; }
-  .row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
-  .muted { color: #6b7280; font-size: 12px; }
-  #status { font-size: 12px; margin-top: 10px; }
-  .ok { color: #059669; } .bad { color: #b91c1c; }
-  button { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; background: #f9fafb; }
-  button:hover { background: #f3f4f6; }
-  #export[disabled] { opacity: .5; cursor: default; }
-  .hint { margin-top: 10px; font-size: 11px; color: #9ca3af; line-height: 1.5; }
+  * { box-sizing: border-box; }
+  body {
+    font: 13px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+    width: 290px;
+    margin: 0;
+    padding: 14px;
+    color: #1e293b;
+    background: #ffffff;
+    user-select: none;
+  }
+
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #3b82f6;
+    box-shadow: 0 0 0 3px #dbeafe;
+  }
+  .title {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.2px;
+  }
+  .status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2.5px 7px;
+    border-radius: 10px;
+  }
+  .status-ok { background: #dcfce7; color: #15803d; }
+  .status-bad { background: #fee2e2; color: #b91c1c; }
+
+  /* 三大核心功能菜单选项 */
+  .menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .menu-btn {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #1e293b;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .menu-btn:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  }
+
+  .menu-btn:active {
+    transform: scale(0.98);
+  }
+
+  .menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .icon-scan { background: #fee2e2; color: #dc2626; }
+  .icon-panel { background: #dbeafe; color: #2563eb; }
+  .icon-log { background: #fef3c7; color: #d97706; }
+
+  .menu-info {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .menu-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .menu-desc {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 1.5px;
+  }
+
+  .badge-count {
+    font-size: 10.5px;
+    font-weight: 700;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+
+  .footer-hint {
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
-<h3>Tepat</h3>
-<div class="row">
-  <span>PRPM 词典查询</span>
-  <input type="checkbox" id="prpm">
+
+<div class="head">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <h3 class="title">Tepat</h3>
+  </div>
+  <div id="status" class="status-badge status-bad">Menyambung…</div>
 </div>
-<div class="row">
-  <span>日志条数: <b id="nlog">0</b></span>
+
+<!-- 3大功能选项 -->
+<div class="menu-list">
+  <!-- 1. 全页扫描 (Imbas Seluruh Halaman) -->
+  <button id="opt-scan-page" class="menu-btn" title="Imbas keseluruhan teks laman dan serlahkan kesalahan">
+    <div class="menu-icon icon-scan">🔍</div>
+    <div class="menu-info">
+      <div class="menu-label">Imbas Seluruh Halaman</div>
+      <div class="menu-desc">Sorot kesalahan pada teks halaman web</div>
+    </div>
+  </button>
+
+  <!-- 2. 打开弹窗 (Buka Tetingkap Semakan) -->
+  <button id="opt-open-panel" class="menu-btn" title="Papar tetingkap terapung semakan & PRPM">
+    <div class="menu-icon icon-panel">💬</div>
+    <div class="menu-info">
+      <div class="menu-label">Tetingkap Semakan</div>
+      <div class="menu-desc">Buka tetingkap carian kata & PRPM</div>
+    </div>
+  </button>
+
+  <!-- 3. 导出日志 (Eksport Log JSON) -->
+  <button id="opt-export-log" class="menu-btn" title="Muat turun fail JSON log kesalahan">
+    <div class="menu-icon icon-log">📥</div>
+    <div class="menu-info">
+      <div class="menu-label">
+        <span>Eksport Log Ralat</span>
+        <span id="log-count" class="badge-count">0</span>
+      </div>
+      <div class="menu-desc">Muat turun laporan kesalahan (JSON)</div>
+    </div>
+  </button>
 </div>
-<div class="row">
-  <button id="export">导出日志 JSON</button>
-  <button id="clear">清空</button>
+
+<div style="display:flex;justify-content:center;margin-bottom:8px;">
+  <button id="opt-clear-hl" style="background:none;border:none;color:#64748b;font-size:11.5px;cursor:pointer;padding:4px 8px;text-decoration:underline;" title="Buang semua garisan warna pada halaman">Padam semua serlahan pada halaman</button>
 </div>
-<div id="status"></div>
-<p class="hint">选中网页文字 → 浮条「Semak / Raise Error」<br>快捷键 Ctrl+Shift+B 检查当前选区。<br>需要 Tepat.exe 在本机运行。</p>
-<script>
-const API = 'http://127.0.0.1:8377';
-const $ = (s) => document.querySelector(s);
 
-chrome.storage.sync.get({ prpmEnabled: true }, (s) => { $('#prpm').checked = s.prpmEnabled; });
-$('#prpm').onchange = () => chrome.storage.sync.set({ prpmEnabled: $('#prpm').checked });
+<div class="footer-hint">
+  Guna pintasan <b>Alt+S</b> untuk semak teks pilihan / buka tetingkap.
+</div>
 
-function refreshN() {
-  chrome.storage.local.get({ log: [] }, (s) => { $('#nlog').textContent = s.log.length; $('#export').disabled = !s.log.length; });
-}
-refreshN();
-
-$('#export').onclick = () => {
-  chrome.storage.local.get({ log: [] }, (s) => {
-    const blob = new Blob([JSON.stringify(s.log, null, 1)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `bm-checker-log-${new Date().toISOString().slice(0,10)}.json`;
-    a.click(); URL.revokeObjectURL(a.href);
-  });
-};
-$('#clear').onclick = () => {
-  if (confirm('清空全部已 raise 的日志？')) { chrome.storage.local.set({ log: [] }, refreshN); }
-};
-
-// exe 存活探测
-fetch(API + '/api/health').then(r => r.json()).then(h => {
-  $('#status').innerHTML = `<span class="ok">✓ exe 在运行（${h.words.toLocaleString()} 词）</span>`;
-}).catch(() => {
-  $('#status').innerHTML = '<span class="bad">✗ Tepat.exe 未运行</span>';
-});
-</script>
+<script src="popup.js"></script>
 </body>
 </html>

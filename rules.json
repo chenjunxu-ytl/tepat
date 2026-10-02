@@ -1,39 +1,299 @@
 {
- "meta": {
-  "version": 1,
-  "updated": "2026-10-01",
-  "source": "Anna rule_book.py 同源外包（2026-10-01）；conf 档位：high=结构性错误无合法场景/深标，medium=上下文相关/中标，low=宽网提醒/浅标",
-  "note": "规则改动直接编辑本文件，重启 exe 生效（无需重新打包——exe 内置副本仅作缺失兜底）"
- },
- "rules": [
-  {"id": "KS-01", "conf": "medium", "re": "\\bdari (segi|sudut|aspek|perspektif)\\b", "note": "dari + 抽象名词应为 daripada"},
-  {"id": "KS-01", "conf": "medium", "re": "\\blebih [^\\n]{0,40}?\\bdari\\b", "note": "比较级 lebih ... dari 应为 daripada"},
-  {"id": "KS-01", "conf": "high", "re": "\\bberasal\\s+dari\\b", "note": "berasal dari 应为 berasal daripada"},
-  {"id": "KS-02", "conf": "medium", "re": "\\bantara\\b[^\\n]{0,80}\\bdan\\b", "note": "antara 搭配 dengan（antara X dengan Y），此处用了 dan"},
-  {"id": "KS-03", "conf": "low", "re": "\\bberbanding\\b", "note": "berbanding 结构需与 dengan 搭配，请检查"},
-  {"id": "KS-05", "conf": "medium", "re": "\\bdalam (tahun|masa|waktu|hari)\\b", "note": "dalam + 时间词通常应为 pada（pada tahun/masa/waktu/hari）"},
-  {"id": "KP-01", "conf": "low", "re": "\\b(ialah|adalah)\\b", "note": "ialah/adalah 出现——检查主语谓语类型是否匹配"},
-  {"id": "PI-01", "conf": "low", "re": "\\b(guna|pakai|cari|tanya)\\b", "note": "裸动词（meN- 脱落）：guna/pakai/cari 口语可，正式文体需 men-"},
-  {"id": "SA-01", "conf": "low", "re": "\\b(setelah|selepas|semasa|ketika)\\b[^.\\n]{0,60},?\\s+\\w+\\s+(ialah|adalah|merupakan)\\b", "note": "时间状语从句前置——检查主语是否悬垂"},
-  {"id": "KL-01", "conf": "high", "re": "\\b(ialah|adalah)\\b[^\\n.]{0,30}\\b(ialah|adalah)\\b", "note": "双 pemeri（ialah/adalah 重复）"},
-  {"id": "KL-01", "conf": "high", "re": "\\b(walau bagaimanapun|tetapi|namun)\\b[^\\n.]{0,10}\\b(tetapi|namun|walau bagaimanapun)\\b", "note": "双连词（walau bagaimanapun/tetapi/namun 重复）"},
-  {"id": "KL-02", "conf": "medium", "re": "\\b(kebanyakan|sebahagian|sesetengah|beberapa)\\b[^\\n]{0,30}\\b(kita|mereka)\\b", "note": "量词后接复数代词（kebanyakan...mereka 冗余复数）"},
-  {"id": "IS-02", "conf": "medium", "re": "\\bkomprehensif\\b|\\bkomprehensiv\\b", "note": "komprehensif 为常误用的外来词（DBP 建议 menyeluruh）"},
-  {"id": "IS-03", "conf": "high", "re": "\\byang mana\\b", "note": "yang mana 作连接词是英语 which 的直译，不规范"},
-  {"id": "IS-03", "conf": "medium", "re": "\\bdi mana\\b", "note": "di mana 作非处所连接词是直译，不规范"},
-  {"id": "IS-04", "conf": "medium", "re": "\\bmembuat penyelidikan\\b|\\bmelakukan penambahbaikan\\b", "note": "membuat penyelidikan 不地道（应为 menjalankan/mengkaji）"},
-  {"id": "EJ-01", "conf": "medium", "re": "\\b(prarontal|prefrontal|sirkadian|intravena)\\b", "note": "外来词拼写疑似（检查 DBP 规范形式）"}
- ],
- "ms_id_suffix_map": [
-  ["ken", "kan"],
-  ["nye", "nya"],
-  ["sj", "sahaja"]
- ],
- "affix_strip": [
-  ["meng", "k"], ["meng", ""], ["meny", "s"], ["men", "t"],
-  ["mem", "p"], ["mem", ""], ["memper", ""], ["menge", ""],
-  ["ber", ""], ["ter", ""], ["di", ""], ["ke", ""], ["pe", ""],
-  ["peng", "k"], ["peny", "s"], ["pen", "t"], ["pem", "p"]
- ],
- "suffix_strip": ["kan", "an", "i", "nya", "lah", "kah", "pun"]
+  "meta": {
+    "version": 2,
+    "updated": "2026-10-02",
+    "source": "Anna rule_book.py 同源外包（2026-10-01）；conf 档位：high=结构性错误无合法场景/深标，medium=上下文相关/中标，low=宽网提醒/浅标",
+    "note": "Rules run independently of dictionary/corpus matches. entry_id is unique; register and exceptions bound matches. Add trigger/clear examples when extending rules. Existing contextual patterns are reminders, not universal error proofs."
+  },
+  "rules": [
+    {
+      "id": "KS-01",
+      "conf": "medium",
+      "re": "\\bdari (segi|sudut|aspek|perspektif)\\b",
+      "note": "Semak dari segi/sudut/aspek/perspektif; pertimbangkan daripada.",
+      "entry_id": "KS-01-01",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KS-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KS-01",
+      "conf": "medium",
+      "re": "\\blebih [^\\n]{0,40}?\\bdari\\b",
+      "note": "Semak dari/daripada dalam perbandingan lebih.",
+      "entry_id": "KS-01-02",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KS-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KS-01",
+      "conf": "medium",
+      "re": "\\bberasal\\s+dari\\b",
+      "note": "Semak pemilihan dari/daripada mengikut makna selepas berasal.",
+      "entry_id": "KS-01-03",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KS-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KS-02",
+      "conf": "medium",
+      "re": "\\bantara\\b[^\\n]{0,80}\\bdan\\b",
+      "note": "Semak antara X dengan Y; penggunaan dan bergantung pada binaan ayat.",
+      "entry_id": "KS-02-04",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KS-02 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KS-03",
+      "conf": "low",
+      "re": "\\bberbanding\\b",
+      "note": "Semak pasangan berbanding dengan.",
+      "entry_id": "KS-03-05",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KS-03 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KS-05",
+      "conf": "medium",
+      "re": "\\bdalam (tahun|masa|waktu|hari)\\b",
+      "note": "Semak dalam/pada apabila merujuk tahun, masa, waktu atau hari.",
+      "entry_id": "KS-05-06",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KS-05 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KP-01",
+      "conf": "low",
+      "re": "\\b(ialah|adalah)\\b",
+      "note": "Semak kesesuaian ialah/adalah dengan jenis predikat.",
+      "entry_id": "KP-01-07",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KP-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "PI-01",
+      "conf": "low",
+      "re": "\\b(guna|pakai|cari|tanya)\\b",
+      "note": "Kata kerja tanpa awalan mungkin sesuai dalam perbualan; semak laras formal.",
+      "entry_id": "PI-01-08",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / PI-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "SA-01",
+      "conf": "low",
+      "re": "\\b(setelah|selepas|semasa|ketika)\\b[^.\\n]{0,60},?\\s+\\w+\\s+(ialah|adalah|merupakan)\\b",
+      "note": "Semak hubungan subjek dalam klausa waktu yang diletakkan di hadapan.",
+      "entry_id": "SA-01-09",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / SA-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KL-01",
+      "conf": "high",
+      "re": "\\b(ialah|adalah)\\s+(ialah|adalah)\\b",
+      "note": "Dua kata pemeri bersebelahan; semak pengulangan.",
+      "entry_id": "KL-01-10",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KL-01 (inherited manual rule; inspect context)",
+      "exceptions": [],
+      "examples": {
+        "trigger": [
+          "Ali ialah adalah seorang doktor."
+        ],
+        "clear": [
+          "Ali ialah seorang doktor.",
+          "Ali ialah doktor dan Abu adalah ketua."
+        ]
+      }
+    },
+    {
+      "id": "KL-01",
+      "conf": "medium",
+      "re": "\\b(walau bagaimanapun|tetapi|namun)\\b[^\\n.]{0,10}\\b(tetapi|namun|walau bagaimanapun)\\b",
+      "note": "Semak pengulangan penanda hubungan; klausa berasingan mungkin sah.",
+      "entry_id": "KL-01-11",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KL-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "KL-02",
+      "conf": "medium",
+      "re": "\\b(kebanyakan|sebahagian|sesetengah|beberapa)\\b[^\\n]{0,30}\\b(kita|mereka)\\b",
+      "note": "Semak rujukan jamak selepas kebanyakan/sebahagian/sesetengah/beberapa.",
+      "entry_id": "KL-02-12",
+      "category": "grammar",
+      "register": "formal",
+      "source": "Anna rule_book / KL-02 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "IS-02",
+      "conf": "medium",
+      "re": "\\bkomprehensif\\b|\\bkomprehensiv\\b",
+      "note": "Semak makna komprehensif mengikut konteks; menyeluruh mungkin sesuai.",
+      "entry_id": "IS-02-13",
+      "category": "terminology",
+      "register": "formal",
+      "source": "Anna rule_book / IS-02 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "IS-03",
+      "conf": "medium",
+      "re": "\\byang mana\\b",
+      "note": "Jika digunakan sebagai penghubung relatif, semak binaan yang mana; soalan memerlukan konteks.",
+      "entry_id": "IS-03-14",
+      "category": "terminology",
+      "register": "formal",
+      "source": "Anna rule_book / IS-03 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "IS-03",
+      "conf": "medium",
+      "re": "\\bdi mana\\b",
+      "note": "Semak di mana jika digunakan sebagai penghubung bukan tempat; soalan/tempat perlu konteks.",
+      "entry_id": "IS-03-15",
+      "category": "terminology",
+      "register": "formal",
+      "source": "Anna rule_book / IS-03 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "IS-04",
+      "conf": "medium",
+      "re": "\\bmembuat penyelidikan\\b|\\bmelakukan penambahbaikan\\b",
+      "note": "Semak pilihan kata kerja bersama penyelidikan atau penambahbaikan.",
+      "entry_id": "IS-04-16",
+      "category": "terminology",
+      "register": "formal",
+      "source": "Anna rule_book / IS-04 (inherited manual rule; inspect context)",
+      "exceptions": []
+    },
+    {
+      "id": "EJ-01",
+      "conf": "medium",
+      "re": "\\b(prarontal|prefrontal|sirkadian|intravena)\\b",
+      "note": "Semak ejaan istilah pinjaman ini dalam PRPM dan konteks bidang.",
+      "entry_id": "EJ-01-17",
+      "category": "spelling",
+      "register": "formal",
+      "source": "Anna rule_book / EJ-01 (inherited manual rule; inspect context)",
+      "exceptions": []
+    }
+  ],
+  "ms_id_suffix_map": [
+    [
+      "ken",
+      "kan"
+    ],
+    [
+      "nye",
+      "nya"
+    ],
+    [
+      "sj",
+      "sahaja"
+    ]
+  ],
+  "affix_strip": [
+    [
+      "meng",
+      "k"
+    ],
+    [
+      "meng",
+      ""
+    ],
+    [
+      "meny",
+      "s"
+    ],
+    [
+      "men",
+      "t"
+    ],
+    [
+      "mem",
+      "p"
+    ],
+    [
+      "mem",
+      ""
+    ],
+    [
+      "memper",
+      ""
+    ],
+    [
+      "menge",
+      ""
+    ],
+    [
+      "ber",
+      ""
+    ],
+    [
+      "ter",
+      ""
+    ],
+    [
+      "di",
+      ""
+    ],
+    [
+      "ke",
+      ""
+    ],
+    [
+      "pe",
+      ""
+    ],
+    [
+      "peng",
+      "k"
+    ],
+    [
+      "peny",
+      "s"
+    ],
+    [
+      "pen",
+      "t"
+    ],
+    [
+      "pem",
+      "p"
+    ]
+  ],
+  "suffix_strip": [
+    "kan",
+    "an",
+    "i",
+    "nya",
+    "lah",
+    "kah",
+    "pun"
+  ]
 }

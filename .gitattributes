@@ -1,0 +1,2 @@
+# Evidence metadata hashes the tokenizer as bytes.
+*.py text eol=lf

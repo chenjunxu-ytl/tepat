@@ -30,8 +30,8 @@
 }
 
 .bmc-panel {
-  position: fixed;
-  z-index: 2147483647;
+  position: fixed !important;
+  z-index: 2147483647 !important;
   width: 420px;
   max-width: calc(100vw - 32px);
   max-height: 82vh;
@@ -142,11 +142,18 @@
   transform: rotate(-35deg);
 }
 
-/* 填充选中词按钮 */
+/* 填充选中词按钮 (画笔/指针) */
 .bmc-grab-btn:hover {
   background: #f0fdf4;
   color: #16a34a;
   border-color: #bbf7d0;
+}
+
+.bmc-grab-btn.bmc-grab-active {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border-color: #86efac !important;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.25) !important;
 }
 
 .bmc-btn-pop {
@@ -300,7 +307,6 @@
   border-radius: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-left: 3.5px solid #cbd5e1;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
 }
 
@@ -373,7 +379,7 @@
 .bmc-item-miss {
   background: #fff5f5;
   border-color: #fecaca;
-  border-left-color: #ef4444;
+  border-left: 3.5px solid #ef4444;
 }
 
 .bmc-word-err {
@@ -388,22 +394,41 @@
   font-weight: 500;
 }
 
-/* 存在 (Hit) */
+/* 存在 (Hit) - 无绿色 border-left */
 .bmc-item-hit {
   background: #ffffff;
   border-color: #e2e8f0;
-  border-left-color: #22c55e;
 }
 
 .bmc-def {
   margin-top: 6px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   background: #f8fafc;
   border-radius: 8px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: #334155;
   border: 1px solid #edf2f7;
+  max-height: 140px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+.bmc-def::-webkit-scrollbar {
+  width: 5px;
+}
+
+.bmc-def::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bmc-def::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.bmc-def::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* 警告/未在语料 (Warn) */
@@ -646,3 +671,73 @@
   font-size: 12px;
   font-weight: 600;
 }
+
+/* ── 全页扫描高亮标记（分层程度：仅保留波浪线/斜线效果，去除硬边框）── */
+.bmc-hl {
+  position: relative !important;
+  cursor: pointer !important;
+  border-radius: 2px !important;
+  padding: 0 1px !important;
+  transition: all 0.2s ease !important;
+  font-weight: inherit !important;
+  border: none !important;
+  outline: none !important;
+  display: inline !important;
+}
+
+.bmc-hl:hover {
+  filter: brightness(0.9) !important;
+}
+
+/* 严重错误：黑名单搭配、拼写错误、高置信度语法 (纯红色波浪下划线 + 淡红底) */
+.bmc-hl-err {
+  background-color: rgba(254, 202, 202, 0.45) !important;
+  text-decoration: underline wavy #dc2626 1.8px !important;
+  text-underline-offset: 3px !important;
+}
+
+/* 中度/警告：中置信度语法、未在语料生僻词 (纯橙色波浪下划线 + 淡橙底) */
+.bmc-hl-warn {
+  background-color: rgba(254, 240, 138, 0.45) !important;
+  text-decoration: underline wavy #d97706 1.6px !important;
+  text-underline-offset: 3px !important;
+}
+
+/* 轻度提示：低置信度、句式结构 (浅蓝波浪线 + 淡蓝底) */
+.bmc-hl-info {
+  background-color: rgba(224, 242, 254, 0.45) !important;
+  text-decoration: underline wavy #0284c7 1.5px !important;
+  text-underline-offset: 3px !important;
+}
+
+/* 浮动条汇总通知 (Toast) */
+.bmc-toast {
+  position: fixed !important;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647 !important;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font: 13px/1.4 "Segoe UI", sans-serif;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: bmc-spring-pop 0.3s ease;
+}
+
+.bmc-toast-close {
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.bmc-toast-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.15); }
+
+
+.bmc-evidence-btn{font-size:12px;padding:4px 8px;cursor:pointer;border:1px solid #64748b;border-radius:5px;background:transparent;color:inherit}
+.bmc-search-link{font-size:12px;color:#60a5fa}
+.bmc-local-evidence{font-size:12px;margin-top:10px;padding:10px;border:1px solid #475569;border-radius:6px;max-height:260px;overflow:auto}

@@ -1,6 +1,7 @@
 # build artifacts
 dist/
 build/
+releases/
 __pycache__/
 *.spec
 prpm-checker.spec
@@ -8,6 +9,10 @@ prpm-checker.spec
 # large data files (regenerable; shipped in the release zip instead)
 words.txt
 bigrams.txt.xz
+data/*.sqlite
+data/*.sqlite-journal
+data/*.manifest.json
+validation-output.json
 
 # session/debug scripts
 _*.ps1
