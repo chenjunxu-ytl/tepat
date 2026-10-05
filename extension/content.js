@@ -770,20 +770,35 @@
       return;
     }
     const r = ruleBookScan(cleanText);
-    const order = { error: 0, warn: 1, note: 2 };
-    const sorted = [...r.findings].sort((a, b) => (order[a.conf] ?? 9) - (order[b.conf] ?? 9));
-    const dot = { error: '🔴', warn: '🟠', note: '🟡' };
-    const confLabel = { error: 'kesalahan', warn: 'perlu konteks', note: 'peringatan' };
-    const items = sorted.map(f =>
-      `<div class="bmc-item bmc-item-${f.conf}">
-         <div class="bmc-item-main">${dot[f.conf]} <b>${TepatResults.escapeHtml(f.span)}</b>
-           <span class="bmc-rule-id">[${f.rule}]</span></div>
-         <div class="bmc-info-note">${TepatResults.escapeHtml(f.note)} · ${confLabel[f.conf]}</div>
-       </div>`).join('');
+    // error 与 warn 分开呈现（用户裁决 2026-10-02）：regex 判不了语境的规则
+    // 是"提醒不是判决"——warn 不占错误位，hover 看 tooltip 说明。
+    const errors = r.findings.filter(f => f.conf === 'error');
+    const warns = r.findings.filter(f => f.conf === 'warn');
+    const notes = r.findings.filter(f => f.conf === 'note');
+    const itemHtml = (f, kind) => {
+      const dot = { error: '🔴', warn: '🟠', note: '🟡' }[kind];
+      const label = { error: 'kesalahan', warn: 'perlu konteks — hover untuk nuansa', note: 'peringatan' }[kind];
+      const tip = TepatResults.escapeHtml(
+        kind === 'warn'
+          ? `${f.rule}: ${f.note}\nRegex tidak boleh menilai konteks — ini peringatan, bukan penghakiman. Rujuk Rule Book ${f.rule} sebelum memutuskan.`
+          : `${f.rule}: ${f.note}`);
+      return `<div class="bmc-item bmc-item-${kind} bmc-tip" data-tip="${tip.replace(/"/g, '&quot;').replace(/\n/g, ' ')}">
+           <div class="bmc-item-main">${dot} <b>${TepatResults.escapeHtml(f.span)}</b>
+             <span class="bmc-rule-id">[${f.rule}]</span></div>
+           <div class="bmc-info-note">${TepatResults.escapeHtml(f.note)} · ${label}</div>
+         </div>`;
+    };
+    const section = (title, arr, kind) => arr.length
+      ? `<div class="bmc-sec-title">${title} (${arr.length})</div>` + arr.map(f => itemHtml(f, kind)).join('')
+      : '';
     const suppressedNote = r.suppressed.length
       ? `<div class="bmc-foot">${r.suppressed.length} padanan diabaikan (kekecualian NF/LR)</div>` : '';
-    panelBody().innerHTML = sorted.length
-      ? items + suppressedNote + `<div class="bmc-foot">${sorted.length} penemuan · ${packs.length} pakej peraturan · semakan tempatan (offline)</div>`
+    panelBody().innerHTML = (errors.length || warns.length || notes.length)
+      ? section('Kesalahan', errors, 'error')
+        + section('Perlu konteks', warns, 'warn')
+        + section('Peringatan', notes, 'note')
+        + suppressedNote
+        + `<div class="bmc-foot">${errors.length} kesalahan · ${warns.length} perlu konteks · ${notes.length} peringatan · ${packs.length} pakej · semakan tempatan (offline)</div>`
       : `<div class="bmc-clean">✓ Tiada kesalahan mengikut Rule Book. (${packs.map(p => p.meta.title).join('; ')})</div>`;
   }
 
