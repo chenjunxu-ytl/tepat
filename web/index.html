@@ -1,64 +1,235 @@
 <!doctype html>
-<html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tepat — Semakan Bahasa Melayu</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tepat — Malay Language Checker</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:#263243;font:15px/1.6 system-ui,sans-serif}main{max-width:1000px;margin:32px auto;padding:0 22px}header{display:flex;justify-content:space-between;align-items:baseline}h1{font-size:27px;margin:0}small,#status,.bmc-foot{color:#5d6977;font-size:12px}.card{background:white;border:1px solid #dbe1e7;border-radius:12px;padding:20px;margin:18px 0}textarea{width:100%;min-height:175px;padding:14px;border:1px solid #bcc8d4;border-radius:8px;font:inherit}button,select{font:inherit;padding:7px 12px;background:white;border:1px solid #c4ced8;border-radius:6px;cursor:pointer}button.primary{background:#256b58;color:white;border-color:#256b58}.controls{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}#text-result{white-space:pre-wrap;line-height:1.9;margin-top:14px}mark{border-radius:3px;padding:1px 0;cursor:pointer}mark.error{background:#ffdbd8}mark.warning{background:#fff0bd}mark.info{background:#e2edf9}.bmc-item{border:1px solid #dbe1e7;border-left:3px solid #8da7c0;padding:13px;margin:10px 0;border-radius:6px}.bmc-item-miss{border-left-color:#ba4237}.bmc-item-warn{border-left-color:#c99520}.bmc-item-info{border-left-color:#5482ac}.bmc-tag{font-size:11px;color:#607080;margin-right:8px}.bmc-actions{display:flex;gap:9px;align-items:center;margin-top:9px;flex-wrap:wrap}.bmc-actions button,.bmc-actions a{font-size:12px}.bmc-sec-title{font-weight:600;margin-top:16px}.bmc-miss-note,.bmc-warn-note,.bmc-info-note{font-size:13px;color:#526273}.bmc-sug{color:#256b58}.bmc-err-box{color:#a3312a}.bmc-clean-box{padding:18px;background:#eef5f3;margin:12px 0}.bmc-clean-box div{font-size:13px;color:#526273}.bmc-local-evidence{font-size:13px;padding:12px;background:#f5f7fa;margin-top:10px;max-height:300px;overflow:auto}a{color:#256b58}summary{cursor:pointer;color:#456078}#coverage{font-size:13px;color:#526273}table{width:100%;font-size:12px;border-collapse:collapse}td,th{text-align:left;padding:7px;border-bottom:1px solid #e4e9ed}
-</style></head><body><main>
-<header><h1>Tepat</h1><span id="status">Memuatkan bukti…</span></header><p>Semak ejaan, penggunaan istilah dan peraturan tatabahasa. Setiap isyarat memerlukan pertimbangan konteks.</p>
-<section class="card"><label for="input">Teks Bahasa Melayu</label><textarea id="input" placeholder="Tampal teks untuk disemak…" maxlength="30000"></textarea><div class="controls"><button class="primary" id="btn-check">Semak</button><button id="btn-clear">Kosongkan</button><label>Laras <select id="register"><option value="formal">Penulisan formal</option><option value="informal">Perbualan / tidak formal</option></select></label></div><div id="text-result"></div></section>
-<section class="card" id="output" aria-live="polite">Hasil semakan akan muncul di sini.</section><details class="card"><summary>Liputan semakan dan sumber</summary><p id="coverage">Fakta belum disemak. Semakan tatabahasa meliputi peraturan dan bukti penggunaan tempatan sahaja.</p><table><thead><tr><th>Sumber</th><th>Rekod calon</th><th>Ayat selepas deduplikasi</th></tr></thead><tbody id="sources"></tbody></table></details>
-<details class="card"><summary>⚙️ Konfigurasi peraturan <span id="cfg-badge" style="font-size:11px;color:#5d6977"></span></summary>
-<p style="font-size:13px;color:#526273">Setiap peraturan yang ditanam — sunting fail terus (path di bawah), simpan, dan ia <b>di-reload panas automatik</b> dalam &lt;15s tanpa restart.</p>
-<div id="cfg-files"></div>
-<div class="controls"><button id="btn-reload" style="font-size:12px">↻ Reload sekarang</button><span id="cfg-msg" style="font-size:12px;color:#526273"></span></div>
-<table id="cfg-rules" style="margin-top:10px"><thead><tr><th>#</th><th>ID</th><th>Tahap</th><th>Regex</th><th>Catatan</th><th>Status</th></tr></thead><tbody></tbody></table>
-</details>
+*{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:#263243;font:15px/1.6 system-ui,sans-serif;display:flex;min-height:100vh}
+aside{width:210px;background:#1f2d3a;color:#c8d3dd;padding:18px 0;flex-shrink:0}
+aside h1{font-size:19px;margin:0 18px 14px;color:white}
+aside button{display:block;width:100%;text-align:left;background:none;border:none;color:#c8d3dd;padding:10px 18px;font:inherit;cursor:pointer;border-left:3px solid transparent}
+aside button:hover{background:#2b3d4d}
+aside button.active{background:#2b3d4d;color:white;border-left-color:#4fa08a}
+aside .side-status{margin:14px 18px 0;font-size:11px;color:#8fa0af;line-height:1.5}
+main{flex:1;max-width:980px;margin:0 auto;padding:28px 26px;width:100%}
+h2{font-size:21px;margin:0 0 6px}.sub{color:#5d6977;font-size:13px;margin:0 0 14px}
+.card{background:white;border:1px solid #dbe1e7;border-radius:12px;padding:20px;margin:16px 0}
+textarea{width:100%;min-height:175px;padding:14px;border:1px solid #bcc8d4;border-radius:8px;font:inherit}
+button.act,select{font:inherit;padding:7px 12px;background:white;border:1px solid #c4ced8;border-radius:6px;cursor:pointer}
+button.act.primary{background:#256b58;color:white;border-color:#256b58}
+.controls{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+#text-result{white-space:pre-wrap;line-height:1.9;margin-top:14px}mark{border-radius:3px;padding:1px 0;cursor:pointer}mark.error{background:#ffdbd8}mark.warning{background:#fff0bd}mark.info{background:#e2edf9}
+.bmc-item{border:1px solid #dbe1e7;border-left:3px solid #8da7c0;padding:13px;margin:10px 0;border-radius:6px}.bmc-item-miss{border-left-color:#ba4237}.bmc-item-warn{border-left-color:#c99520}.bmc-item-info{border-left-color:#5482ac}
+.bmc-tag{font-size:11px;color:#607080;margin-right:8px}.bmc-actions{display:flex;gap:9px;align-items:center;margin-top:9px;flex-wrap:wrap}.bmc-actions button,.bmc-actions a{font-size:12px}
+.bmc-sec-title{font-weight:600;margin-top:16px}.bmc-miss-note,.bmc-warn-note,.bmc-info-note{font-size:13px;color:#526273}.bmc-sug{color:#256b58}.bmc-err-box{color:#a3312a}
+.bmc-clean-box{padding:18px;background:#eef5f3;margin:12px 0}.bmc-clean-box div{font-size:13px;color:#526273}
+.bmc-local-evidence{font-size:13px;padding:12px;background:#f5f7fa;margin-top:10px;max-height:300px;overflow:auto}
+a{color:#256b58}table{width:100%;font-size:12px;border-collapse:collapse}td,th{text-align:left;padding:7px;border-bottom:1px solid #e4e9ed}
+.tab{display:none}.tab.active{display:block}
+#pack-src{width:100%;min-height:420px;padding:12px;border:1px solid #bcc8d4;border-radius:8px;font:12px/1.5 Consolas,monospace;white-space:pre;overflow:auto}
+.msg{font-size:12px}.ok{color:#256b58}.bad{color:#a3312a}
+details{margin-top:10px}summary{cursor:pointer;color:#456078}
+</style></head><body>
+<aside>
+ <h1>Tepat</h1>
+ <button class="nav active" data-tab="check">🔍 Check</button>
+ <button class="nav" data-tab="rulebook">📘 Rule Book</button>
+ <button class="nav" data-tab="serverrules">⚙️ Server Rules</button>
+ <button class="nav" data-tab="about">ℹ️ About</button>
+ <div class="side-status" id="status">Connecting…</div>
+</aside>
+<main>
+
+<section class="tab active" id="tab-check">
+ <h2>Check text</h2>
+ <p class="sub">Spelling, terminology and grammar signals. Every flag needs human judgement — absence of a flag is not proof of correctness.</p>
+ <div class="card"><label for="input"><b>Malay text</b></label><textarea id="input" placeholder="Paste text to check…" maxlength="30000"></textarea>
+  <div class="controls"><button class="act primary" id="btn-check">Check</button><button class="act" id="btn-clear">Clear</button>
+  <label>Register <select id="register"><option value="formal">Formal writing</option><option value="informal">Informal / conversation</option></select></label></div>
+  <div id="text-result"></div></div>
+ <div class="card" id="output" aria-live="polite">Results will appear here.</div>
+</section>
+
+<section class="tab" id="tab-rulebook">
+ <h2>Rule Book pack</h2>
+ <p class="sub">Runs inside the Chrome extension (local, offline). Direct editing and acceptance of proposals require an admin token; anyone can submit a proposal for review.</p>
+ <div class="card">
+  <div class="controls" style="margin:0 0 10px"><span id="pack-meta" class="sub" style="margin:0"></span>
+   <span style="flex:1"></span>
+   <button class="act primary" id="btn-pack-save">Save (admin)</button>
+   <button class="act" id="btn-pack-revert">Revert</button>
+   <span id="pack-msg" class="msg"></span></div>
+  <textarea id="pack-src" spellcheck="false"></textarea>
+  <details><summary>Rule list (parsed from source)</summary><table id="pack-rules"><thead><tr><th>ID</th><th>Level</th><th>Note</th><th>Status</th></tr></thead><tbody></tbody></table></details>
+ </div>
+ <div class="card">
+  <h3 style="margin:0 0 4px;font-size:16px">Propose a new rule</h3>
+  <p class="sub" style="margin:0 0 10px">Submitted for admin review — it does not affect checking until accepted.</p>
+  <div class="controls" style="margin:0"><input id="prop-id" placeholder="Rule ID (e.g. KS-06)" style="font:inherit;padding:7px;border:1px solid #c4ced8;border-radius:6px;width:160px">
+   <select id="prop-conf"><option value="warn">warn (needs context)</option><option value="error">error</option><option value="note">note</option><option value="exception">exception</option></select></div>
+  <textarea id="prop-re" placeholder="Regex pattern, e.g. \bselamat\s+pagi\b" style="min-height:70px;margin-top:8px;font:13px Consolas,monospace"></textarea>
+  <textarea id="prop-note" placeholder="Explanation shown in tooltips / review" style="min-height:54px;margin-top:8px"></textarea>
+  <div class="controls"><button class="act primary" id="btn-prop-submit">Submit proposal</button><span id="prop-msg" class="msg"></span></div>
+ </div>
+ <div class="card">
+  <h3 style="margin:0 0 4px;font-size:16px">Admin</h3>
+  <div class="controls" style="margin:0 0 8px"><input id="admin-token" type="password" placeholder="Admin token" style="font:inherit;padding:7px;border:1px solid #c4ced8;border-radius:6px;width:260px">
+   <button class="act" id="btn-admin-load">Load proposals</button><span id="admin-msg" class="msg"></span></div>
+  <div id="admin-list"></div>
+ </div>
+</section>
+
+<section class="tab" id="tab-serverrules">
+ <h2>Server rules</h2>
+ <p class="sub">Config files used by the local service. Edit the file at the path shown and it hot-reloads within 15 seconds — no restart needed.</p>
+ <div class="card">
+  <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act" id="btn-reload">↻ Reload now</button><span id="cfg-msg" class="msg"></span></div>
+  <div id="cfg-files"></div>
+  <table id="cfg-rules"><thead><tr><th>#</th><th>ID</th><th>Level</th><th>Regex</th><th>Note</th><th>Status</th></tr></thead><tbody></tbody></table>
+ </div>
+</section>
+
+<section class="tab" id="tab-about">
+ <h2>About</h2>
+ <div class="card">
+  <p><b>Tepat</b> answers one question: <i>does this word exist?</i> It highlights suspicious words for human investigation — it never judges correctness automatically.</p>
+  <p>Red marks: structural rule hits. Amber: needs context. Blue: uncertain forms. Hover a highlight for notes; use the buttons in each result for local evidence, PRPM lookup or a web search.</p>
+  <p>Absence from a dictionary or corpus does not establish a spelling error. An attested word does not certify grammar, meaning or factuality.</p>
+  <p id="about-mode"></p>
+  <table><thead><tr><th>Corpus source</th><th>Candidate records</th><th>Unique sentences</th></tr></thead><tbody id="sources"></tbody></table>
+ </div>
+</section>
+
 </main><script src="/results.js"></script><script>
-const $=s=>document.querySelector(s), API=location.origin;
+const $=s=>document.querySelector(s), API=location.origin, esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let generation=0;
+
+// ── sidebar tabs ──
+for(const b of document.querySelectorAll('aside .nav')) b.onclick=()=>{
+ document.querySelectorAll('aside .nav').forEach(x=>x.classList.toggle('active',x===b));
+ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id==='tab-'+b.dataset.tab));
+};
+
+// ── health / status ──
 fetch(API+'/api/health').then(r=>r.json()).then(h=>{
- $('#status').textContent=h.mode==='core' ? 'Mod teras: carian PRPM sahaja — letak data/evidence.sqlite di sebelah exe untuk mod penuh.'
-  : h.engine==='evidence-v2' ? `${h.words.toLocaleString()} bentuk DBP · ${h.review_run}` : 'Versi Tepat perlu dikemas kini.';
- for(const [source,count] of Object.entries(h.source_counts || {})){const tr=document.createElement('tr');for(const value of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof value==='number'?value.toLocaleString():value;tr.appendChild(td);}$('#sources').appendChild(tr);}
-}).catch(()=>$('#status').textContent='Pelayan tidak dapat dihubungi.');
-async function request(path,body){const response=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Semakan tidak selesai.');return result;}
+ $('#status').innerHTML=h.mode==='core'
+  ? '<b>Core mode</b><br>PRPM lookup only.<br>Add data/evidence.sqlite beside the exe for full checking.'
+  : `<b>Full mode</b><br>${h.words.toLocaleString()} DBP forms<br>${esc(h.review_run||'')}`;
+ $('#about-mode').textContent=h.mode==='core'?'Running in core mode: PRPM lookups only. Grammar, spelling and evidence checks require the full data pack.':'';
+ for(const [source,count] of Object.entries(h.source_counts||{})){const tr=document.createElement('tr');for(const v of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof v==='number'?v.toLocaleString():v;td.className=v===source?'bmc-tag':'';tr.appendChild(td);}$('#sources').appendChild(tr);}
+}).catch(()=>{$('#status').textContent='Server unreachable.';});
+
+async function request(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed.');return j;}
+
+// ── Check tab ──
 $('#btn-check').onclick=async()=>{
  const current=++generation,text=$('#input').value;if(!text.trim())return;
- $('#btn-check').disabled=true;$('#output').textContent='Menyemak…';
+ $('#btn-check').disabled=true;$('#output').textContent='Checking…';
  try{const r=await request('/api/scan',{text,register:$('#register').value});if(current!==generation)return;
   $('#output').innerHTML=TepatResults.html(r);$('#text-result').replaceChildren();
-  for(const p of TepatResults.segments(text,r.issues || [])){if(!p.level){$('#text-result').appendChild(document.createTextNode(p.text));continue;}const mark=document.createElement('mark');mark.className=p.level;mark.textContent=p.text;mark.title=p.notes.join(' · ');mark.onclick=()=>$('#output').scrollIntoView({behavior:'smooth'});$('#text-result').appendChild(mark);}
+  for(const p of TepatResults.segments(text,r.issues||[])){if(!p.level){$('#text-result').appendChild(document.createTextNode(p.text));continue;}const mark=document.createElement('mark');mark.className=p.level;mark.textContent=p.text;mark.title=p.notes.join(' · ');mark.onclick=()=>$('#output').scrollIntoView({behavior:'smooth'});$('#text-result').appendChild(mark);}
  }catch(e){if(current===generation)$('#output').textContent=e.message;}finally{$('#btn-check').disabled=false;}
 };
-$('#btn-clear').onclick=()=>{generation++;$('#input').value='';$('#text-result').replaceChildren();$('#output').textContent='Hasil semakan akan muncul di sini.';};
-// ── Config view（用户裁决 2026-10-02：每个 rule 植入的直观视图 + hot config）──
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('#btn-clear').onclick=()=>{generation++;$('#input').value='';$('#text-result').replaceChildren();$('#output').textContent='Results will appear here.';};
+$('#output').onclick=async e=>{
+ const btn=e.target.closest('.bmc-evidence-btn,.bmc-kamus-btn');if(!btn)return;
+ btn.disabled=true;const item=btn.closest('.bmc-item');let box=item.querySelector('.bmc-local-evidence');if(!box){box=document.createElement('div');box.className='bmc-local-evidence';item.appendChild(box);}box.textContent='Loading…';
+ try{if(btn.classList.contains('bmc-kamus-btn')){const r=await request('/api/prpm',{word:btn.dataset.w});box.textContent=({hit:'Entry found; meaning and register still need review. ',miss:'No entry found; this does not prove a spelling error. ',unreachable:'PRPM could not be verified. '}[r.status]||'')+(r.definition||r.note||'');}
+ else{const r=await request('/api/evidence',{query:btn.dataset.q});box.replaceChildren();const rows=[...(r.lexical?.definitions||[]).map(d=>({source:d.dictionary_source||'DBP',text:d.cleaned_text})),...(r.lexical?.examples||[]),...(r.references||[])];const unique=new Set();for(const row of rows){const key=row.source+row.text;if(unique.has(key))continue;unique.add(key);const p=document.createElement('p');p.textContent=`${row.source}: ${row.text}`;box.appendChild(p);}if(!rows.length)box.textContent='No local evidence found; check external sources.';}
+ }catch(e){box.textContent=e.message;}finally{btn.disabled=false;}
+};
+
+// ── Server Rules tab ──
 async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
-  $('#cfg-badge').textContent=r.loaded?`(${(r.rule_views||[]).length} peraturan aktif)`:'(modul tatabahasa tidak dimuatkan)';
-  $('#cfg-files').innerHTML=(r.files||[]).map(f=>`<p style="font-size:12px;margin:4px 0"><code>${esc(f.name)}</code> — ${f.exists?`<code style="font-size:11px">${esc(f.path)}</code> · ${(f.bytes/1024).toFixed(1)} KB${f.parse_error?` · <b style="color:#a3312a">JSON rosak: ${esc(f.parse_error)}</b>`:''}`:'<i>tidak dijumpai</i>'}</p>`).join('');
+  $('#cfg-badge').textContent=r.loaded?`${(r.rule_views||[]).length} active rules`:'grammar module not loaded';
+  $('#cfg-files').innerHTML=(r.files||[]).map(f=>`<p style="font-size:12px;margin:4px 0"><code>${esc(f.name)}</code> — ${f.exists?`<code style="font-size:11px">${esc(f.path)}</code> · ${(f.bytes/1024).toFixed(1)} KB${f.parse_error?` · <b class="bad">Broken JSON: ${esc(f.parse_error)}</b>`:''}`:'<i>not found</i>'}</p>`).join('');
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
   for(const v of r.rule_views||[]){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${v.idx}</td><td><b>${esc(v.id)}</b></td><td>${esc(v.conf)}</td><td><code style="font-size:11px;word-break:break-all">${esc(v.re)}</code></td><td style="font-size:11px">${esc(v.note)}</td><td style="font-size:11px;color:${v.valid?'#256b58':'#a3312a'}">${v.valid?'✓':'✗ '+esc(v.error||'')}</td>`;
     tb.appendChild(tr);
   }
-  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="6" style="color:#a3312a">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
- }catch(e){$('#cfg-badge').textContent='(config tidak tersedia)';}
+  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="6" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
+ }catch(e){$('#cfg-badge').textContent='config unavailable';}
 }
 $('#btn-reload').onclick=async()=>{
- $('#cfg-msg').textContent='Me-reload…';
+ $('#cfg-msg').textContent='Reloading…';
  try{const r=await fetch(API+'/api/config/reload',{method:'POST'}).then(x=>x.json());
-  $('#cfg-msg').textContent=r.ok?`✓ ${r.rules} peraturan dimuat semula${r.config_warnings.length?` · ${r.config_warnings.length} amaran`:''}`:'✗ '+r.error;
+  $('#cfg-msg').innerHTML=r.ok?`<span class="ok">✓ ${r.rules} rules reloaded${r.config_warnings.length?` · ${r.config_warnings.length} warnings`:''}</span>`:`<span class="bad">✗ ${esc(r.error)}</span>`;
   await loadConfig();
- }catch(e){$('#cfg-msg').textContent='✗ '+e.message;}
+ }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
 loadConfig();
-$('#output').onclick=async e=>{
- const btn=e.target.closest('.bmc-evidence-btn,.bmc-kamus-btn');if(!btn)return;
- btn.disabled=true;const item=btn.closest('.bmc-item');let box=item.querySelector('.bmc-local-evidence');if(!box){box=document.createElement('div');box.className='bmc-local-evidence';item.appendChild(box);}box.textContent='Memuatkan…';
- try{if(btn.classList.contains('bmc-kamus-btn')){const r=await request('/api/prpm',{word:btn.dataset.w});box.textContent=({hit:'Entri ditemui; makna dan laras masih perlu diperiksa. ',miss:'Tiada entri ditemui; ini tidak membuktikan ejaan salah. ',unreachable:'PRPM belum dapat disahkan. '}[r.status]||'')+(r.definition||r.note||'');}
- else{const r=await request('/api/evidence',{query:btn.dataset.q});box.replaceChildren();const rows=[...(r.lexical?.definitions||[]).map(d=>({source:d.dictionary_source||'DBP',text:d.cleaned_text})),...(r.lexical?.examples||[]),...(r.references||[])];const unique=new Set();for(const row of rows){const key=row.source+row.text;if(unique.has(key))continue;unique.add(key);const p=document.createElement('p');p.textContent=`${row.source}: ${row.text}`;box.appendChild(p);}if(!rows.length)box.textContent='Tiada bukti tempatan ditemui; semak sumber luar.';}
- }catch(e){box.textContent=e.message;}finally{btn.disabled=false;}
+
+// ── Rule Book tab ──
+let packOriginal='';
+async function loadPack(){
+ try{
+  const r=await fetch(API+'/api/pack').then(x=>x.json());
+  packOriginal=r.content;$('#pack-src').value=r.content;
+  $('#pack-meta').innerHTML=`<code style="font-size:11px">${esc(r.path)}</code>`;
+  renderPackViews(r.content);
+ }catch(e){$('#pack-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+}
+function renderPackViews(src){
+ // 与 server /api/config 相同的解析规则，直接在前端复刻一份避免多一次请求
+ const tb=$('#pack-rules tbody');tb.replaceChildren();
+ const pat=/\{\s*id:\s*'([^']*)'\s*,\s*conf:\s*'([^']*)'\s*,\s*note:\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g;
+ let m;
+ while((m=pat.exec(src))){
+  let note=m[3];try{note=JSON.parse(note);}catch{note=note.slice(1,-1);}
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><b>${esc(m[1])}</b></td><td>${esc(m[2])}</td><td style="font-size:11px">${esc(note)}</td><td style="color:#8a94a0">—</td>`;
+  tb.appendChild(tr);
+ }
+ if(!tb.children.length)tb.innerHTML='<tr><td colspan="4" class="bad">No rule entries parsed — check the source format.</td></tr>';
+}
+$('#btn-pack-save').onclick=async()=>{
+ $('#pack-msg').textContent='Saving…';
+ try{
+  const r=await request('/api/pack',{content:$('#pack-src').value,admin_token:$('#admin-token').value});
+  $('#pack-msg').innerHTML=`<span class="ok">✓ Saved (${r.entries} entries). Backup kept. Reload extension pages to apply.</span>`;
+  packOriginal=$('#pack-src').value;renderPackViews(packOriginal);
+ }catch(e){
+  const msg=e.message.includes('validation failed')?'Validation failed — nothing written.':e.message;
+  $('#pack-msg').innerHTML='<span class="bad">✗ '+esc(msg)+'</span>';
+ }
+};
+$('#btn-pack-revert').onclick=()=>{$('#pack-src').value=packOriginal;$('#pack-msg').textContent='Reverted to last saved version.';renderPackViews(packOriginal);};
+$('#pack-src').oninput=()=>renderPackViews($('#pack-src').value);
+loadPack();
+
+// ── proposals（普通用户提交申请；admin 查看 + 批准）──
+$('#btn-prop-submit').onclick=async()=>{
+ $('#prop-msg').textContent='Submitting…';
+ try{
+  const r=await request('/api/proposals',{rule:{id:$('#prop-id').value,conf:$('#prop-conf').value,re:$('#prop-re').value,note:$('#prop-note').value}});
+  let msg=r.regex_valid?'✓ Submitted for review.':'✓ Submitted (note: regex issue — '+r.regex_error+')';
+  if(r.github_issue)msg+=` <a href="${esc(r.github_issue)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>`;
+  else if(r.github_error)msg+=` <span class="sub">(local only — GitHub sync failed)</span>`;
+  $('#prop-msg').innerHTML=r.regex_valid?`<span class="ok">${msg}</span>`:`<span class="ok">${esc(msg)}</span>`;
+  $('#prop-id').value='';$('#prop-re').value='';$('#prop-note').value='';
+ }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+};
+$('#btn-admin-load').onclick=async()=>{
+ $('#admin-msg').textContent='Loading…';
+ try{
+  const r=await fetch(API+'/api/proposals',{headers:{'X-Admin-Token':$('#admin-token').value}}).then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
+  $('#admin-msg').innerHTML=`<span class="ok">✓ ${r.proposals.length} pending</span>`;
+  const list=$('#admin-list');list.replaceChildren();
+  for(const p of r.proposals){
+    const div=document.createElement('div');
+    div.style.cssText='border:1px solid #dbe1e7;border-radius:8px;padding:10px;margin:8px 0;font-size:13px';
+    div.innerHTML=`<b>${esc(p.id)}</b> <span class="bmc-tag">${esc(p.conf)}</span> ${p.regex_valid?'':'<span class="bad">(regex invalid)</span>'}<br><code style="font-size:11px;word-break:break-all">${esc(p.re)}</code><br>${esc(p.note||'')}<br>`;
+    const accept=document.createElement('button');accept.className='act';accept.textContent='Accept';
+    accept.onclick=async()=>{
+      accept.disabled=true;
+      try{const res=await request('/api/proposals/accept',{submitted_at:p.submitted_at,admin_token:$('#admin-token').value});
+        div.style.opacity='.5';accept.textContent='✓ '+res.accepted;packOriginal='';loadPack();
+      }catch(e){accept.disabled=false;accept.textContent='✗ '+e.message;}
+    };
+    div.appendChild(accept);list.appendChild(div);
+  }
+  if(!r.proposals.length)list.innerHTML='<p class="sub" style="margin:0">No pending proposals.</p>';
+ }catch(e){$('#admin-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
 </script></body></html>

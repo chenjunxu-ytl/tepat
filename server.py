@@ -43,6 +43,84 @@ CACHE_PATH = os.path.join(
     "tepat", "prpm_cache.sqlite") if os.name == "nt" else \
     os.path.join(os.path.expanduser("~"), ".tepat", "prpm_cache.sqlite")
 
+# Admin 权限：TEPAT_ADMIN_TOKEN 环境变量优先，其次 %APPDATA%\tepat\admin_token。
+# 有 token 才能 accept proposals / 直接改 Rule Book；普通用户只能提交申请。
+ADMIN_TOKEN = os.environ.get("TEPAT_ADMIN_TOKEN") or ""
+
+
+def _admin_token() -> str:
+    if ADMIN_TOKEN:
+        return ADMIN_TOKEN
+    path = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat", "admin_token") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat", "admin_token")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _is_admin(req_headers, body: dict | None = None) -> bool:
+    import hmac as _hmac
+    expected = _admin_token()
+    if not expected:
+        return False
+    given = str((body or {}).get("admin_token") or req_headers.get("X-Admin-Token") or "")
+    return _hmac.compare_digest(expected, given)
+
+
+def _proposals_path() -> str:
+    base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, "proposals.jsonl")
+
+
+# GitHub 同步：proposal 上云用（Issue 形态，admin 在 GitHub 上阅读）。
+# 建议给 fine-grained PAT，仅 tepat repo 的 Issues: Write；泄露只可能被刷 Issue。
+GH_PROPOSAL_REPO = os.environ.get("TEPAT_GH_REPO", "chenjunxu-ytl/tepat")
+
+
+def _gh_token() -> str:
+    tok = os.environ.get("TEPAT_GH_TOKEN") or ""
+    if tok:
+        return tok
+    path = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat", "gh_token") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat", "gh_token")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _gh_open_proposal_issue(rule: dict, regex_valid: bool) -> str:
+    """把一条 proposal 开成 GitHub Issue，返回 html_url；失败抛 RuntimeError。"""
+    import urllib.request as _rq
+    token = _gh_token()
+    if not token:
+        raise RuntimeError("no GitHub token configured (%APPDATA%\\tepat\\gh_token)")
+    rid = rule.get("id", "?")
+    title = f"[proposal] {rid}: {(rule.get('note') or '')[:80]}"
+    body = ("\n".join(f"**{k}:** {rule.get(k, '')}" for k in
+                      ("id", "conf", "re", "note"))
+            + f"\n\n**regex_valid:** {regex_valid}"
+            + f"\n**submitted_at:** {int(time.time())}"
+            + "\n\n_Auto-filed by Tepat web UI._")
+    req = _rq.Request(
+        f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/issues",
+        data=json.dumps({"title": title[:120], "body": body,
+                         "labels": ["rule-proposal"]}).encode(),
+        headers={"Authorization": f"Bearer {token}",
+                 "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json"})
+    import urllib.error as _ue
+    with _rq.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read()).get("html_url", "")
+
 # ── Accepted evidence database ──
 
 _words: set[str] = set()
@@ -70,6 +148,31 @@ def load_words() -> int:
 
 def word_exists(w: str) -> bool:
     return bool(_checker and _checker.store.lexical(normalize(w))["state"] != "unknown")
+
+
+def _validate_pack_js(content: str) -> list[str]:
+    """rules-pack.js 落盘前的最小校验：扩展引擎要消费的结构必须完整。"""
+    problems = []
+    if "window.TEPAT_PACKS" not in content:
+        problems.append("missing window.TEPAT_PACKS registration")
+    if "meta:" not in content or "rules:" not in content:
+        problems.append("missing meta:/rules: sections")
+    entries = re.findall(r"\{\s*id:\s*'([^']*)'\s*,\s*conf:\s*'([^']*)'\s*,"
+                         r"\s*note:\s*('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")", content)
+    if not entries:
+        problems.append("no rule entries parsed ({ id, conf, note, re })")
+    for idx, (rid, conf, _note) in enumerate(entries):
+        if not rid:
+            problems.append(f"rule {idx}: empty id")
+        if conf not in ("error", "warn", "note", "exception"):
+            problems.append(f"rule {idx} ({rid or '?'}): conf must be error/warn/note/exception, got '{conf}'")
+    for m in re.finditer(r"\bre:\s*('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")", content):
+        raw = m.group(1)[1:-1]
+        try:
+            re.compile(raw)  # 近似校验：JS 与 Python 正则大部分语法重合
+        except re.error as e:
+            problems.append(f"regex {raw[:40]!r}: {e}")
+    return problems
 
 
 def bigram_exists(a: str, b: str) -> bool:
@@ -308,9 +411,64 @@ class Handler(BaseHTTPRequestHandler):
                     rule_views.append({"idx": i, "id": r.get("id"), "conf": r.get("conf"),
                                        "re": r.get("re"), "note": r.get("note"),
                                        "valid": ok, "error": err})
+            # Rule Book 插件包（extension/rules-pack.js）：JS 正则，服务端只做
+            # 结构列出 + 明显损坏检测，不保证 JS 语义可编译（那是扩展引擎的事）。
+            pack_meta, pack_views = None, []
+            pack_path = Path(_ROOT) / "extension" / "rules-pack.js"
+            if pack_path.is_file():
+                text = pack_path.read_text(encoding="utf-8", errors="replace")
+                meta_id = re.search(r"id:\s*'([^']+)'", text)
+                meta_title = re.search(r"title:\s*'([^']+)'", text)
+                meta_src = re.search(r"source:\s*'([^']+)'", text)
+                meta_ver = re.search(r"version:\s*(\d+)", text)
+                pack_meta = {"id": meta_id.group(1) if meta_id else "?",
+                             "title": meta_title.group(1) if meta_title else "?",
+                             "source": meta_src.group(1) if meta_src else "?",
+                             "version": int(meta_ver.group(1)) if meta_ver else 0,
+                             "path": str(pack_path)}
+                for m in re.finditer(r"\{\s*id:\s*'([^']+)'\s*,\s*conf:\s*'([^']+)'\s*,"
+                                     r"\s*note:\s*('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")", text):
+                    rid, conf, note_raw = m.group(1), m.group(2), m.group(3)
+                    try:
+                        note = json.loads(note_raw)  # JS 单引号字符串无转义时与 JSON 兼容
+                    except json.JSONDecodeError:
+                        note = note_raw[1:-1]
+                    ok, err = True, None
+                    re_m = re.search(r"re:\s*('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")",
+                                     text[m.start():m.start() + 2000])
+                    if re_m:
+                        try:
+                            re.compile(re_m.group(1)[1:-1])
+                        except re.error as e:
+                            ok, err = False, f"(python近似校验) {e}"
+                    pack_views.append({"id": rid, "conf": conf, "note": note,
+                                       "valid": ok, "error": err})
             self._json(200, {"files": entries, "rule_views": rule_views,
+                             "pack": pack_meta, "pack_views": pack_views,
                              "loaded": _checker is not None,
                              "config_warnings": _checker.config_warnings if _checker else []})
+        elif self.path == "/api/pack":
+            # Rule Book 插件包（extension/rules-pack.js）：GET 返回原文 + path。
+            # POST（见 do_POST）保存新内容；扩展在页面刷新后读取新包。
+            pack_path = Path(_ROOT) / "extension" / "rules-pack.js"
+            if not pack_path.is_file():
+                self._json(404, {"error": "rules-pack.js not found"})
+                return
+            self._json(200, {"path": str(pack_path),
+                             "content": pack_path.read_text(encoding="utf-8", errors="replace")})
+        elif self.path == "/api/proposals":
+            # Rule Book 申请列表：读取需要 admin（申请内容对普通用户互相不可见）。
+            if not _is_admin(self.headers):
+                self._json(403, {"error": "admin token required"})
+                return
+            proposals = []
+            try:
+                with open(_proposals_path(), encoding="utf-8") as f:
+                    proposals = [json.loads(line) for line in f if line.strip()]
+            except (OSError, json.JSONDecodeError):
+                pass
+            self._json(200, {"proposals": proposals,
+                             "admin_configured": bool(_admin_token())})
         else:
             self._json(404, {"error": "not found"})
 
@@ -375,6 +533,123 @@ class Handler(BaseHTTPRequestHandler):
                                  "config_warnings": _checker.config_warnings})
             except Exception as e:  # noqa: BLE001
                 self._json(500, {"error": f"reload failed: {e}"})
+        elif self.path == "/api/pack":
+            # 保存 Rule Book 插件包：admin 专属（普通用户请走 /api/proposals 申请）。
+            # 写前备份 rules-pack.js.bak，随后基础校验（IIFE 结构、meta、rules
+            # 数组、每条 rule 的 id/conf/re/note 齐全、JS 字符串能转成合法正则）。
+            # 校验失败不落盘。
+            if not _is_admin(self.headers, req):
+                self._json(403, {"error": "admin token required to edit the Rule Book pack; "
+                                         "submit a proposal via /api/proposals instead"})
+                return
+            pack_path = Path(_ROOT) / "extension" / "rules-pack.js"
+            content = str(req.get("content") or "")
+            if not content.strip():
+                self._json(400, {"error": "content required"})
+                return
+            problems = _validate_pack_js(content)
+            if problems:
+                self._json(400, {"error": "pack validation failed", "problems": problems})
+                return
+            try:
+                if pack_path.exists():
+                    backup = pack_path.with_suffix(".js.bak")
+                    backup.write_bytes(pack_path.read_bytes())
+                pack_path.write_text(content, encoding="utf-8")
+            except OSError as e:
+                self._json(500, {"error": f"write failed: {e}"})
+                return
+            meta = re.search(r"id:\s*'([^']+)'", content)
+            count = len(re.findall(r"\{\s*id:\s*'", content)) - 1  # 减 meta 自身
+            _log(f"[pack] rules-pack.js updated ({max(count, 0)} rule entries)")
+            self._json(200, {"ok": True, "backup": True,
+                             "entries": max(count, 0),
+                             "meta_id": meta.group(1) if meta else "?"})
+        elif self.path == "/api/proposals":
+            # 普通用户提交 Rule Book 申请：免 token，但内容有长度上限，
+            # 只进申请列表，不影响任何实际检查；admin 批准后才落 rules-pack.js。
+            rule = req.get("rule")
+            if not isinstance(rule, dict):
+                self._json(400, {"error": "rule object required"})
+                return
+            rid = str(rule.get("id") or "").strip()[:32]
+            note = str(rule.get("note") or "").strip()[:300]
+            pattern = str(rule.get("re") or "").strip()[:500]
+            conf = str(rule.get("conf") or "warn").strip()[:16]
+            if not rid or not pattern:
+                self._json(400, {"error": "rule id and re required"})
+                return
+            ok, err = True, None
+            try:
+                re.compile(pattern)  # 近似校验，跟保存包同一口径
+            except re.error as e:
+                ok, err = False, str(e)
+            entry = {"id": rid, "conf": conf, "re": pattern, "note": note,
+                     "regex_valid": ok, "regex_error": err,
+                     "submitted_at": int(time.time())}
+            with open(_proposals_path(), "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            # 云端同步：有 GitHub token 就把申请开成 Issue（admin 在 GitHub 阅读）；
+            # 失败不影响本地存储，稍后可在 admin 机器补传。
+            gh_url = ""
+            gh_error = None
+            try:
+                gh_url = _gh_open_proposal_issue(entry, ok)
+            except Exception as e:  # noqa: BLE001
+                gh_error = str(e)[:200]
+                _log(f"[proposals] GitHub issue failed: {gh_error}")
+            _log(f"[proposals] new proposal {rid} from web UI")
+            self._json(200, {"ok": True, "regex_valid": ok, "regex_error": err,
+                             "github_issue": gh_url or None,
+                             "github_error": gh_error})
+        elif self.path == "/api/proposals/accept":
+            # admin 批准申请：把规则追加进 rules-pack.js 的 rules 数组尾部。
+            if not _is_admin(self.headers, req):
+                self._json(403, {"error": "admin token required"})
+                return
+            submitted_at = req.get("submitted_at")
+            proposals_path = Path(_proposals_path())
+            proposals = []
+            if proposals_path.is_file():
+                with proposals_path.open(encoding="utf-8") as f:
+                    proposals = [json.loads(line) for line in f if line.strip()]
+            target = next((p for p in proposals
+                           if str(p.get("submitted_at")) == str(submitted_at)), None)
+            if target is None:
+                self._json(404, {"error": "proposal not found"})
+                return
+            pack_path = Path(_ROOT) / "extension" / "rules-pack.js"
+            if not pack_path.is_file():
+                self._json(404, {"error": "rules-pack.js not found"})
+                return
+            content = pack_path.read_text(encoding="utf-8")
+            rid, conf = str(target["id"]), str(target["conf"]) or "warn"
+            pattern, note = str(target["re"]), str(target.get("note") or "")
+            # JS 字符串字面量转义：反斜杠与引号，跨行不存在（提交时已限单行）
+            js_re = pattern.replace("\\", "\\\\").replace('"', '\\"')
+            js_note = note.replace("\\", "\\\\").replace('"', '\\"')
+            entry = (f'      // ── accepted proposal ──\n'
+                     f"      {{ id: '{rid}', conf: '{conf}', note: \"{js_note}\",\n"
+                     f'        re: "{js_re}" }},\n')
+            if "rules: [" not in content:
+                self._json(500, {"error": "rules array not found in pack"})
+                return
+            # 在 rules 数组收尾行（"    ],"）前插入，保留原缩进
+            close = content.rindex("],\n  };")
+            line_start = content.rindex("\n", 0, close) + 1
+            new_content = content[:line_start] + entry + content[line_start:]
+            problems = _validate_pack_js(new_content)
+            if problems:
+                self._json(400, {"error": "merged pack failed validation", "problems": problems})
+                return
+            pack_path.with_suffix(".js.bak").write_bytes(pack_path.read_bytes())
+            pack_path.write_text(new_content, encoding="utf-8")
+            with proposals_path.open("w", encoding="utf-8") as f:  # 已处理：清空申请列表
+                for p in proposals:
+                    if p is not target:
+                        f.write(json.dumps(p, ensure_ascii=False) + "\n")
+            _log(f"[proposals] accepted {rid} -> rules-pack.js")
+            self._json(200, {"ok": True, "accepted": rid})
         else:
             self._json(404, {"error": "not found"})
 
