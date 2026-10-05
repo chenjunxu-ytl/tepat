@@ -274,6 +274,7 @@ class Handler(BaseHTTPRequestHandler):
             self._file(os.path.join(_ROOT, "extension", "results.js"), "text/javascript; charset=utf-8")
         elif self.path == "/api/health":
             self._json(200, {"ok": _checker is not None, "engine": "evidence-v2", "words": len(_words),
+                             "mode": "full" if _checker is not None else "core",
                              "review_run": _checker.store.metadata["review_run"] if _checker else None,
                              "source_counts": _checker.store.metadata["counts"] if _checker else {},
                              "config_warnings": _checker.config_warnings if _checker else [],
@@ -392,10 +393,6 @@ def main() -> int:
 
     _log(f"[main] args: port={args.port}, no_browser={args.no_browser}, no_tray={args.no_tray}")
 
-    if not os.path.exists(EVIDENCE_PATH):
-        _log(f"[FATAL] evidence.sqlite not found at: {EVIDENCE_PATH}; run build_evidence.py first")
-        return 2
-
     import ctypes
     import socket as _socket
 
@@ -416,8 +413,17 @@ def main() -> int:
         _log(f"[tepat] port {args.port} already serving — exiting WITHOUT opening UI")
         return 0
 
-    _log("[main] loading words and rules...")
-    load_words()
+    # core 运行时没有 evidence.sqlite：保持 PRPM-only 服务（轻量版是一等资产）。
+    # 语法数据是可后补的升级包，不是启动前提；放回 data/ 后重启即恢复完整检查。
+    if os.path.exists(EVIDENCE_PATH):
+        _log("[main] loading words and rules...")
+        try:
+            load_words()
+        except Exception as e:  # noqa: BLE001
+            _log(f"[main] evidence load failed ({e!r}) — serving PRPM-only")
+    else:
+        _log("[main] no evidence.sqlite — PRPM-only core mode; "
+             "drop data/evidence.sqlite beside the runtime to enable the grammar module")
 
     class _ExclusiveServer(ThreadingHTTPServer):
         # Windows 默认允许同端口双重 bind（无 SO_EXCLUSIVEADDRUSE），

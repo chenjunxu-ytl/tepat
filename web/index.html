@@ -16,7 +16,8 @@
 const $=s=>document.querySelector(s), API=location.origin;
 let generation=0;
 fetch(API+'/api/health').then(r=>r.json()).then(h=>{
- $('#status').textContent=h.engine==='evidence-v2' ? `${h.words.toLocaleString()} bentuk DBP · ${h.review_run}` : 'Versi Tepat perlu dikemas kini.';
+ $('#status').textContent=h.mode==='core' ? 'Mod teras: carian PRPM sahaja — letak data/evidence.sqlite di sebelah exe untuk mod penuh.'
+  : h.engine==='evidence-v2' ? `${h.words.toLocaleString()} bentuk DBP · ${h.review_run}` : 'Versi Tepat perlu dikemas kini.';
  for(const [source,count] of Object.entries(h.source_counts || {})){const tr=document.createElement('tr');for(const value of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof value==='number'?value.toLocaleString():value;tr.appendChild(td);}$('#sources').appendChild(tr);}
 }).catch(()=>$('#status').textContent='Pelayan tidak dapat dihubungi.');
 async function request(path,body){const response=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Semakan tidak selesai.');return result;}
