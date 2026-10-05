@@ -16,6 +16,8 @@ From this directory:
 python server.py
 ```
 
+PRPM is part of the Tepat core and starts even when the optional grammar evidence pack is not installed. When grammar data is present, the existing grammar/evidence checker is loaded as an additional capability.
+
 Open http://127.0.0.1:8377. For Chrome, reload `extension/` as an unpacked extension,
 then refresh the target page. Select text and use **Semak bahasa**, or use Alt+S.
 The extension can scan the first 30,000 UTF-16 units of page text, with exact
@@ -100,10 +102,13 @@ after one day.
 ## Validation and package
 
 ```powershell
-python -m unittest test_evidence test_checker -v
+python -m unittest test_core test_evidence test_checker -v
 node test_results.js
-.\build.bat
+.\build.bat core
+.\build.bat full
 ```
+
+`build.bat core` produces the lightweight PRPM runtime without the grammar database. `build.bat full` preserves the existing PRPM + grammar package.
 
 The portable app is `dist/tepat-v2/tepat-v2.exe`. Keep its entire folder together;
 the database is intentionally outside the binary. External copies of rules and
@@ -114,12 +119,14 @@ After committing both the checker and its sibling corpus-cleaning repository,
 prepare the portable app, Chrome extension, corpus tools and checksums with:
 
 ```powershell
-python prepare_release.py
+python prepare_release.py --mode core
+python prepare_release.py --mode full
 ```
 
-The output is under `releases/v2.0.0-preview.1/`. Preparation reads the existing
-completed database and verifies Zip64 archives; it does not rebuild evidence or
-publish to GitHub. The app archive includes the database and the entire runtime.
+The output is under `releases/v2.0.0-preview.1/`. Core mode creates a lightweight
+`*-prpm-win64.zip` asset without grammar data. Full mode keeps the existing
+Windows, Chrome-extension and corpus-tool release assets and verifies the completed
+evidence database. Preparation does not rebuild evidence or publish to GitHub.
 
 Tests cover source counts, deduplication, prohibited negative/holdout ingestion,
 function words, single occurrence support, independent rule/Indonesian matching,
