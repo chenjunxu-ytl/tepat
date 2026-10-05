@@ -1,14 +1,23 @@
 const API = 'http://127.0.0.1:8377';
 const $ = (s) => document.querySelector(s);
+let grammarAvailable = false;
 
 // ── 状态探测 ──
 fetch(API + '/api/health')
   .then((r) => r.json())
   .then((h) => {
+    grammarAvailable = Boolean(h.capabilities?.grammar?.installed && h.capabilities?.grammar?.status === 'ready');
     const el = $('#status');
     if (el) {
       el.className = 'status-badge status-ok';
-      el.textContent = `✓ Aktif (${h.words.toLocaleString()} bentuk DBP)`;
+      el.textContent = grammarAvailable ? '✓ Aktif · Grammar' : '✓ Aktif · PRPM';
+    }
+    const scan = $('#opt-scan-page');
+    if (scan && !grammarAvailable) {
+      scan.classList.add('menu-btn-disabled');
+      scan.title = 'Mod tatabahasa belum dipasang';
+      const desc = scan.querySelector('.menu-desc');
+      if (desc) desc.textContent = 'Mod tatabahasa belum dipasang';
     }
   })
   .catch(() => {
@@ -64,6 +73,10 @@ async function sendToActiveTab(msg) {
 
 // ── 选项 1: 全页扫描并在页面高亮标记 ──
 $('#opt-scan-page').onclick = () => {
+  if (!grammarAvailable) {
+    alert('Mod tatabahasa belum dipasang. PRPM masih boleh digunakan seperti biasa.');
+    return;
+  }
   sendToActiveTab({ type: 'scan-full-page' });
 };
 
