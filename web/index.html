@@ -10,7 +10,14 @@
 const $=s=>document.querySelector(s), API=location.origin;
 let generation=0;
 fetch(API+'/api/health').then(r=>r.json()).then(h=>{
- $('#status').textContent=h.engine==='evidence-v2' ? `${h.words.toLocaleString()} bentuk DBP · ${h.review_run}` : 'Versi Tepat perlu dikemas kini.';
+ const grammar=h.capabilities?.grammar;
+ if(grammar?.installed && grammar?.status==='ready'){
+  $('#status').textContent=`${(grammar.words||h.words||0).toLocaleString()} bentuk DBP · ${grammar.review_run||h.review_run||''}`;
+ }else{
+  $('#status').textContent='PRPM aktif · modul tatabahasa belum dipasang';
+  $('#btn-check').disabled=true;
+  $('#output').innerHTML='<div class="bmc-clean-box"><b>Mod tatabahasa belum dipasang.</b><div>PRPM masih tersedia melalui sambungan Tepat. Versi ringan tidak memerlukan pangkalan bukti tatabahasa.</div></div>';
+ }
  for(const [source,count] of Object.entries(h.source_counts || {})){const tr=document.createElement('tr');for(const value of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof value==='number'?value.toLocaleString():value;tr.appendChild(td);}$('#sources').appendChild(tr);}
 }).catch(()=>$('#status').textContent='Pelayan tidak dapat dihubungi.');
 async function request(path,body){const response=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Semakan tidak selesai.');return result;}
