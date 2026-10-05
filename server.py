@@ -15,6 +15,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from checker import Checker
 from evidence import EvidenceStore
@@ -277,6 +278,38 @@ class Handler(BaseHTTPRequestHandler):
                              "source_counts": _checker.store.metadata["counts"] if _checker else {},
                              "config_warnings": _checker.config_warnings if _checker else [],
                              "tray": tray_icon is not None})
+        elif self.path == "/api/config":
+            # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
+            # + 解析态 + 逐条规则视图，web UI 的 Config 区消费。
+            entries = []
+            for name in ("rules.json", "indo_words.json", "blacklist.json"):
+                resolved = _config_path(name)
+                entry = {"name": name, "path": str(resolved),
+                         "exists": os.path.isfile(resolved)}
+                if entry["exists"]:
+                    st = os.stat(resolved)
+                    entry["mtime"] = st.st_mtime
+                    entry["bytes"] = st.st_size
+                    entry["content"] = Path(resolved).read_text(encoding="utf-8", errors="replace")
+                    try:
+                        entry["parsed"] = json.loads(entry["content"])
+                    except json.JSONDecodeError as e:
+                        entry["parse_error"] = str(e)
+                entries.append(entry)
+            rule_views = []
+            if entries[0].get("parsed"):
+                for i, r in enumerate(entries[0]["parsed"].get("rules", [])):
+                    ok, err = True, None
+                    try:
+                        re.compile(r.get("re", ""))
+                    except re.error as e:
+                        ok, err = False, str(e)
+                    rule_views.append({"idx": i, "id": r.get("id"), "conf": r.get("conf"),
+                                       "re": r.get("re"), "note": r.get("note"),
+                                       "valid": ok, "error": err})
+            self._json(200, {"files": entries, "rule_views": rule_views,
+                             "loaded": _checker is not None,
+                             "config_warnings": _checker.config_warnings if _checker else []})
         else:
             self._json(404, {"error": "not found"})
 
@@ -329,6 +362,18 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, {"query": query, "lexical": _checker.store.lookup(query),
                              "references": _checker.store.search(query)})
+        elif self.path == "/api/config/reload":
+            # 热重载：编辑 rules.json/indo_words.json 后不重启 exe 即生效。
+            if _checker is None:
+                self._json(409, {"error": "grammar module not loaded; nothing to reload"})
+                return
+            try:
+                _checker.reload()
+                self._json(200, {"ok": True,
+                                 "rules": len(_checker.rules),
+                                 "config_warnings": _checker.config_warnings})
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"error": f"reload failed: {e}"})
         else:
             self._json(404, {"error": "not found"})
 
@@ -406,10 +451,30 @@ def main() -> int:
     if not args.no_tray:
         def _tray_watchdog():
             dead_count = 0
+            def _config_sig():
+                sig = []
+                for name in ("rules.json", "indo_words.json", "blacklist.json"):
+                    try:
+                        sig.append((name, os.stat(_config_path(name)).st_mtime))
+                    except OSError:
+                        sig.append((name, 0))
+                return tuple(sig)
+            last_cfg = _config_sig()
             while True:
-                time.sleep(30)
+                time.sleep(15)
                 if stop_event.is_set():
                     return
+                # hot config（用户裁决 2026-10-02）：改文件即生效，不用重启
+                cfg = _config_sig()
+                if cfg != last_cfg:
+                    last_cfg = cfg
+                    if _checker is not None:
+                        try:
+                            _checker.reload()
+                            _log(f"[config] hot-reloaded rules ({len(_checker.rules)} rules, "
+                                 f"{len(_checker.config_warnings)} warnings)")
+                        except Exception as e:  # noqa: BLE001
+                            _log(f"[config] hot-reload failed: {e!r}")
                 if tray_icon is not None and not tray_icon.alive():
                     dead_count += 1
                     _log(f"[watchdog] tray window dead (x{dead_count}) — restarting tray")

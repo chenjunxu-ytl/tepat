@@ -6,6 +6,12 @@
 <header><h1>Tepat</h1><span id="status">Memuatkan bukti…</span></header><p>Semak ejaan, penggunaan istilah dan peraturan tatabahasa. Setiap isyarat memerlukan pertimbangan konteks.</p>
 <section class="card"><label for="input">Teks Bahasa Melayu</label><textarea id="input" placeholder="Tampal teks untuk disemak…" maxlength="30000"></textarea><div class="controls"><button class="primary" id="btn-check">Semak</button><button id="btn-clear">Kosongkan</button><label>Laras <select id="register"><option value="formal">Penulisan formal</option><option value="informal">Perbualan / tidak formal</option></select></label></div><div id="text-result"></div></section>
 <section class="card" id="output" aria-live="polite">Hasil semakan akan muncul di sini.</section><details class="card"><summary>Liputan semakan dan sumber</summary><p id="coverage">Fakta belum disemak. Semakan tatabahasa meliputi peraturan dan bukti penggunaan tempatan sahaja.</p><table><thead><tr><th>Sumber</th><th>Rekod calon</th><th>Ayat selepas deduplikasi</th></tr></thead><tbody id="sources"></tbody></table></details>
+<details class="card"><summary>⚙️ Konfigurasi peraturan <span id="cfg-badge" style="font-size:11px;color:#5d6977"></span></summary>
+<p style="font-size:13px;color:#526273">Setiap peraturan yang ditanam — sunting fail terus (path di bawah), simpan, dan ia <b>di-reload panas automatik</b> dalam &lt;15s tanpa restart.</p>
+<div id="cfg-files"></div>
+<div class="controls"><button id="btn-reload" style="font-size:12px">↻ Reload sekarang</button><span id="cfg-msg" style="font-size:12px;color:#526273"></span></div>
+<table id="cfg-rules" style="margin-top:10px"><thead><tr><th>#</th><th>ID</th><th>Tahap</th><th>Regex</th><th>Catatan</th><th>Status</th></tr></thead><tbody></tbody></table>
+</details>
 </main><script src="/results.js"></script><script>
 const $=s=>document.querySelector(s), API=location.origin;
 let generation=0;
@@ -23,6 +29,30 @@ $('#btn-check').onclick=async()=>{
  }catch(e){if(current===generation)$('#output').textContent=e.message;}finally{$('#btn-check').disabled=false;}
 };
 $('#btn-clear').onclick=()=>{generation++;$('#input').value='';$('#text-result').replaceChildren();$('#output').textContent='Hasil semakan akan muncul di sini.';};
+// ── Config view（用户裁决 2026-10-02：每个 rule 植入的直观视图 + hot config）──
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function loadConfig(){
+ try{
+  const r=await fetch(API+'/api/config').then(x=>x.json());
+  $('#cfg-badge').textContent=r.loaded?`(${(r.rule_views||[]).length} peraturan aktif)`:'(modul tatabahasa tidak dimuatkan)';
+  $('#cfg-files').innerHTML=(r.files||[]).map(f=>`<p style="font-size:12px;margin:4px 0"><code>${esc(f.name)}</code> — ${f.exists?`<code style="font-size:11px">${esc(f.path)}</code> · ${(f.bytes/1024).toFixed(1)} KB${f.parse_error?` · <b style="color:#a3312a">JSON rosak: ${esc(f.parse_error)}</b>`:''}`:'<i>tidak dijumpai</i>'}</p>`).join('');
+  const tb=$('#cfg-rules tbody');tb.replaceChildren();
+  for(const v of r.rule_views||[]){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${v.idx}</td><td><b>${esc(v.id)}</b></td><td>${esc(v.conf)}</td><td><code style="font-size:11px;word-break:break-all">${esc(v.re)}</code></td><td style="font-size:11px">${esc(v.note)}</td><td style="font-size:11px;color:${v.valid?'#256b58':'#a3312a'}">${v.valid?'✓':'✗ '+esc(v.error||'')}</td>`;
+    tb.appendChild(tr);
+  }
+  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="6" style="color:#a3312a">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
+ }catch(e){$('#cfg-badge').textContent='(config tidak tersedia)';}
+}
+$('#btn-reload').onclick=async()=>{
+ $('#cfg-msg').textContent='Me-reload…';
+ try{const r=await fetch(API+'/api/config/reload',{method:'POST'}).then(x=>x.json());
+  $('#cfg-msg').textContent=r.ok?`✓ ${r.rules} peraturan dimuat semula${r.config_warnings.length?` · ${r.config_warnings.length} amaran`:''}`:'✗ '+r.error;
+  await loadConfig();
+ }catch(e){$('#cfg-msg').textContent='✗ '+e.message;}
+};
+loadConfig();
 $('#output').onclick=async e=>{
  const btn=e.target.closest('.bmc-evidence-btn,.bmc-kamus-btn');if(!btn)return;
  btn.disabled=true;const item=btn.closest('.bmc-item');let box=item.querySelector('.bmc-local-evidence');if(!box){box=document.createElement('div');box.className='bmc-local-evidence';item.appendChild(box);}box.textContent='Memuatkan…';
