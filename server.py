@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Tepat: source-aware Malay checker, manual rules and contextual usage evidence.
+"""Tepat core service with PRPM lookup and an optional local grammar module.
 
-Uses data/evidence.sqlite built from the accepted cleaning run. Indonesian and
-register reminders run independently. No automatic correction or factual verdict.
-PRPM remains an on-demand dictionary lookup with hit/miss/unreachable states.
+PRPM is always available when the service starts. The grammar/evidence checker is
+loaded only when its data pack is installed, so the lightweight runtime can run
+without evidence.sqlite, rules.json or indo_words.json.
 """
 import argparse
 import json
@@ -36,21 +36,40 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 if getattr(sys, "frozen", False):  # PyInstaller 打包后的资源路径
     _ROOT = sys._MEIPASS  # noqa: SLF001
 
+APP_VERSION = "2.0.0-preview.1"
 WEB_DIR = os.path.join(_ROOT, "web")
 CACHE_PATH = os.path.join(
     os.environ.get("APPDATA") or os.path.expanduser("~"),
     "tepat", "prpm_cache.sqlite") if os.name == "nt" else \
     os.path.join(os.path.expanduser("~"), ".tepat", "prpm_cache.sqlite")
 
-# ── Accepted evidence database ──
+# ── Optional grammar module ──
 
 _words: set[str] = set()
-
-EVIDENCE_PATH = os.environ.get("TEPAT_EVIDENCE_DB", os.path.join(_ROOT, "data", "evidence.sqlite"))
 _checker: Checker | None = None
+_grammar_error: str | None = None
+
+_DATA_HOME = (
+    os.environ.get("LOCALAPPDATA")
+    if os.name == "nt"
+    else os.path.join(os.path.expanduser("~"), ".local", "share")
+) or os.path.expanduser("~")
+GRAMMAR_MODULE_DIR = os.environ.get(
+    "TEPAT_GRAMMAR_DIR",
+    os.path.join(_DATA_HOME, "Tepat", "modules", "grammar"),
+)
+_BUNDLED_EVIDENCE_PATH = os.path.join(_ROOT, "data", "evidence.sqlite")
+EVIDENCE_PATH = os.environ.get("TEPAT_EVIDENCE_DB") or (
+    os.path.join(GRAMMAR_MODULE_DIR, "data", "evidence.sqlite")
+    if os.path.isfile(os.path.join(GRAMMAR_MODULE_DIR, "data", "evidence.sqlite"))
+    else _BUNDLED_EVIDENCE_PATH
+)
 
 
 def _config_path(name: str) -> str:
+    module_file = os.path.join(GRAMMAR_MODULE_DIR, name)
+    if os.path.isfile(module_file):
+        return module_file
     if getattr(sys, "frozen", False):
         external = os.path.join(os.path.dirname(sys.executable), name)
         if os.path.isfile(external):
@@ -58,13 +77,48 @@ def _config_path(name: str) -> str:
     return os.path.join(_ROOT, name)
 
 
+def grammar_capability() -> dict:
+    if _checker is not None:
+        return {
+            "installed": True,
+            "status": "ready",
+            "engine": "evidence-v2",
+            "review_run": _checker.store.metadata.get("review_run"),
+            "words": len(_words),
+        }
+    if _grammar_error:
+        return {"installed": True, "status": "error", "error": _grammar_error}
+    return {"installed": False, "status": "not_installed"}
+
+
 def load_words() -> int:
-    global _checker, _words
-    store = EvidenceStore(EVIDENCE_PATH)
-    _checker = Checker(store, _config_path("rules.json"), _config_path("indo_words.json"))
-    _words = store.lexicon  # compatibility: health word count now counts DBP attestation
-    print(f"[evidence] loaded {len(_words):,} dictionary forms; run={store.metadata['review_run']}")
-    return len(_words)
+    """Load the optional grammar module without making core startup depend on it."""
+    global _checker, _words, _grammar_error
+    _checker = None
+    _words = set()
+    _grammar_error = None
+    rules_path = _config_path("rules.json")
+    indo_path = _config_path("indo_words.json")
+    if not os.path.isfile(EVIDENCE_PATH):
+        _log(f"[grammar] not installed; evidence database missing: {EVIDENCE_PATH}")
+        return 0
+    missing = [path for path in (rules_path, indo_path) if not os.path.isfile(path)]
+    if missing:
+        _grammar_error = "Grammar data pack is incomplete"
+        _log(f"[grammar] incomplete module; missing: {', '.join(missing)}")
+        return 0
+    try:
+        store = EvidenceStore(EVIDENCE_PATH)
+        _checker = Checker(store, rules_path, indo_path)
+        _words = store.lexicon  # compatibility: DBP-attested forms when grammar is installed
+        print(f"[grammar] loaded {len(_words):,} dictionary forms; run={store.metadata['review_run']}")
+        return len(_words)
+    except Exception as exc:  # Core PRPM must remain usable when an optional module is broken.
+        _checker = None
+        _words = set()
+        _grammar_error = str(exc)[:300]
+        _log(f"[grammar] failed to load optional module: {exc!r}")
+        return 0
 
 
 def word_exists(w: str) -> bool:
@@ -272,11 +326,21 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/results.js":
             self._file(os.path.join(_ROOT, "extension", "results.js"), "text/javascript; charset=utf-8")
         elif self.path == "/api/health":
-            self._json(200, {"ok": _checker is not None, "engine": "evidence-v2", "words": len(_words),
-                             "review_run": _checker.store.metadata["review_run"] if _checker else None,
-                             "source_counts": _checker.store.metadata["counts"] if _checker else {},
-                             "config_warnings": _checker.config_warnings if _checker else [],
-                             "tray": tray_icon is not None})
+            grammar = grammar_capability()
+            self._json(200, {
+                "ok": True,
+                "version": APP_VERSION,
+                "engine": "tepat-core",
+                "words": len(_words),
+                "review_run": _checker.store.metadata["review_run"] if _checker else None,
+                "source_counts": _checker.store.metadata["counts"] if _checker else {},
+                "config_warnings": _checker.config_warnings if _checker else [],
+                "capabilities": {
+                    "prpm": {"available": True},
+                    "grammar": grammar,
+                },
+                "tray": tray_icon is not None,
+            })
         else:
             self._json(404, {"error": "not found"})
 
@@ -296,6 +360,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "bad json"})
             return
         if self.path == "/api/scan":
+            if _checker is None:
+                grammar = grammar_capability()
+                code = "grammar_module_error" if grammar["status"] == "error" else "grammar_module_not_installed"
+                self._json(409, {"error": code, "module": "grammar", "status": grammar["status"]})
+                return
             text = str(req.get("text") or "")
             try:
                 self._json(200, scan(text, str(req.get("register") or "formal")))
@@ -324,8 +393,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, out)
         elif self.path == "/api/evidence":
             query = str(req.get("query") or "").strip()[:240]
-            if not query or _checker is None:
-                self._json(400, {"error": "query required and evidence must be loaded"})
+            if not query:
+                self._json(400, {"error": "query required"})
+                return
+            if _checker is None:
+                grammar = grammar_capability()
+                code = "grammar_module_error" if grammar["status"] == "error" else "grammar_module_not_installed"
+                self._json(409, {"error": code, "module": "grammar", "status": grammar["status"]})
                 return
             self._json(200, {"query": query, "lexical": _checker.store.lookup(query),
                              "references": _checker.store.search(query)})
@@ -347,10 +421,6 @@ def main() -> int:
 
     _log(f"[main] args: port={args.port}, no_browser={args.no_browser}, no_tray={args.no_tray}")
 
-    if not os.path.exists(EVIDENCE_PATH):
-        _log(f"[FATAL] evidence.sqlite not found at: {EVIDENCE_PATH}; run build_evidence.py first")
-        return 2
-
     import ctypes
     import socket as _socket
 
@@ -371,7 +441,7 @@ def main() -> int:
         _log(f"[tepat] port {args.port} already serving — exiting WITHOUT opening UI")
         return 0
 
-    _log("[main] loading words and rules...")
+    _log("[main] loading optional grammar module...")
     load_words()
 
     class _ExclusiveServer(ThreadingHTTPServer):
