@@ -715,6 +715,78 @@
     }, 50);
   }
 
+  // ── Rule Book 插件引擎（纯前端，零依赖 exe）──
+  // 消费 window.TEPAT_PACKS（rules-pack.js 注册的规则包）。
+  // 插件化：以后新增检查能力 = 新增一个 pack 文件，引擎不改。
+  function ruleBookPacks() {
+    return (window.TEPAT_PACKS || []);
+  }
+
+  function ruleBookScan(text) {
+    const findings = [];
+    const exceptions = [];
+    for (const pack of ruleBookPacks()) {
+      for (const rule of pack.rules || []) {
+        let rx;
+        try { rx = new RegExp(rule.re, 'g' + (rule.re.includes('\\u') ? 'u' : '')); }
+        catch (e) { console.warn('[tepat] bad rule regex', rule.id, e); continue; }
+        let m;
+        while ((m = rx.exec(text)) !== null) {
+          if (m[0].length === 0) { rx.lastIndex++; continue; }
+          const hit = {
+            pack: pack.meta.id,
+            rule: rule.id,
+            conf: rule.conf,
+            note: rule.note,
+            span: m[0],
+            start: m.index,
+            end: m.index + m[0].length,
+          };
+          if (rule.conf === 'exception' || rule.noflag) exceptions.push(hit);
+          else findings.push(hit);
+        }
+      }
+    }
+    // exception 抑制：与 exception 区间重叠的 finding 降级为 suppressed
+    for (const f of findings) {
+      f.suppressed = exceptions.some(x => x.rule !== f.rule &&
+        f.start < x.end && x.start < f.end);
+    }
+    return { findings: findings.filter(f => !f.suppressed), suppressed: findings.filter(f => f.suppressed) };
+  }
+
+  async function runRuleBook(text, shouldCreatePanel = true) {
+    const cleanText = sanitizeText(text);
+    if (shouldCreatePanel || !panel) {
+      panel = mkPanel('Rule Book', cleanText, 'check');
+    } else {
+      currentMode = 'check';
+      panel.querySelector('.bmc-title-text').textContent = 'Rule Book';
+      panel.querySelector('.bmc-search-input').value = cleanText;
+    }
+    const packs = ruleBookPacks();
+    if (!packs.length) {
+      panelBody().innerHTML = '<div class="bmc-err-box"><div class="bmc-err-title">Tiada pakej peraturan</div></div>';
+      return;
+    }
+    const r = ruleBookScan(cleanText);
+    const order = { error: 0, warn: 1, note: 2 };
+    const sorted = [...r.findings].sort((a, b) => (order[a.conf] ?? 9) - (order[b.conf] ?? 9));
+    const dot = { error: '🔴', warn: '🟠', note: '🟡' };
+    const confLabel = { error: 'kesalahan', warn: 'perlu konteks', note: 'peringatan' };
+    const items = sorted.map(f =>
+      `<div class="bmc-item bmc-item-${f.conf}">
+         <div class="bmc-item-main">${dot[f.conf]} <b>${TepatResults.escapeHtml(f.span)}</b>
+           <span class="bmc-rule-id">[${f.rule}]</span></div>
+         <div class="bmc-info-note">${TepatResults.escapeHtml(f.note)} · ${confLabel[f.conf]}</div>
+       </div>`).join('');
+    const suppressedNote = r.suppressed.length
+      ? `<div class="bmc-foot">${r.suppressed.length} padanan diabaikan (kekecualian NF/LR)</div>` : '';
+    panelBody().innerHTML = sorted.length
+      ? items + suppressedNote + `<div class="bmc-foot">${sorted.length} penemuan · ${packs.length} pakej peraturan · semakan tempatan (offline)</div>`
+      : `<div class="bmc-clean">✓ Tiada kesalahan mengikut Rule Book. (${packs.map(p => p.meta.title).join('; ')})</div>`;
+  }
+
   // ── 消息监听与快捷键 ──
   chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
     if (m.type === 'context-prpm') {
@@ -722,6 +794,9 @@
       sendResponse({ ok: true });
     } else if (m.type === 'context-check') {
       runCheck(m.text || '');
+      sendResponse({ ok: true });
+    } else if (m.type === 'context-rulebook') {
+      runRuleBook(m.text || '');
       sendResponse({ ok: true });
     } else if (m.type === 'context-raise') {
       showRaiseForm(m.text || '');
