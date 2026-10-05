@@ -23,7 +23,6 @@
         "<all_urls>"
       ],
       "js": [
-        "rules-pack.js",
         "results.js",
         "content.js"
       ],

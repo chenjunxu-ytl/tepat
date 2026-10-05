@@ -715,17 +715,23 @@
     }, 50);
   }
 
-  // ── Rule Book 插件引擎（纯前端，零依赖 exe）──
-  // 消费 window.TEPAT_PACKS（rules-pack.js 注册的规则包）。
-  // 插件化：以后新增检查能力 = 新增一个 pack 文件，引擎不改。
-  function ruleBookPacks() {
-    return (window.TEPAT_PACKS || []);
+  // ── Rule Book 插件引擎 ──
+  // 规则包从 server /api/pack 拉取（extension/rules-pack.json，热更新：admin
+  // 保存后新扫描即用新规则，无需重载扩展）。缓存本页结果；拉不到就空跑。
+  let packCache = null;
+  async function ruleBookPacks() {
+    if (packCache) return packCache;
+    try {
+      const r = await fetch(`${API}/api/pack`).then(x => x.json());
+      if (r && r.pack && Array.isArray(r.pack.rules)) packCache = [r.pack];
+    } catch (e) { /* server 不在线时 Rule Book 直接空跑 */ }
+    return packCache || [];
   }
 
-  function ruleBookScan(text) {
+  function ruleBookScanSync(text, packs) {
     const findings = [];
     const exceptions = [];
-    for (const pack of ruleBookPacks()) {
+    for (const pack of packs) {
       for (const rule of pack.rules || []) {
         let rx;
         try { rx = new RegExp(rule.re, 'gi' + (rule.re.includes('\\u') ? 'u' : '')); }
@@ -764,12 +770,12 @@
       panel.querySelector('.bmc-title-text').textContent = 'Rule Book';
       panel.querySelector('.bmc-search-input').value = cleanText;
     }
-    const packs = ruleBookPacks();
+    const packs = await ruleBookPacks();
     if (!packs.length) {
-      panelBody().innerHTML = '<div class="bmc-err-box"><div class="bmc-err-title">Tiada pakej peraturan</div></div>';
+      panelBody().innerHTML = '<div class="bmc-err-box"><div class="bmc-err-title">Tiada pakej peraturan (server tidak dapat dihubungi?)</div></div>';
       return;
     }
-    const r = ruleBookScan(cleanText);
+    const r = ruleBookScanSync(cleanText, packs);
     // error 与 warn 分开呈现（用户裁决 2026-10-02）：regex 判不了语境的规则
     // 是"提醒不是判决"——warn 不占错误位，hover 看 tooltip 说明。
     const errors = r.findings.filter(f => f.conf === 'error');

@@ -29,7 +29,7 @@ rem starts PRPM-only and prepare_release.py --mode core refuses otherwise.
 set GRAMMAR_DATA=--add-data "rules.json;." --add-data "indo_words.json;."
 if /i "%MODE%"=="core" set GRAMMAR_DATA=
 
-python -m PyInstaller --onedir --noconsole --name tepat-v2 ^
+python -m PyInstaller --onedir --noconsole --noconfirm --name tepat-v2 ^
   --icon assets\icon.ico ^
   %GRAMMAR_DATA% ^
   --add-data "web;web" ^

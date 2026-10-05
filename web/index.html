@@ -49,20 +49,19 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-rulebook">
  <h2>Rule Book pack</h2>
- <p class="sub">Runs inside the Chrome extension (local, offline). Direct editing and acceptance of proposals require an admin token; anyone can submit a proposal for review.</p>
+ <p class="sub">Runs inside the Chrome extension, fetched live from this service. Direct editing and acceptance of proposals require an admin token; anyone can submit a proposal for review. Rule IDs are assigned automatically (RB-001, RB-002, …).</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px"><span id="pack-meta" class="sub" style="margin:0"></span>
    <span style="flex:1"></span>
    <button class="act primary" id="btn-pack-save">Save (admin)</button>
    <button class="act" id="btn-pack-revert">Revert</button>
    <span id="pack-msg" class="msg"></span></div>
-  <textarea id="pack-src" spellcheck="false"></textarea>
-  <details><summary>Rule list (parsed from source)</summary><table id="pack-rules"><thead><tr><th>ID</th><th>Level</th><th>Note</th><th>Status</th></tr></thead><tbody></tbody></table></details>
+  <textarea id="pack-src" spellcheck="false" style="font:12px/1.5 Consolas,monospace"></textarea>
  </div>
  <div class="card">
   <h3 style="margin:0 0 4px;font-size:16px">Propose a new rule</h3>
-  <p class="sub" style="margin:0 0 10px">Submitted for admin review — it does not affect checking until accepted.</p>
-  <div class="controls" style="margin:0"><input id="prop-id" placeholder="Rule ID (e.g. KS-06)" style="font:inherit;padding:7px;border:1px solid #c4ced8;border-radius:6px;width:160px">
+  <p class="sub" style="margin:0 0 10px">Submitted for admin review — it does not affect checking until accepted. The rule number is assigned for you.</p>
+  <div class="controls" style="margin:0">
    <select id="prop-conf"><option value="warn">warn (needs context)</option><option value="error">error</option><option value="note">note</option><option value="exception">exception</option></select></div>
   <textarea id="prop-re" placeholder="Regex pattern, e.g. \bselamat\s+pagi\b" style="min-height:70px;margin-top:8px;font:13px Consolas,monospace"></textarea>
   <textarea id="prop-note" placeholder="Explanation shown in tooltips / review" style="min-height:54px;margin-top:8px"></textarea>
@@ -78,7 +77,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">Config files used by the local service. Edit the file at the path shown and it hot-reloads within 15 seconds — no restart needed.</p>
+ <p class="sub">Regex/affix rules used by the local scan service (rules.json) plus the Indonesian-word policy files. These are <b>server-side</b> — separate from the Rule Book pack that runs in the Chrome extension. Edit the file at the path shown and it hot-reloads within 15 seconds; the rules below are active in full mode only (they need the evidence database).</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act" id="btn-reload">↻ Reload now</button><span id="cfg-msg" class="msg"></span></div>
   <div id="cfg-files"></div>
@@ -112,8 +111,15 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
  $('#status').innerHTML=h.mode==='core'
   ? '<b>Core mode</b><br>PRPM lookup only.<br>Add data/evidence.sqlite beside the exe for full checking.'
   : `<b>Full mode</b><br>${h.words.toLocaleString()} DBP forms<br>${esc(h.review_run||'')}`;
- $('#about-mode').textContent=h.mode==='core'?'Running in core mode: PRPM lookups only. Grammar, spelling and evidence checks require the full data pack.':'';
- for(const [source,count] of Object.entries(h.source_counts||{})){const tr=document.createElement('tr');for(const v of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof v==='number'?v.toLocaleString():v;td.className=v===source?'bmc-tag':'';tr.appendChild(td);}$('#sources').appendChild(tr);}
+ $('#about-mode').innerHTML=h.mode==='core'
+  ?'<div class="bmc-clean-box"><b>Core mode.</b> Only PRPM dictionary lookups are available. Corpus evidence (dictionary forms, usage examples, n-gram support), spelling/terminology/grammar checks and the corpus table below require <code>data/evidence.sqlite</code> beside the executable.</div>'
+  :'';
+ const src=$('#sources');
+ if(h.mode==='full'){
+  for(const [source,count] of Object.entries(h.source_counts||{})){const tr=document.createElement('tr');for(const v of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof v==='number'?v.toLocaleString():v;td.className=v===source?'bmc-tag':'';tr.appendChild(td);}src.appendChild(tr);}
+ }else{
+  src.closest('table').style.display='none';
+ }
 }).catch(()=>{$('#status').textContent='Server unreachable.';});
 
 async function request(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed.');return j;}
@@ -140,7 +146,7 @@ $('#output').onclick=async e=>{
 async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
-  $('#cfg-badge').textContent=r.loaded?`${(r.rule_views||[]).length} active rules`:'grammar module not loaded';
+  $('#cfg-badge').textContent=r.loaded?`${(r.rule_views||[]).length} active rules`:'grammar module not loaded — core mode (add data/evidence.sqlite for server-side rules)';
   $('#cfg-files').innerHTML=(r.files||[]).map(f=>`<p style="font-size:12px;margin:4px 0"><code>${esc(f.name)}</code> — ${f.exists?`<code style="font-size:11px">${esc(f.path)}</code> · ${(f.bytes/1024).toFixed(1)} KB${f.parse_error?` · <b class="bad">Broken JSON: ${esc(f.parse_error)}</b>`:''}`:'<i>not found</i>'}</p>`).join('');
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
   for(const v of r.rule_views||[]){
@@ -161,53 +167,42 @@ $('#btn-reload').onclick=async()=>{
 loadConfig();
 
 // ── Rule Book tab ──
-let packOriginal='';
+let packOriginal='';  // last saved JSON text
 async function loadPack(){
  try{
   const r=await fetch(API+'/api/pack').then(x=>x.json());
-  packOriginal=r.content;$('#pack-src').value=r.content;
-  $('#pack-meta').innerHTML=`<code style="font-size:11px">${esc(r.path)}</code>`;
-  renderPackViews(r.content);
+  packOriginal=JSON.stringify(r.pack,null,1);$('#pack-src').value=packOriginal;
+  $('#pack-meta').innerHTML=`${esc(r.pack.meta?.title||'')} · ${r.pack.rules?.length||0} rules · <code style="font-size:11px">${esc(r.path)}</code>`;
  }catch(e){$('#pack-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
-}
-function renderPackViews(src){
- // 与 server /api/config 相同的解析规则，直接在前端复刻一份避免多一次请求
- const tb=$('#pack-rules tbody');tb.replaceChildren();
- const pat=/\{\s*id:\s*'([^']*)'\s*,\s*conf:\s*'([^']*)'\s*,\s*note:\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g;
- let m;
- while((m=pat.exec(src))){
-  let note=m[3];try{note=JSON.parse(note);}catch{note=note.slice(1,-1);}
-  const tr=document.createElement('tr');
-  tr.innerHTML=`<td><b>${esc(m[1])}</b></td><td>${esc(m[2])}</td><td style="font-size:11px">${esc(note)}</td><td style="color:#8a94a0">—</td>`;
-  tb.appendChild(tr);
- }
- if(!tb.children.length)tb.innerHTML='<tr><td colspan="4" class="bad">No rule entries parsed — check the source format.</td></tr>';
 }
 $('#btn-pack-save').onclick=async()=>{
  $('#pack-msg').textContent='Saving…';
+ let pack;
+ try{pack=JSON.parse($('#pack-src').value);}
+ catch(e){$('#pack-msg').innerHTML='<span class="bad">✗ Invalid JSON: '+esc(e.message)+'</span>';return;}
  try{
-  const r=await request('/api/pack',{content:$('#pack-src').value,admin_token:$('#admin-token').value});
-  $('#pack-msg').innerHTML=`<span class="ok">✓ Saved (${r.entries} entries). Backup kept. Reload extension pages to apply.</span>`;
-  packOriginal=$('#pack-src').value;renderPackViews(packOriginal);
+  const r=await request('/api/pack',{pack,admin_token:$('#admin-token').value});
+  $('#pack-msg').innerHTML=`<span class="ok">✓ Saved (${r.entries} rules). Backup kept. New scans use the new rules immediately.</span>`;
+  packOriginal=$('#pack-src').value;
  }catch(e){
   const msg=e.message.includes('validation failed')?'Validation failed — nothing written.':e.message;
   $('#pack-msg').innerHTML='<span class="bad">✗ '+esc(msg)+'</span>';
  }
 };
-$('#btn-pack-revert').onclick=()=>{$('#pack-src').value=packOriginal;$('#pack-msg').textContent='Reverted to last saved version.';renderPackViews(packOriginal);};
-$('#pack-src').oninput=()=>renderPackViews($('#pack-src').value);
+$('#btn-pack-revert').onclick=()=>{$('#pack-src').value=packOriginal;$('#pack-msg').textContent='Reverted to last saved version.';};
 loadPack();
 
 // ── proposals（普通用户提交申请；admin 查看 + 批准）──
 $('#btn-prop-submit').onclick=async()=>{
  $('#prop-msg').textContent='Submitting…';
  try{
-  const r=await request('/api/proposals',{rule:{id:$('#prop-id').value,conf:$('#prop-conf').value,re:$('#prop-re').value,note:$('#prop-note').value}});
-  let msg=r.regex_valid?'✓ Submitted for review.':'✓ Submitted (note: regex issue — '+r.regex_error+')';
+  const r=await request('/api/proposals',{rule:{conf:$('#prop-conf').value,re:$('#prop-re').value,note:$('#prop-note').value}});
+  let msg=`✓ Submitted as <b>${esc(r.id)}</b> for review.`;
+  if(!r.regex_valid)msg=`✓ Submitted as <b>${esc(r.id)}</b> (note: regex issue — ${esc(r.regex_error)})`;
   if(r.github_issue)msg+=` <a href="${esc(r.github_issue)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>`;
   else if(r.github_error)msg+=` <span class="sub">(local only — GitHub sync failed)</span>`;
-  $('#prop-msg').innerHTML=r.regex_valid?`<span class="ok">${msg}</span>`:`<span class="ok">${esc(msg)}</span>`;
-  $('#prop-id').value='';$('#prop-re').value='';$('#prop-note').value='';
+  $('#prop-msg').innerHTML=`<span class="ok">${msg}</span>`;
+  $('#prop-re').value='';$('#prop-note').value='';
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
 $('#btn-admin-load').onclick=async()=>{
@@ -224,7 +219,7 @@ $('#btn-admin-load').onclick=async()=>{
     accept.onclick=async()=>{
       accept.disabled=true;
       try{const res=await request('/api/proposals/accept',{submitted_at:p.submitted_at,admin_token:$('#admin-token').value});
-        div.style.opacity='.5';accept.textContent='✓ '+res.accepted;packOriginal='';loadPack();
+        div.style.opacity='.5';accept.textContent='✓ '+res.accepted;loadPack();
       }catch(e){accept.disabled=false;accept.textContent='✗ '+e.message;}
     };
     div.appendChild(accept);list.appendChild(div);

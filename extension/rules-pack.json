@@ -1,0 +1,256 @@
+{
+ "meta": {
+  "id": "rule-book-v1",
+  "title": "Bingka Ubi Rule Book (settled)",
+  "source": "Knowledge/settled-rules.md (2026-10-02)",
+  "version": 3
+ },
+ "rules": [
+  {
+   "id": "KS-01",
+   "conf": "error",
+   "note": "lebih … dari → lebih … daripada (perbandingan = KABOS)",
+   "re": "\\blebih\\s+[^.,;\\n]{0,40}?\\bdari\\b(?!\\s+(segi|sudut|aspek|perspektif)\\b)",
+   "noflag": true
+  },
+  {
+   "id": "KS-01",
+   "conf": "error",
+   "note": "berasal dari → berasal daripada (asal = KABOS)",
+   "re": "\\bberasal\\s+dari\\b",
+   "noflag": true
+  },
+  {
+   "id": "KS-01",
+   "conf": "note",
+   "note": "dari segi/sudut/aspek/perspektif adalah kekecualian tetap (jangan tukar)",
+   "re": "\\bdari\\s+(segi|sudut|aspek|perspektif)\\b",
+   "noflag": true
+  },
+  {
+   "id": "KS-02",
+   "conf": "warn",
+   "note": "antara X dan Y — dua item biasanya dengan; kira item dahulu",
+   "re": "\\bantara\\s+[^.,;\\n]{0,60}?\\s+dan\\s",
+   "noflag": true
+  },
+  {
+   "id": "KS-02",
+   "conf": "error",
+   "note": "antara … dengan (dua item)",
+   "re": "\\bantara\\s+\\w+(\\s+\\w+){0,4}\\s+dengan\\b",
+   "noflag": true
+  },
+  {
+   "id": "KS-03",
+   "conf": "error",
+   "note": "lebih … berbanding (dengan) → lebih … daripada",
+   "re": "\\blebih\\s+[^.,;\\n]{0,40}?\\bberbanding(\\s+dengan)?\\b"
+  },
+  {
+   "id": "KS-03",
+   "conf": "warn",
+   "note": "berbanding tanpa dengan — tidak lengkap (tiada lebih/kurang)",
+   "re": "\\bberbanding\\b(?!\\s+dengan\\b)(?!\\s+daripada\\b)"
+  },
+  {
+   "id": "KS-04",
+   "conf": "warn",
+   "note": "habis/faedah/ruang + kepada → bagi (beneficiary, bukan penerima)",
+   "re": "\\b(habis|faedah|ruang|peluang|habis guna)\\s+kepada\\b"
+  },
+  {
+   "id": "KS-05",
+   "conf": "error",
+   "note": "pada + jangka masa → dalam (tempoh)",
+   "re": "\\bpada\\s+(jangka\\s+masa|tempoh|masa\\s+panjang)\\b"
+  },
+  {
+   "id": "KS-05",
+   "conf": "error",
+   "note": "dalam + titik masa spesifik → pada (bulan/tahun/tarikh)",
+   "re": "\\bdalam\\s+(bulan|tahun|minggu|hari)\\s+[A-Z\\d]"
+  },
+  {
+   "id": "KS-05",
+   "conf": "error",
+   "note": "di + saat/masa → pada (masa, bukan tempat)",
+   "re": "\\bdi\\s+(saat|masa|ketika|waktu)\\s"
+  },
+  {
+   "id": "KP-01",
+   "conf": "warn",
+   "note": "adalah + frasa kerja (Adalah dimaklumkan/diserahkan…) — buang pemeri",
+   "re": "\\bAdalah\\s+(dimaklumkan|diserahkan|dinyatakan|dijelaskan|diharapkan)\\b"
+  },
+  {
+   "id": "KP-01",
+   "conf": "error",
+   "note": "adalah merupakan — kembar kata pemeri (lihat KL-01)",
+   "re": "\\b(adalah|ialah)\\s+merupakan\\b"
+  },
+  {
+   "id": "PI-01",
+   "conf": "error",
+   "note": "mensetujui → menyetujui / bersetuju dengan (realisasi meN- salah)",
+   "re": "\\bmensetujui\\b"
+  },
+  {
+   "id": "PI-02",
+   "conf": "warn",
+   "note": "memberikan + objek hidup (pelajar/guru/orang…) → memberi",
+   "re": "\\bmemberikan\\s+(pelajar|guru|murid|orang|kanak-kanak|peserta|pengguna|ibu|bapa|rakan)\\b"
+  },
+  {
+   "id": "SA-01",
+   "conf": "warn",
+   "note": "Setelah/Selepas/semasa/ketika … + pasif: subjek klausa utama mesti pelaku",
+   "re": "\\b(Setelah|Selepas|Semasa|Ketika)\\s+[^.\\n]{0,60}?,\\s+[^.\\n]{0,30}\\s+\\bdipasang|dibuat|diberi|digunakan\\b"
+  },
+  {
+   "id": "SA-02",
+   "conf": "warn",
+   "note": "selaras frasa: kata nama terus dalam siri kata kerja (bergotong-royong, X, menyanyi)",
+   "re": "\\b(bergotong-royong|menyanyi|bermain)[^.\\n]{0,20},\\s+(?!ber|men|mem|me|di)[a-z]+\\s+[a-z]+\\s+dan\\s+(ber|men|mem|me)"
+  },
+  {
+   "id": "KL-01",
+   "conf": "error",
+   "note": "kembar kata pemeri/hubung: adalah merupakan / ialah merupakan",
+   "re": "\\b(adalah|ialah)\\s+merupakan\\b"
+  },
+  {
+   "id": "KL-01",
+   "conf": "error",
+   "note": "kembar kata hubung: tetapi…namun / walau bagaimanapun…tetapi",
+   "re": "\\b(walau bagaimanapun|tetapi|namun)[^.\\n]{0,40}\\b(tetapi|namun|walau bagaimanapun)\\b"
+  },
+  {
+   "id": "KL-01",
+   "conf": "error",
+   "note": "ialah ialah / adalah adalah (ganda botoh)",
+   "re": "\\b(ialah\\s+ialah|adalah\\s+adalah)\\b"
+  },
+  {
+   "id": "KL-02",
+   "conf": "error",
+   "note": "penanda jamak + kata ganda nama: Sebahagian/beberapa/para … X-X",
+   "re": "\\b(sebahagian|beberapa|sesetengah|semua|para)\\s+[^.,\\n]{0,20}?([a-z]+)-\\2\\b"
+  },
+  {
+   "id": "IS-01",
+   "conf": "error",
+   "note": "kerana fakta bahawa → kerana (kalque 'due to the fact that')",
+   "re": "\\bkerana\\s+fakta\\s+bahawa\\b"
+  },
+  {
+   "id": "IS-01",
+   "conf": "error",
+   "note": "adalah kerana → ialah kerana / kerana",
+   "re": "\\badalah\\s+kerana\\b"
+  },
+  {
+   "id": "IS-02",
+   "conf": "warn",
+   "note": "tali pikat → tali anjing/cawak (pikat = memikat burung) [LR-02]",
+   "re": "\\btali\\s+pikat\\b"
+  },
+  {
+   "id": "IS-02",
+   "conf": "warn",
+   "note": "bunyi amaran (nada peranti) → bunyi isyarat [LR-04]",
+   "re": "\\bbunyi\\s+amaran\\b"
+  },
+  {
+   "id": "IS-02",
+   "conf": "warn",
+   "note": "nasihat tidak diundang → tidak diminta [LR-05]",
+   "re": "\\b(nasihat|komen|pendapat|audi)\\s+yang\\s+tidak\\s+diundang\\b",
+   "noflag": true
+  },
+  {
+   "id": "IS-03",
+   "conf": "error",
+   "note": "yang mana sebagai konjungsi relatif → yang (kalque 'which')",
+   "re": "\\b[yY]ang\\s+mana\\b(?!\\s+(satu|antara|lebih))",
+   "noflag": true
+  },
+  {
+   "id": "IS-03",
+   "conf": "error",
+   "note": "di mana sebagai konjungsi (bukan tempat) → susun semula",
+   "re": "\\b[dD]i\\s+mana\\b(?!\\s+(berada|lokasi|kedudukan|tempat))",
+   "noflag": true
+  },
+  {
+   "id": "IS-04",
+   "conf": "error",
+   "note": "menggapai untung → meraih/memperoleh untung",
+   "re": "\\bmenggapai\\s+untung\\b",
+   "noflag": true
+  },
+  {
+   "id": "IS-04",
+   "conf": "error",
+   "note": "terima kasih di atas → terima kasih atas (di atas = spatial)",
+   "re": "\\bterima\\s+kasih\\s+di\\s+atas\\b",
+   "noflag": true
+  },
+  {
+   "id": "IS-04",
+   "conf": "error",
+   "note": "menyambungkan X kepada Y (bukan hidup) → dengan [LR-06]",
+   "re": "\\b(menyambungkan|menghubungkan)\\s+[^.\\n]{0,30}\\s+kepada\\s+(port|peranti|kabel|bank|router|wifi)\\b",
+   "noflag": true
+  },
+  {
+   "id": "EJ-01",
+   "conf": "error",
+   "note": "frekuensy → frekuensi",
+   "re": "\\bfrekuensy\\b",
+   "noflag": true
+  },
+  {
+   "id": "EJ-01",
+   "conf": "error",
+   "note": "membantuh → membantu",
+   "re": "\\bmembantuh\\b",
+   "noflag": true
+  },
+  {
+   "id": "LR-03",
+   "conf": "error",
+   "note": "lepas + objek langsung → lepaskan (PI-01)",
+   "re": "\\b[Jj]angan\\s+lepas\\s+(anjing|kucing|burung|ikan|kanak)\\b",
+   "noflag": true
+  },
+  {
+   "id": "NF-2",
+   "conf": "exception",
+   "note": "antara + 3+ item + dan adalah betul",
+   "re": "\\bantara\\s+[^.\\n]{0,25},[^.\\n]{0,25},[^.\\n]{0,25}\\s+dan\\b",
+   "noflag": true
+  },
+  {
+   "id": "NF-4",
+   "conf": "exception",
+   "note": "gugur meN- pada kata kerja aktif (guna/pakai/cari) — jangan tanda",
+   "re": "\\b(guna|pakai|cari|bili|tanya)\\b",
+   "noflag": true
+  },
+  {
+   "id": "LR-01",
+   "conf": "exception",
+   "note": "minta satu, beri beberapa opsyen — jangan tanda",
+   "re": "(?s)\\bsatu\\s+(slogan|cadangan|idea)\\b",
+   "noflag": true
+  },
+  {
+   "id": "LR-07",
+   "conf": "exception",
+   "note": "dengan = beserta (kamera dengan sensor) — jangan tanda",
+   "re": "\\b(dengan)\\s+(sensor|kamera|kopi|lauk|sambal)\\b",
+   "noflag": true
+  }
+ ]
+}
