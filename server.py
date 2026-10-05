@@ -38,6 +38,29 @@ if getattr(sys, "frozen", False):  # PyInstaller 打包后的资源路径
     _ROOT = sys._MEIPASS  # noqa: SLF001
 
 WEB_DIR = os.path.join(_ROOT, "web")
+
+
+def _load_dotenv() -> None:
+    """启动时读 exe/源码目录旁的 .env（KEY=VALUE 逐行），不覆盖已有环境变量。
+    .env 在 .gitignore 里，绝不打包进 release。"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, "frozen", False)
+                        else os.path.dirname(sys.executable), ".env")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key, value = key.strip(), value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except OSError:
+        pass
+
+
+_load_dotenv()
+
 CACHE_PATH = os.path.join(
     os.environ.get("APPDATA") or os.path.expanduser("~"),
     "tepat", "prpm_cache.sqlite") if os.name == "nt" else \
