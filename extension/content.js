@@ -728,7 +728,7 @@
     for (const pack of ruleBookPacks()) {
       for (const rule of pack.rules || []) {
         let rx;
-        try { rx = new RegExp(rule.re, 'g' + (rule.re.includes('\\u') ? 'u' : '')); }
+        try { rx = new RegExp(rule.re, 'gi' + (rule.re.includes('\\u') ? 'u' : '')); }
         catch (e) { console.warn('[tepat] bad rule regex', rule.id, e); continue; }
         let m;
         while ((m = rx.exec(text)) !== null) {
