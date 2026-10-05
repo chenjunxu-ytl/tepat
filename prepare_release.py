@@ -109,7 +109,10 @@ def prepare(app_dir, output, mode: str):
         source = BASE / relative
         if not source.is_file():
             continue  # core 构建可能没把语法文件拷到 app_dir
-        if digest(app_dir / '_internal' / relative) != digest(source):
+        packaged = app_dir / '_internal' / relative
+        if not packaged.is_file():
+            continue  # core 构建：语法数据不随 exe 打包，跳过
+        if digest(packaged) != digest(source):
             raise ValueError(f'Portable resource differs from source: {relative}')
 
     output.mkdir(parents=True, exist_ok=False)

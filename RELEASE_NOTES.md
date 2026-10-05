@@ -1,4 +1,4 @@
-# Tepat v2.0.0-preview.1
+# Tepat v0.2.0-preview
 
 This pre-release provides a reproducible evaluation baseline for the local Malay
 checker and Chrome extension. Grammar coverage and reminder noise still need work.
