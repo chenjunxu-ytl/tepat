@@ -130,8 +130,12 @@ def prepare(app_dir, output, mode):
         store.close_thread()
         for relative in ('rules.json', 'indo_words.json'):
             packaged = app_dir / '_internal' / relative
+            external = app_dir / relative
             if not packaged.is_file() or digest(packaged) != digest(BASE / relative):
                 raise ValueError(f'Portable resource differs from source: {relative}')
+            if not external.is_file() or digest(external) != digest(BASE / relative):
+                raise ValueError(f'Portable editable resource differs from source: {relative}')
+            runtime.append((external, 'tepat-v2/' + relative))
         evidence_digest = digest(evidence)
         manifest['corpus_tools_commit'] = git(puzzle, 'rev-parse', 'HEAD')
         manifest['evidence'] = {
