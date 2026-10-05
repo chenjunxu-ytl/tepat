@@ -13,6 +13,14 @@
   const PORT = 8377;
   const API = `http://127.0.0.1:${PORT}`;
   let prpmEnabled = true;
+  let grammarAvailable = false;
+
+  fetch(`${API}/api/health`)
+    .then(r => r.json())
+    .then(h => {
+      grammarAvailable = Boolean(h.capabilities?.grammar?.installed && h.capabilities?.grammar?.status === 'ready');
+    })
+    .catch(() => { grammarAvailable = false; });
 
   chrome.storage.sync.get({ prpmEnabled: true }, (s) => { prpmEnabled = s.prpmEnabled; });
   chrome.storage.onChanged.addListener((ch) => {
@@ -40,7 +48,7 @@
         btnGrab.classList.add('bmc-btn-pop');
         setTimeout(() => btnGrab.classList.remove('bmc-btn-pop'), 300);
       }
-      if (currentMode === 'check' || sel.includes(' ') || sel.length > 25) {
+      if (currentMode === 'check' && grammarAvailable) {
         runCheck(sel, false);
       } else {
         runPrpm(sel, false);
@@ -73,7 +81,7 @@
       e.stopPropagation();
       const sel = getPageSelection();
       if (sel && sel.length >= 2) {
-        if (sel.includes(' ') || sel.length > 25) {
+        if (grammarAvailable && (sel.includes(' ') || sel.length > 25)) {
           runCheck(sel);
         } else {
           runPrpm(sel);
@@ -248,7 +256,7 @@
         if (sel && sel.length >= 2) {
           lastGrabbedText = sel;
           input.value = sel;
-          if (currentMode === 'check' || sel.includes(' ') || sel.length > 25) {
+          if (currentMode === 'check' && grammarAvailable) {
             runCheck(sel, false);
           } else {
             runPrpm(sel, false);
@@ -273,8 +281,8 @@
       if (e.key === 'Enter') {
         const q = input.value.trim();
         if (!q) return;
-        // 如果当前是 check 模式或输入含空格多词，走 scan；否则走 prpm
-        if (currentMode === 'check' || q.includes(' ')) {
+        // Lightweight mode keeps multi-word input on PRPM unless grammar is installed.
+        if (currentMode === 'check' && grammarAvailable) {
           triggerScan();
         } else {
           triggerPrpm();
@@ -449,6 +457,16 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: cleanText })
       }).then(x => x.json());
+      if (r.error === 'grammar_module_not_installed' || r.error === 'grammar_module_error') {
+        grammarAvailable = false;
+        panelBody().innerHTML = `
+          <div class="bmc-item bmc-item-info">
+            <div class="bmc-item-main"><b>Mod tatabahasa belum tersedia</b></div>
+            <div class="bmc-info-note">PRPM masih boleh digunakan. Sokongan pemasangan modul tatabahasa akan disediakan melalui aplikasi Tepat.</div>
+          </div>
+        `;
+        return;
+      }
     } catch {
       panelBody().innerHTML = `
         <div class="bmc-err-box">
@@ -685,6 +703,10 @@
     let r;
     try {
       r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fullText})}).then(x=>x.json());
+      if (r.error === 'grammar_module_not_installed' || r.error === 'grammar_module_error') {
+        grammarAvailable = false;
+        throw new Error('Mod tatabahasa belum dipasang. PRPM masih boleh digunakan.');
+      }
       if (r.error || r.engine!=='evidence-v2') throw new Error(r.error || 'Versi Tepat perlu dikemas kini.');
     } catch (e) { showToast(esc(e.message || 'Semakan tidak selesai.'),4000);return; }
     let hitCount=0;
@@ -729,7 +751,7 @@
     } else if (m.type === 'check-selection') {
       const text = getPageSelection();
       if (text && text.length >= 2) {
-        if (text.includes(' ') || text.length > 25) {
+        if (grammarAvailable && (text.includes(' ') || text.length > 25)) {
           runCheck(text);
         } else {
           runPrpm(text);
@@ -745,7 +767,7 @@
     } else if (m.type === 'open-panel') {
       const sel = getPageSelection();
       if (sel) {
-        if (sel.includes(' ') || sel.length > 25) {
+        if (grammarAvailable && (sel.includes(' ') || sel.length > 25)) {
           runCheck(sel);
         } else {
           runPrpm(sel);
