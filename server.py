@@ -6,6 +6,7 @@ register reminders run independently. No automatic correction or factual verdict
 PRPM remains an on-demand dictionary lookup with hit/miss/unreachable states.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -66,31 +67,26 @@ CACHE_PATH = os.path.join(
     "tepat", "prpm_cache.sqlite") if os.name == "nt" else \
     os.path.join(os.path.expanduser("~"), ".tepat", "prpm_cache.sqlite")
 
-# Admin 权限：TEPAT_ADMIN_TOKEN 环境变量优先，其次 %APPDATA%\tepat\admin_token。
-# 有 token 才能 accept proposals / 直接改 Rule Book；普通用户只能提交申请。
-ADMIN_TOKEN = os.environ.get("TEPAT_ADMIN_TOKEN") or ""
+# Admin 权限（机器级，用户裁决 2026-10-05）：启动时一次性判定，不请求级验 token。
+#   .env 放明文 TEPAT_ADMIN_TOKEN（gitignored），启动时 hash 后与代码内置 hash 比对；
+#   match → 本机即 admin 机器，admin 功能在 UI 直接全开（无需任何输入）；
+#   不 match / 未配 → 普通用户机器，admin 功能不下发。
+# 代码里只有 hash，明文只存在于 admin 自己的 .env，泄露源码/hash 都推不出明文。
+ADMIN_TOKEN_SHA256_EMBEDDED = (
+    "3e564295dea3afbd7c7b74adcd8d0374299e8eed590ce248abb3b3a78271cc21"
+)
 
 
-def _admin_token() -> str:
-    if ADMIN_TOKEN:
-        return ADMIN_TOKEN
-    path = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
-                        "tepat", "admin_token") if os.name == "nt" else \
-        os.path.join(os.path.expanduser("~"), ".tepat", "admin_token")
-    try:
-        with open(path, encoding="utf-8") as f:
-            return f.read().strip()
-    except OSError:
-        return ""
-
-
-def _is_admin(req_headers, body: dict | None = None) -> bool:
-    import hmac as _hmac
-    expected = _admin_token()
-    if not expected:
+def _decide_admin_machine() -> bool:
+    raw = (os.environ.get("TEPAT_ADMIN_TOKEN") or "").strip()
+    if not raw:
         return False
-    given = str((body or {}).get("admin_token") or req_headers.get("X-Admin-Token") or "")
-    return _hmac.compare_digest(expected, given)
+    import hmac as _hmac
+    return _hmac.compare_digest(ADMIN_TOKEN_SHA256_EMBEDDED,
+                                hashlib.sha256(raw.encode("utf-8")).hexdigest())
+
+
+IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
 
 def _proposals_path() -> str:
@@ -104,6 +100,80 @@ def _proposals_path() -> str:
 # GitHub 同步：proposal 上云用（Issue 形态，admin 在 GitHub 上阅读）。
 # 建议给 fine-grained PAT，仅 tepat repo 的 Issues: Write；泄露只可能被刷 Issue。
 GH_PROPOSAL_REPO = os.environ.get("TEPAT_GH_REPO", "chenjunxu-ytl/tepat")
+
+# server rules 云端源（用户裁决 2026-10-05）：规则的真源是 GitHub repo，
+# 本地 reload 改为 fetch GitHub main 分支最新内容，而不是读本地文件自嗨。
+GH_RULES_BRANCH = os.environ.get("TEPAT_GH_BRANCH", "main")
+GH_SYNC_FILES = ("rules.json", "indo_words.json", "blacklist.json",
+                 "extension/rules-pack.json")
+
+
+def _gh_fetch_file(repo_path: str) -> bytes:
+    """从 GitHub raw 拉 main 分支的一个文件；失败抛 RuntimeError。"""
+    import urllib.error as _ue
+    import urllib.request as _rq
+    url = (f"https://raw.githubusercontent.com/{GH_PROPOSAL_REPO}/"
+           f"{GH_RULES_BRANCH}/{repo_path}")
+    req = _rq.Request(url, headers={"Accept": "application/vnd.github.raw"})
+    try:
+        with _rq.urlopen(req, timeout=15) as resp:
+            return resp.read()
+    except _ue.HTTPError as e:
+        raise RuntimeError(f"GitHub {repo_path}: HTTP {e.code}") from e
+    except OSError as e:
+        raise RuntimeError(f"GitHub {repo_path}: {e}") from e
+
+
+def _gh_sync_rules() -> dict:
+    """把 GitHub 上的 server rules + rule pack 拉下来覆盖本地。
+    返回每个文件的状态；校验失败的文件不落盘（rules.json 必须可解析，
+    rules-pack.json 必须过 pack 校验）。"""
+    import tempfile
+    results = {}
+    for name in GH_SYNC_FILES:
+        try:
+            content = _gh_fetch_file(name)
+        except RuntimeError as e:
+            results[name] = {"ok": False, "error": str(e)}
+            continue
+        # 先校验再落盘
+        try:
+            if name.endswith(".json"):
+                parsed = json.loads(content)
+                if name == "extension/rules-pack.json":
+                    problems = _validate_pack(parsed)
+                    if problems:
+                        results[name] = {"ok": False, "error": "; ".join(problems)}
+                        continue
+            else:
+                results[name] = {"ok": False, "error": "unexpected file type"}
+                continue
+        except (json.JSONDecodeError, ValueError) as e:
+            results[name] = {"ok": False, "error": f"bad JSON: {e}"}
+            continue
+        # rules.json 额外校验每条正则可编译（跟 Checker.reload 同口径）
+        if name == "rules.json":
+            bad = []
+            for i, r in enumerate(parsed.get("rules", [])):
+                try:
+                    re.compile(r.get("re", ""))
+                except re.error as e:
+                    bad.append(f"rule {i} ({r.get('id', '?')}): {e}")
+            if bad:
+                results[name] = {"ok": False, "error": "; ".join(bad)}
+                continue
+        local = _config_path(name) if not name.startswith("extension/") \
+            else str(Path(_ROOT) / "extension" / Path(name).name)
+        Path(local).write_bytes(content)
+        results[name] = {"ok": True, "bytes": len(content)}
+    # 同步后立即热重载 checker（若已加载）
+    if _checker is not None:
+        try:
+            _checker.reload()
+            _log(f"[sync] hot-reloaded checker after GitHub sync")
+        except Exception as e:  # noqa: BLE001
+            _log(f"[sync] hot-reload after sync failed: {e!r}")
+    return results
 
 
 def _gh_token() -> str:
@@ -249,7 +319,10 @@ def scan(text: str, register: str = "formal") -> dict:
 
 # ── PRPM 查询（简化版：hit / miss / unreachable 三态 + sqlite 缓存 + 串行限流）──
 
-_prpm_lock = threading.Lock()  # 全局串行：DBP crawl-delay 语义
+# DBP 限速（用户裁决 2026-10-07）：并发 3 + 每请求 0.2s 间隔。纯串行 1 req/s
+# 太慢（选区多词场景），30 req/s 又是爬虫特征容易被封 IP——3 并发 ≈ 几个用户
+# 同时使用的正常流量。缓存命中的词不走这里。
+_prpm_sem = threading.Semaphore(3)
 
 
 def _cache_con() -> sqlite3.Connection:
@@ -349,19 +422,19 @@ def prpm_lookup(word: str) -> dict:
             return {"word": word, "status": cached["status"],
                     "definition": cached.get("definition") or "",
                     "from_cache": True}
-    with _prpm_lock:
+    with _prpm_sem:
         url = "https://prpm.dbp.gov.my/Cari1?keyword=" + urllib.parse.quote(word)
         try:
             page = prpm_fetch(url)
         except PrpmUnavailable as e:
             return {"word": word, "status": "unreachable", "note": str(e)[:150]}
-        
+
         parsed = parse_prpm(page)
         status = parsed["status"]
         definition = parsed.get("definition", "")
         if status in {"hit", "miss", "warn"}:
             cache_put(word, status, definition)
-        time.sleep(1.0)
+        time.sleep(0.2)  # 槽内小间隔：3 并发 × 0.2s ≈ 均匀 15 req/s 以下
         return {"word": word, "url": url, **parsed}
 
 
@@ -443,6 +516,7 @@ class Handler(BaseHTTPRequestHandler):
                              "review_run": _checker.store.metadata["review_run"] if _checker else None,
                              "source_counts": _checker.store.metadata["counts"] if _checker else {},
                              "config_warnings": _checker.config_warnings if _checker else [],
+                             "admin": IS_ADMIN_MACHINE,
                              "tray": tray_icon is not None})
         elif self.path == "/api/config":
             # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
@@ -470,8 +544,14 @@ class Handler(BaseHTTPRequestHandler):
                         re.compile(r.get("re", ""))
                     except re.error as e:
                         ok, err = False, str(e)
-                    rule_views.append({"idx": i, "id": r.get("id"), "conf": r.get("conf"),
-                                       "re": r.get("re"), "note": r.get("note"),
+                    rule_views.append({"idx": i, "id": r.get("id"),
+                                       "entry_id": r.get("entry_id") or f"idx:{i}",
+                                       "conf": r.get("conf"),
+                                       "enabled": r.get("enabled", True),
+                                       "note": r.get("note"),
+                                       "category": r.get("category"),
+                                       "source": r.get("source"),
+                                       "examples": r.get("examples", {}),
                                        "valid": ok, "error": err})
             # Rule Book 插件包（extension/rules-pack.json）：纯 JSON，无 JS 解析。
             pack_meta, pack_views = None, []
@@ -502,7 +582,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"path": str(_pack_path()), "pack": pack})
         elif self.path == "/api/proposals":
             # Rule Book 申请列表：读取需要 admin（申请内容对普通用户互相不可见）。
-            if not _is_admin(self.headers):
+            if not IS_ADMIN_MACHINE:
                 self._json(403, {"error": "admin token required"})
                 return
             proposals = []
@@ -512,7 +592,7 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, json.JSONDecodeError):
                 pass
             self._json(200, {"proposals": proposals,
-                             "admin_configured": bool(_admin_token())})
+                             "admin": IS_ADMIN_MACHINE})
         else:
             self._json(404, {"error": "not found"})
 
@@ -577,10 +657,64 @@ class Handler(BaseHTTPRequestHandler):
                                  "config_warnings": _checker.config_warnings})
             except Exception as e:  # noqa: BLE001
                 self._json(500, {"error": f"reload failed: {e}"})
+        elif self.path == "/api/config/rule":
+            # 单条规则开关（admin 机器）：改 rules.json 里该 entry 的 enabled
+            # 并热重载。GitHub sync 会用 repo 版覆盖——toggle 是本地调试行为，
+            # 要持久就 commit rules.json。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            entry_id = str(req.get("entry_id") or "")
+            enabled = req.get("enabled")
+            if not entry_id or enabled is None:
+                self._json(400, {"error": "entry_id and enabled required"})
+                return
+            path = Path(_config_path("rules.json"))
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as e:
+                self._json(500, {"error": f"rules.json unreadable: {e}"})
+                return
+            target = next((r for r in data.get("rules", [])
+                           if r.get("entry_id") == entry_id), None)
+            if target is None and entry_id.startswith("idx:"):  # 无 entry_id 的旧规则
+                try:
+                    target = data["rules"][int(entry_id[4:])]
+                except (ValueError, IndexError):
+                    target = None
+            if target is None:
+                self._json(404, {"error": f"entry_id {entry_id} not found"})
+                return
+            target["enabled"] = bool(enabled)
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8")
+            if _checker is not None:
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[config] reload after toggle failed: {e!r}")
+            _log(f"[config] rule {entry_id} enabled={bool(enabled)}")
+            self._json(200, {"ok": True, "entry_id": entry_id, "enabled": bool(enabled),
+                             "active_rules": len(_checker.rules) if _checker else 0})
+        elif self.path == "/api/sync":
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            try:
+                results = _gh_sync_rules()
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"error": f"sync failed: {e}"})
+                return
+            ok = all(v.get("ok") for v in results.values())
+            self._json(200 if ok else 207,
+                       {"ok": ok, "files": results,
+                        "repo": GH_PROPOSAL_REPO, "branch": GH_RULES_BRANCH,
+                        "checker_reloaded": _checker is not None,
+                        "rules": len(_checker.rules) if _checker else 0})
         elif self.path == "/api/pack":
             # 保存 Rule Book 插件包：admin 专属（普通用户请走 /api/proposals 申请）。
             # 写前备份 rules-pack.json.bak；JSON 校验失败不落盘。
-            if not _is_admin(self.headers, req):
+            if not IS_ADMIN_MACHINE:
                 self._json(403, {"error": "admin token required to edit the Rule Book pack; "
                                          "submit a proposal via /api/proposals instead"})
                 return
@@ -607,29 +741,55 @@ class Handler(BaseHTTPRequestHandler):
                              "meta_id": pack.get("meta", {}).get("id", "?")})
         elif self.path == "/api/proposals":
             # 普通用户提交 Rule Book 申请：免 token。规则号服务端自动分配
-            # （RB-NNNN auto-increment，用户不需要也不应该手填 ID）。
+            # （RB-NNNN auto-increment）。写入方案照 rule-book 的 Salah/Betul 形态：
+            # 用户给 trigger 短语（会命中）和 clear 短语（不该命中），服务端
+            # 从 trigger 推导词边界正则——非技术用户不需要懂 regex。
             rule = req.get("rule")
             if not isinstance(rule, dict):
                 self._json(400, {"error": "rule object required"})
                 return
             note = str(rule.get("note") or "").strip()[:300]
-            pattern = str(rule.get("re") or "").strip()[:500]
             conf = str(rule.get("conf") or "warn").strip()[:16]
-            if not pattern:
-                self._json(400, {"error": "pattern (re) required"})
+            triggers = [str(t).strip() for t in
+                        (rule.get("triggers") if isinstance(rule.get("triggers"), list) else [rule.get("triggers")])
+                        if t and str(t).strip()]
+            clears = [str(c).strip() for c in
+                      (rule.get("clears") if isinstance(rule.get("clears"), list) else [rule.get("clears")])
+                      if c and str(c).strip()]
+            pattern = str(rule.get("re") or "").strip()[:500]  # 高级用户可直供正则
+            if not triggers and not pattern:
+                self._json(400, {"error": "at least one trigger phrase (or a regex) is required"})
                 return
             if conf not in ("error", "warn", "note", "exception"):
                 self._json(400, {"error": "conf must be error/warn/note/exception"})
                 return
             pack = _load_pack()
             rid = f"RB-{_next_rule_no(pack):03d}"
+            if not pattern and triggers:
+                # 从 trigger 短语推导正则：转义 + 词边界；多短语 OR 起来
+                parts = []
+                for t in triggers[:5]:
+                    esc_t = re.escape(t.strip())
+                    parts.append(rf"\b{esc_t}\b" if esc_t[:2] != r"\b" else esc_t)
+                pattern = "|".join(parts)
             ok, err = True, None
             try:
-                re.compile(pattern)  # 近似校验，跟保存包同一口径
+                rx = re.compile(pattern)  # 近似校验，跟保存包同一口径
             except re.error as e:
                 ok, err = False, str(e)
+            # 用 trigger/clear 实测推导出的正则：trigger 应命中、clear 不应命中
+            mismatches = []
+            if ok:
+                for t in triggers:
+                    if not rx.search(t):
+                        mismatches.append(f"does not match trigger: {t[:50]}")
+                for c in clears:
+                    if rx.search(c):
+                        mismatches.append(f"should not match: {c[:50]}")
             entry = {"id": rid, "conf": conf, "re": pattern, "note": note,
+                     "triggers": triggers[:5], "clears": clears[:5],
                      "regex_valid": ok, "regex_error": err,
+                     "self_test": mismatches or "pass",
                      "submitted_at": int(time.time())}
             with open(_proposals_path(), "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -644,11 +804,12 @@ class Handler(BaseHTTPRequestHandler):
                 _log(f"[proposals] GitHub issue failed: {gh_error}")
             _log(f"[proposals] new proposal {rid} from web UI")
             self._json(200, {"ok": True, "id": rid, "regex_valid": ok, "regex_error": err,
+                             "self_test": mismatches or "pass",
                              "github_issue": gh_url or None,
                              "github_error": gh_error})
         elif self.path == "/api/proposals/accept":
             # admin 批准申请：把规则追加进 rules-pack.json 的 rules 数组尾部。
-            if not _is_admin(self.headers, req):
+            if not IS_ADMIN_MACHINE:
                 self._json(403, {"error": "admin token required"})
                 return
             submitted_at = req.get("submitted_at")
@@ -667,9 +828,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "rules-pack.json not found or broken"})
                 return
             rid = str(target["id"])
-            pack.setdefault("rules", []).append({
+            merged = {
                 "id": rid, "conf": str(target["conf"]),
-                "note": str(target.get("note") or ""), "re": str(target["re"])})
+                "note": str(target.get("note") or ""), "re": str(target["re"])}
+            if target.get("triggers") or target.get("clears"):
+                merged["examples"] = {"trigger": target.get("triggers", []),
+                                      "clear": target.get("clears", [])}
+            pack.setdefault("rules", []).append(merged)
             problems = _validate_pack(pack)
             if problems:
                 self._json(400, {"error": "merged pack failed validation", "problems": problems})
@@ -765,6 +930,9 @@ def main() -> int:
     # 消息循环自愈管"循环内异常"，看门狗管"整个线程没了"。
     if not args.no_tray:
         def _tray_watchdog():
+            # 赋值 tray_icon（重启托盘）需要 global 声明，否则整个函数里
+            # tray_icon 被当成局部变量，第一次读就 UnboundLocalError。
+            global tray_icon
             dead_count = 0
             def _config_sig():
                 sig = []

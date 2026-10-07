@@ -347,10 +347,17 @@
       rawWords.unshift(joinedForm);
     }
 
-    const words = [...new Set(rawWords)].slice(0, 8);
+    // 无上限（用户裁决 2026-10-07）：选区切出多少词就查多少；server 端缓存
+    // 命中的词瞬间回，新词走 3 并发限速，逐词渲染不用等全部完成。
+    const words = [...new Set(rawWords)];
     if (!words.length) return;
 
+    let done = 0;
     const title = words.length === 1 ? `PRPM — ${words[0]}` : `PRPM (${words.length} kata)`;
+    const updateTitle = () => {
+      if (panel && words.length > 1)
+        panel.querySelector('.bmc-title-text').textContent = `PRPM (${done}/${words.length} kata)`;
+    };
     if (shouldCreatePanel || !panel) {
       panel = mkPanel(title, cleanText, 'prpm');
     } else {
@@ -369,9 +376,9 @@
       </div>`
     ).join('');
 
-    for (const w of words) {
+    const lookupOne = async (w) => {
       const el = b.querySelector(`#bmc-p-${CSS.escape(w)}`);
-      if (!el) continue;
+      if (!el) return;
       try {
         const r = await fetch(`${API}/api/prpm`, {
           method: 'POST',
@@ -426,7 +433,16 @@
           <span class="bmc-badge bmc-badge-warn" title="Exe tidak berjalan">?</span>
         `;
         el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">Tepat.exe tidak berjalan di latar belakang</div>`);
+      } finally {
+        done++;updateTitle();
       }
+    };
+
+    // 并发 6 打 server（server 侧 3 槽信号量 + 缓存秒回，这里多点没关系），
+    // 每词完成即渲染。
+    const CONC = 6;
+    for (let i = 0; i < words.length; i += CONC) {
+      await Promise.all(words.slice(i, i + CONC).map(lookupOne));
     }
   }
 
