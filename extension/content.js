@@ -452,15 +452,10 @@
     }
 
     const attention = (group, html) => {
-      // dualView 模式：miss/warn 全条目插入 attention 视图对应组
+      // dualView 模式：miss/warn 全条目插入 attention 视图对应组。
+      // 不自动切换视图（用户裁决：默认 ☰ chips，⚠ 图标才进 attention）。
       const sec = b.querySelector(`#bmc-prpm-attention [data-group="${group}"]`);
-      if (sec) {
-        sec.insertAdjacentHTML('beforeend', html);
-        // compact 模式下第一个 miss/warn 出现时自动切到 attention（问题词优先）
-        if (compact && sec.children.length === 1) {
-          b.querySelector('.bmc-tab-btn[data-view="attention"]').click();
-        }
-      }
+      if (sec) sec.insertAdjacentHTML('beforeend', html);
     };
     const bumpSummary = (group) => {
       const chip = b.querySelector(`#bmc-prpm-summary .bmc-sum-${group} b`);

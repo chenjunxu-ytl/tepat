@@ -411,6 +411,16 @@ def _prpm_definition(page: str) -> str:
     return td_text[:2000]
 
 
+def _looks_english_entry(definition: str) -> bool:
+    """识别 Kamus Inggeris-Melayu 词条文本（KIMD 命中不该算马来语词 hit）。
+    KIMD 特征：显式标注，或英文语法标签开头（n/adj/v/adv + 英文例句）。"""
+    if not definition:
+        return False
+    if "Kamus Inggeris-Melayu" in definition:
+        return True
+    return bool(re.match(r"^(n|adj|v|adv)\s+[a-z]", definition[:8]))
+
+
 def prpm_lookup(word: str) -> dict:
     """三态 + 释义: {'status': 'hit'|'miss'|'unreachable', 'definition': str}
 
@@ -429,7 +439,13 @@ def prpm_lookup(word: str) -> dict:
         # 防御旧缓存坏条目：若记录为 hit 且包含 Carian kata tiada，视为无效重新查询
         if cached["status"] == "hit" and "Carian kata tiada" in (cached.get("definition") or ""):
             cached = None
-        elif cached["status"] in {"miss", "warn"}:
+        elif cached["status"] == "hit" and _looks_english_entry(cached.get("definition") or ""):
+            # 字典源区分上线前的脏缓存（test/lion 等英文词存成了 hit）：
+            # 降级 warn 并把缓存修正，不当作马来语词存在
+            fixed = {"status": "warn", "definition": cached["definition"]}
+            cache_put(word, "warn", cached["definition"])
+            cached = fixed
+        if cached and cached["status"] in {"miss", "warn"}:
             # 缓存的 miss/warn 同样走词根重查（nilainya 旧缓存 miss → nilai hit）
             root_hit = _prpm_root_retry(word)
             if root_hit:
