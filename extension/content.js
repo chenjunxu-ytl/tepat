@@ -367,34 +367,34 @@
     }
 
     // PRPM 批量面板（用户裁决 2026-10-07）：
-    //   >8 词 → chips 视图（紧凑标签，tab 图标 ⚠/☰ 切换 attention）
-    //   ≤5 词 → 直接 attention 布局（少量词就该逐条看，没有 chips 必要性）
+    //   ≤5 词 与 >8 词 → chips + attention 双视图，**默认 ☰ chips**（全部词），
+    //     ⚠ 图标才切到 attention（miss/warn 条目；少量词时 hit 组也在）
     //   6-8 词 → 传统全条目列表
-    // tab 按钮只有图标（无文字）；默认显示全部词（☰），⚠ 跳到 miss/warn 条目。
+    // tab 按钮只有图标（无文字）。
     const compact = words.length > 8;
-    const attentionOnly = words.length <= 5;
+    const dualView = words.length <= 5 || compact;  // 双视图；6-8 词走传统列表
     const groups = { hit: [], miss: [], warn: [], pending: new Set(words) };
 
     const b = panelBody();
-    if (compact || attentionOnly) {
+    if (dualView) {
       b.innerHTML = `
         <div class="bmc-prpm-summary" id="bmc-prpm-summary">
           <span class="bmc-sum-chip bmc-sum-miss" data-g="miss">✗ <b>0</b></span>
           <span class="bmc-sum-chip bmc-sum-warn" data-g="warn">? <b>0</b></span>
           <span class="bmc-sum-chip bmc-sum-hit" data-g="hit">✓ <b>0</b></span>
           <span style="flex:1"></span>
-          <span class="bmc-tab-btn${attentionOnly ? ' bmc-tab-btn-active' : ''}" data-view="attention" title="Show problem words">⚠</span>
-          <span class="bmc-tab-btn${compact ? ' bmc-tab-btn-active' : ''}" data-view="chips" title="Show all words">☰</span>
+          <span class="bmc-tab-btn" data-view="attention" title="Show problem words">⚠</span>
+          <span class="bmc-tab-btn bmc-tab-btn-active" data-view="chips" title="Show all words">☰</span>
         </div>
-        <div id="bmc-prpm-attention"${compact ? ' style="display:none"' : ''}>
-          <div class="bmc-att-head bmc-att-hit-head" data-att="hit" style="${attentionOnly ? '' : 'display:none'}">✓ Found <span class="bmc-att-toggle">▾</span></div>
-          <div data-group="hit" style="${attentionOnly ? '' : 'display:none'}"></div>
+        <div id="bmc-prpm-attention" style="display:none">
+          <div class="bmc-att-head bmc-att-hit-head" data-att="hit" style="${words.length <= 5 ? '' : 'display:none'}">✓ Found <span class="bmc-att-toggle">▾</span></div>
+          <div data-group="hit" style="${words.length <= 5 ? '' : 'display:none'}"></div>
           <div class="bmc-att-head" data-att="miss">✗ Not found <span class="bmc-att-toggle">▾</span></div>
           <div data-group="miss"></div>
           <div class="bmc-att-head" data-att="warn">? Needs review <span class="bmc-att-toggle">▾</span></div>
           <div data-group="warn"></div>
         </div>
-        <div class="bmc-prpm-chips" id="bmc-prpm-chips"${attentionOnly ? ' style="display:none"' : ''}>${words.map(w =>
+        <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
           `<span class="bmc-chip bmc-chip-pending" data-w="${esc(w)}">${esc(w)}</span>`).join('')}</div>`;
       // tab 切换
       b.querySelector('#bmc-prpm-summary').addEventListener('click', e => {
@@ -452,7 +452,7 @@
     }
 
     const attention = (group, html) => {
-      // compact / attentionOnly 模式：miss/warn 全条目插入 attention 视图对应组
+      // dualView 模式：miss/warn 全条目插入 attention 视图对应组
       const sec = b.querySelector(`#bmc-prpm-attention [data-group="${group}"]`);
       if (sec) {
         sec.insertAdjacentHTML('beforeend', html);
@@ -469,9 +469,8 @@
 
     const lookupOne = async (w) => {
       let el = b.querySelector(`#bmc-p-${CSS.escape(w)}`);
-      const chip = (compact || attentionOnly) && !attentionOnly
-        ? b.querySelector(`.bmc-chip[data-w="${CSS.escape(w)}"]`) : null;
-      if (!el && !chip && !(compact || attentionOnly)) return;
+      const chip = dualView ? b.querySelector(`.bmc-chip[data-w="${CSS.escape(w)}"]`) : null;
+      if (!el && !chip) return;
       let status = 'warn', def = '';
       try {
         const r = await fetch(`${API}/api/prpm`, {
@@ -490,16 +489,16 @@
       groups.pending.delete(w);
       groups[status in groups ? status : 'warn'].push(w);
 
-      if (compact || attentionOnly) {
-        // chips 视图着色（attentionOnly 无 chips，跳过）；miss/warn 在 attention 视图展开
+      if (dualView) {
+        // chips 永远存在并着色；miss/warn 在 attention 视图展开
         if (chip) {
           chip.classList.remove('bmc-chip-pending');
           chip.classList.add(`bmc-chip-${status === 'unreachable' ? 'warn' : status}`);
           if (status === 'hit') chip.dataset.def = def || '(entry found)';
         }
         if (status === 'hit') {
-          // attentionOnly 模式：hit 也进 attention（少量词全量可见，点 ☰ 无必要）
-          if (attentionOnly) {
+          // 少量词（≤5）：hit 也进 attention（⚠ 视图里看到全部状态）
+          if (words.length <= 5) {
             attention('hit', `<div class="bmc-item bmc-item-hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-hit" title="Found in PRPM">✓</span></div></div>`);
           }
         } else if (status === 'miss') {
