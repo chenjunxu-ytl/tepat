@@ -35,6 +35,8 @@ class Checker:
             if not isinstance(r,dict):
                 self.config_warnings.append(f"Skipped rule {i}: object required")
                 continue
+            if r.get('enabled') is False:  # 用户关掉的规则（config UI toggle）
+                continue
             try:
                 if r.get('conf','medium') not in {'high','medium','low'} or not all(k in r for k in ('id','note','re')):
                     raise ValueError('Invalid rule shape/confidence')

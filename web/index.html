@@ -23,15 +23,19 @@ button.act.primary{background:#256b58;color:white;border-color:#256b58}
 .bmc-local-evidence{font-size:13px;padding:12px;background:#f5f7fa;margin-top:10px;max-height:300px;overflow:auto}
 a{color:#256b58}table{width:100%;font-size:12px;border-collapse:collapse}td,th{text-align:left;padding:7px;border-bottom:1px solid #e4e9ed}
 .tab{display:none}.tab.active{display:block}
-#pack-src{width:100%;min-height:420px;padding:12px;border:1px solid #bcc8d4;border-radius:8px;font:12px/1.5 Consolas,monospace;white-space:pre;overflow:auto}
 .msg{font-size:12px}.ok{color:#256b58}.bad{color:#a3312a}
 details{margin-top:10px}summary{cursor:pointer;color:#456078}
+.lvl{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
+.lvl-error{background:#ffdbd8;color:#a3312a}
+.lvl-warn{background:#fff0bd;color:#8a6a10}
+.lvl-note{background:#e2edf9;color:#3a5d84}
 </style></head><body>
 <aside>
  <h1>Tepat</h1>
  <button class="nav active" data-tab="check">🔍 Check</button>
  <button class="nav" data-tab="rulebook">📘 Rule Book</button>
  <button class="nav" data-tab="serverrules">⚙️ Server Rules</button>
+ <button class="nav" id="nav-proposals" data-tab="proposals" style="display:none">📥 Proposals</button>
  <button class="nav" data-tab="about">ℹ️ About</button>
  <div class="side-status" id="status">Connecting…</div>
 </aside>
@@ -49,39 +53,35 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-rulebook">
  <h2>Rule Book pack</h2>
- <p class="sub">Runs inside the Chrome extension, fetched live from this service. Direct editing and acceptance of proposals require an admin token; anyone can submit a proposal for review. Rule IDs are assigned automatically (RB-001, RB-002, …).</p>
- <div class="card">
-  <div class="controls" style="margin:0 0 10px"><span id="pack-meta" class="sub" style="margin:0"></span>
-   <span style="flex:1"></span>
-   <button class="act primary" id="btn-pack-save">Save (admin)</button>
-   <button class="act" id="btn-pack-revert">Revert</button>
-   <span id="pack-msg" class="msg"></span></div>
-  <textarea id="pack-src" spellcheck="false" style="font:12px/1.5 Consolas,monospace"></textarea>
- </div>
+ <p class="sub">Runs inside the Chrome extension, fetched live from this service. Anyone can submit a proposal for review; accepting proposals happens on the admin machine. Rule IDs are assigned automatically (RB-001, RB-002, …).</p>
  <div class="card">
   <h3 style="margin:0 0 4px;font-size:16px">Propose a new rule</h3>
-  <p class="sub" style="margin:0 0 10px">Submitted for admin review — it does not affect checking until accepted. The rule number is assigned for you.</p>
+  <p class="sub" style="margin:0 0 10px">Give examples, the way the Rule Book does: phrases that <b>should be flagged</b> (Salah) and phrases that <b>must not be flagged</b> (Betul). The pattern is derived from your examples — no regex knowledge needed. The rule number is assigned for you.</p>
   <div class="controls" style="margin:0">
    <select id="prop-conf"><option value="warn">warn (needs context)</option><option value="error">error</option><option value="note">note</option><option value="exception">exception</option></select></div>
-  <textarea id="prop-re" placeholder="Regex pattern, e.g. \bselamat\s+pagi\b" style="min-height:70px;margin-top:8px;font:13px Consolas,monospace"></textarea>
-  <textarea id="prop-note" placeholder="Explanation shown in tooltips / review" style="min-height:54px;margin-top:8px"></textarea>
+  <textarea id="prop-triggers" placeholder="Should be flagged — one phrase per line, e.g.&#10;lebih murah dari harga asal&#10;berasal dari Malaysia" style="min-height:84px;margin-top:8px"></textarea>
+  <textarea id="prop-clears" placeholder="Must NOT be flagged — one phrase per line, e.g.&#10;lebih murah daripada harga asal&#10;dari segi ekonomi" style="min-height:84px;margin-top:8px"></textarea>
+  <textarea id="prop-note" placeholder="Why — what's wrong and what to use instead, e.g. 'lebih' marks comparison, which takes daripada (KS-01)'" style="min-height:54px;margin-top:8px"></textarea>
   <div class="controls"><button class="act primary" id="btn-prop-submit">Submit proposal</button><span id="prop-msg" class="msg"></span></div>
  </div>
+</section>
+
+<section class="tab" id="tab-proposals">
+ <h2>Pending proposals</h2>
+ <p class="sub">Admin machine only. Accepting appends the rule to the Rule Book pack (backup kept); rejected ones are simply left to close on GitHub.</p>
  <div class="card">
-  <h3 style="margin:0 0 4px;font-size:16px">Admin</h3>
-  <div class="controls" style="margin:0 0 8px"><input id="admin-token" type="password" placeholder="Admin token" style="font:inherit;padding:7px;border:1px solid #c4ced8;border-radius:6px;width:260px">
-   <button class="act" id="btn-admin-load">Load proposals</button><span id="admin-msg" class="msg"></span></div>
+  <div class="controls" style="margin:0 0 8px">
+   <button class="act" id="btn-admin-load">Reload</button><span id="admin-msg" class="msg"></span></div>
   <div id="admin-list"></div>
  </div>
 </section>
 
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">Regex/affix rules used by the local scan service (rules.json) plus the Indonesian-word policy files. These are <b>server-side</b> — separate from the Rule Book pack that runs in the Chrome extension. Edit the file at the path shown and it hot-reloads within 15 seconds; the rules below are active in full mode only (they need the evidence database).</p>
+ <p class="sub">Rules the local scan service applies (source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code> — admin machine only). <b>Levels</b> follow the Rule Book: <span class="lvl lvl-error">error</span> structural, no legal context · <span class="lvl lvl-warn">warn</span> context needed, review before acting · <span class="lvl lvl-note">note</span> broad reminder. Toggle a rule off to silence it locally; a GitHub sync restores the repo state. Active in full mode only.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act" id="btn-reload">↻ Reload now</button><span id="cfg-msg" class="msg"></span></div>
-  <div id="cfg-files"></div>
-  <table id="cfg-rules"><thead><tr><th>#</th><th>ID</th><th>Level</th><th>Regex</th><th>Note</th><th>Status</th></tr></thead><tbody></tbody></table>
+  <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act primary" id="btn-sync">↻ Fetch from GitHub</button><span id="cfg-msg" class="msg"></span></div>
+  <table id="cfg-rules"><thead><tr><th>Rule</th><th>What it flags</th><th>Example — flags / doesn't</th><th>Level</th><th>On</th></tr></thead><tbody></tbody></table>
  </div>
 </section>
 
@@ -120,6 +120,11 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
  }else{
   src.closest('table').style.display='none';
  }
+ // admin 机器（启动时 .env token hash match 内置 hash）：专属 Proposals tab
+ if(h.admin){
+  $('#nav-proposals').style.display='';
+  loadAdminProposals();
+ }
 }).catch(()=>{$('#status').textContent='Server unreachable.';});
 
 async function request(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed.');return j;}
@@ -146,85 +151,86 @@ $('#output').onclick=async e=>{
 async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
-  $('#cfg-badge').textContent=r.loaded?`${(r.rule_views||[]).length} active rules`:'grammar module not loaded — core mode (add data/evidence.sqlite for server-side rules)';
-  $('#cfg-files').innerHTML=(r.files||[]).map(f=>`<p style="font-size:12px;margin:4px 0"><code>${esc(f.name)}</code> — ${f.exists?`<code style="font-size:11px">${esc(f.path)}</code> · ${(f.bytes/1024).toFixed(1)} KB${f.parse_error?` · <b class="bad">Broken JSON: ${esc(f.parse_error)}</b>`:''}`:'<i>not found</i>'}</p>`).join('');
+  const active=(r.rule_views||[]).filter(v=>v.enabled!==false).length;
+  $('#cfg-badge').textContent=r.loaded?`${active} of ${(r.rule_views||[]).length} rules on`:'grammar module not loaded — core mode (add data/evidence.sqlite for server-side rules)';
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
+  const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
   for(const v of r.rule_views||[]){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${v.idx}</td><td><b>${esc(v.id)}</b></td><td>${esc(v.conf)}</td><td><code style="font-size:11px;word-break:break-all">${esc(v.re)}</code></td><td style="font-size:11px">${esc(v.note)}</td><td style="font-size:11px;color:${v.valid?'#256b58':'#a3312a'}">${v.valid?'✓':'✗ '+esc(v.error||'')}</td>`;
+    if(v.enabled===false)tr.style.opacity='.45';
+    const [lvl,cls]=confMap[v.conf]||[v.conf,''];
+    const ex=v.examples||{};
+    const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
+    const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
+    tr.innerHTML=`<td><b>${esc(v.id)}</b>${v.category?`<div style="font-size:11px;color:#5d6977">${esc(v.category)}</div>`:''}</td>
+      <td style="font-size:12px">${esc(v.note||'')}${v.valid?'':'<div class="bad">✗ '+esc(v.error||'')+'</div>'}</td>
+      <td style="font-size:12px">${trig||clear?'<div style="font-size:11px;color:#5d6977;margin-bottom:3px">Flags:</div>'+trig+'<div style="font-size:11px;color:#5d6977;margin:3px 0">Doesn\'t flag:</div>'+clear:'<i style="font-size:11px;color:#8a94a0">no examples yet</i>'}</td>
+      <td><span class="lvl ${cls}">${lvl}</span></td>
+      <td></td>`;
+    const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=v.enabled!==false;
+    toggle.onchange=async()=>{
+      try{
+        await request('/api/config/rule',{entry_id:v.entry_id,enabled:toggle.checked});
+        await loadConfig();
+      }catch(e){toggle.checked=!toggle.checked;$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+    };
+    tr.lastElementChild.appendChild(toggle);
     tb.appendChild(tr);
   }
-  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="6" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
+  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="5" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
  }catch(e){$('#cfg-badge').textContent='config unavailable';}
 }
-$('#btn-reload').onclick=async()=>{
- $('#cfg-msg').textContent='Reloading…';
- try{const r=await fetch(API+'/api/config/reload',{method:'POST'}).then(x=>x.json());
-  $('#cfg-msg').innerHTML=r.ok?`<span class="ok">✓ ${r.rules} rules reloaded${r.config_warnings.length?` · ${r.config_warnings.length} warnings`:''}</span>`:`<span class="bad">✗ ${esc(r.error)}</span>`;
+$('#btn-sync').onclick=async()=>{
+ $('#cfg-msg').textContent='Fetching from GitHub…';
+ try{const r=await fetch(API+'/api/sync',{method:'POST'}).then(async x=>{const j=await x.json();if(!x.ok&&!j.files)throw new Error(j.error);return j;});
+  const parts=Object.entries(r.files||{}).map(([f,v])=>`${f}: ${v.ok?'✓ '+(v.bytes||0)+' B':'✗ '+v.error}`);
+  const allOk=Object.values(r.files||{}).every(v=>v.ok);
+  $('#cfg-msg').innerHTML=allOk?`<span class="ok">✓ Synced from ${esc(r.repo)}@${esc(r.branch)} — ${parts.join(' · ')}</span>`:`<span class="bad">✗ ${parts.join(' · ')}</span>`;
   await loadConfig();
  }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
 loadConfig();
 
-// ── Rule Book tab ──
-let packOriginal='';  // last saved JSON text
-async function loadPack(){
- try{
-  const r=await fetch(API+'/api/pack').then(x=>x.json());
-  packOriginal=JSON.stringify(r.pack,null,1);$('#pack-src').value=packOriginal;
-  $('#pack-meta').innerHTML=`${esc(r.pack.meta?.title||'')} · ${r.pack.rules?.length||0} rules · <code style="font-size:11px">${esc(r.path)}</code>`;
- }catch(e){$('#pack-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
-}
-$('#btn-pack-save').onclick=async()=>{
- $('#pack-msg').textContent='Saving…';
- let pack;
- try{pack=JSON.parse($('#pack-src').value);}
- catch(e){$('#pack-msg').innerHTML='<span class="bad">✗ Invalid JSON: '+esc(e.message)+'</span>';return;}
- try{
-  const r=await request('/api/pack',{pack,admin_token:$('#admin-token').value});
-  $('#pack-msg').innerHTML=`<span class="ok">✓ Saved (${r.entries} rules). Backup kept. New scans use the new rules immediately.</span>`;
-  packOriginal=$('#pack-src').value;
- }catch(e){
-  const msg=e.message.includes('validation failed')?'Validation failed — nothing written.':e.message;
-  $('#pack-msg').innerHTML='<span class="bad">✗ '+esc(msg)+'</span>';
- }
-};
-$('#btn-pack-revert').onclick=()=>{$('#pack-src').value=packOriginal;$('#pack-msg').textContent='Reverted to last saved version.';};
-loadPack();
-
 // ── proposals（普通用户提交申请；admin 查看 + 批准）──
 $('#btn-prop-submit').onclick=async()=>{
  $('#prop-msg').textContent='Submitting…';
+ const lines=v=>v.split('\n').map(s=>s.trim()).filter(Boolean);
  try{
-  const r=await request('/api/proposals',{rule:{conf:$('#prop-conf').value,re:$('#prop-re').value,note:$('#prop-note').value}});
-  let msg=`✓ Submitted as <b>${esc(r.id)}</b> for review.`;
-  if(!r.regex_valid)msg=`✓ Submitted as <b>${esc(r.id)}</b> (note: regex issue — ${esc(r.regex_error)})`;
+  const r=await request('/api/proposals',{rule:{conf:$('#prop-conf').value,triggers:lines($('#prop-triggers').value),clears:lines($('#prop-clears').value),note:$('#prop-note').value}});
+  let msg=`✓ Submitted as <b>${esc(r.id)}</b>.`;
+  if(r.self_test&&r.self_test!=='pass')msg+=` <span class="bad">Check: ${esc(r.self_test.join('; '))}</span>`;
+  if(!r.regex_valid)msg+=` <span class="bad">(${esc(r.regex_error)})</span>`;
   if(r.github_issue)msg+=` <a href="${esc(r.github_issue)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>`;
   else if(r.github_error)msg+=` <span class="sub">(local only — GitHub sync failed)</span>`;
   $('#prop-msg').innerHTML=`<span class="ok">${msg}</span>`;
-  $('#prop-re').value='';$('#prop-note').value='';
+  $('#prop-triggers').value='';$('#prop-clears').value='';$('#prop-note').value='';
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
-$('#btn-admin-load').onclick=async()=>{
- $('#admin-msg').textContent='Loading…';
+async function loadAdminProposals(){
  try{
-  const r=await fetch(API+'/api/proposals',{headers:{'X-Admin-Token':$('#admin-token').value}}).then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
+  const r=await fetch(API+'/api/proposals').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
   $('#admin-msg').innerHTML=`<span class="ok">✓ ${r.proposals.length} pending</span>`;
   const list=$('#admin-list');list.replaceChildren();
   for(const p of r.proposals){
     const div=document.createElement('div');
     div.style.cssText='border:1px solid #dbe1e7;border-radius:8px;padding:10px;margin:8px 0;font-size:13px';
-    div.innerHTML=`<b>${esc(p.id)}</b> <span class="bmc-tag">${esc(p.conf)}</span> ${p.regex_valid?'':'<span class="bad">(regex invalid)</span>'}<br><code style="font-size:11px;word-break:break-all">${esc(p.re)}</code><br>${esc(p.note||'')}<br>`;
+    const trig=(p.triggers||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
+    const clear=(p.clears||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
+    const selfTest=p.self_test&&p.self_test!=='pass'?`<div class="bad">⚠ ${esc(Array.isArray(p.self_test)?p.self_test.join('; '):p.self_test)}</div>`:'';
+    div.innerHTML=`<b>${esc(p.id)}</b> <span class="lvl ${(p.conf==='error'?'lvl-error':p.conf==='warn'?'lvl-warn':p.conf==='exception'?'lvl-error':'lvl-note')}">${esc(p.conf)}</span> ${p.regex_valid?'':'<span class="bad">(pattern invalid)</span>'}<br>${esc(p.note||'')}
+      <div style="margin-top:6px">${trig}${clear}</div>${selfTest}`;
     const accept=document.createElement('button');accept.className='act';accept.textContent='Accept';
     accept.onclick=async()=>{
       accept.disabled=true;
-      try{const res=await request('/api/proposals/accept',{submitted_at:p.submitted_at,admin_token:$('#admin-token').value});
-        div.style.opacity='.5';accept.textContent='✓ '+res.accepted;loadPack();
+      try{const res=await request('/api/proposals/accept',{submitted_at:p.submitted_at});
+        accept.textContent='✓ '+res.accepted;div.style.opacity='.5';
+        setTimeout(loadAdminProposals,600);  // 列表自动刷新（已批准项消失）
       }catch(e){accept.disabled=false;accept.textContent='✗ '+e.message;}
     };
     div.appendChild(accept);list.appendChild(div);
   }
   if(!r.proposals.length)list.innerHTML='<p class="sub" style="margin:0">No pending proposals.</p>';
  }catch(e){$('#admin-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
-};
+}
+$('#btn-admin-load').onclick=loadAdminProposals;
 </script></body></html>
