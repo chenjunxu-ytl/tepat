@@ -823,3 +823,4 @@
 .bmc-att-head[data-att="miss"]{ color: #b91c1c; }
 .bmc-att-head[data-att="warn"]{ color: #a16207; }
 .bmc-att-toggle{ font-size: 10px; opacity: .7; }
+.bmc-att-hit-head{ color: #15803d; }
