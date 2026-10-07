@@ -12,16 +12,16 @@ if /i not "%MODE%"=="core" if /i not "%MODE%"=="full" (
 )
 echo Building tepat-v2 (mode=%MODE%) ...
 
-python sync_indo.py
+python tools\sync_indo.py
 if errorlevel 1 exit /b 1
 
 if /i "%MODE%"=="full" if not exist data\evidence.sqlite (
-  echo Build evidence first: python build_evidence.py --review-root ..\puzzle\corpus\clean-review\20261002-v3
+  echo Build evidence first: python tools\build_evidence.py --review-root ..\puzzle\corpus\clean-review\20261002-v3
   exit /b 1
 )
 
 rem Tests use their own fixture evidence; they do not read data\evidence.sqlite.
-python -m unittest test_evidence test_checker -q
+python -m unittest discover -s tests -p "test_*.py" -q
 if errorlevel 1 exit /b 1
 
 rem core mode: grammar configs are NOT bundled into _internal; server.py then

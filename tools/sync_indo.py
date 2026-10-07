@@ -23,5 +23,6 @@ def sync(source_root, output):
 
 
 if __name__=='__main__':
-    base=Path(__file__).resolve().parent
-    print(sync(base.parent/'puzzle',base/'indo_words.json'))
+    base=Path(__file__).resolve().parent          # tools/
+    root=base.parent                               # prpm-checker/
+    print(sync(root.parent/'puzzle',root/'indo_words.json'))

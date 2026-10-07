@@ -8,13 +8,17 @@ import urllib.request
 from pathlib import Path
 from http.server import ThreadingHTTPServer
 
+import sys as _sys
+from pathlib import Path as _Path
+for _p in (_Path(__file__).resolve().parent.parent, _Path(__file__).resolve().parent.parent / "tools"):
+    if str(_p) not in _sys.path: _sys.path.insert(0, str(_p))
 from build_evidence import build
 from checker import Checker
 from evidence import EvidenceStore
 from test_evidence import fixture
 import server
 
-BASE=Path(__file__).resolve().parent
+BASE=Path(__file__).resolve().parent.parent  # 项目根（本文件在 tests/）
 
 
 class CheckerTests(unittest.TestCase):

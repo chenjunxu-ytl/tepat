@@ -4,6 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import sys as _sys
+from pathlib import Path as _Path
+for _p in (_Path(__file__).resolve().parent.parent, _Path(__file__).resolve().parent.parent / "tools"):
+    if str(_p) not in _sys.path: _sys.path.insert(0, str(_p))
 from build_evidence import build, validate_record
 from evidence import EvidenceStore
 from text_units import sentences, token_runs, tokens

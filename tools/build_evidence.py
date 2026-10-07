@@ -47,7 +47,7 @@ def verify_review(root):
             raise ValueError(f"Incomplete source: {source}")
         # The accepted extraction code must still match this snapshot.
         for name, digest in summary["metadata"].get("code_sha256", {}).items():
-            code = Path(__file__).resolve().parent.parent / "puzzle/cleaning" / name
+            code = Path(__file__).resolve().parent.parent.parent / "puzzle/cleaning" / name
             if not code.exists() or hashlib.sha256(code.read_bytes()).hexdigest() != digest:
                 raise ValueError(f"Changed cleaning policy: {name}")
     return validation
@@ -76,7 +76,7 @@ def build(root: Path, output: Path, *, limit=None, verify=True):
     """)
     metadata = {"schema_version": SCHEMA_VERSION, "complete": False, "review_run": root.name,
                 "build_scope": "full" if limit is None else "partial", "max_n": 3,
-                "tokenizer_sha256": hashlib.sha256(Path(__file__).with_name("text_units.py").read_bytes()).hexdigest(),
+                "tokenizer_sha256": hashlib.sha256(Path(__file__).resolve().parent.parent.joinpath("text_units.py").read_bytes()).hexdigest(),
                 "source_policy": "DBP/TD/Bench normative-context candidates; Wiki unverified supplemental usage; Hansard excluded",
                 "authorization": "User: 同意，你可以在观察完现在代码的状态后开始落地新的检查器",
                 "cleaning_validation": validation, "counts": counts}

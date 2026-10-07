@@ -23,7 +23,7 @@ from pathlib import Path
 
 from evidence import EvidenceStore
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parent.parent  # 项目根（本文件在 tools/）
 TAG = 'v0.2.0-preview'
 CHUNK = 4 * 1024 * 1024
 MODES = ('core', 'full')
