@@ -1,9 +1,9 @@
 {
  "meta": {
   "version": 2,
-  "updated": "2026-10-02",
+  "updated": "2026-10-07",
   "source": "Anna rule_book.py 同源外包（2026-10-01）；conf 档位：high=结构性错误无合法场景/深标，medium=上下文相关/中标，low=宽网提醒/浅标",
-  "note": "Rules run independently of dictionary/corpus matches. entry_id is unique; register and exceptions bound matches. Add trigger/clear examples when extending rules. Existing contextual patterns are reminders, not universal error proofs."
+  "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict."
  },
  "rules": [
   {
@@ -219,6 +219,22 @@
  ],
  "affix_strip": [
   [
+   "memper",
+   ""
+  ],
+  [
+   "diper",
+   ""
+  ],
+  [
+   "menge",
+   ""
+  ],
+  [
+   "penge",
+   ""
+  ],
+  [
    "meng",
    "k"
   ],
@@ -227,12 +243,20 @@
    ""
   ],
   [
+   "peng",
+   "k"
+  ],
+  [
+   "peng",
+   ""
+  ],
+  [
    "meny",
    "s"
   ],
   [
-   "men",
-   "t"
+   "peny",
+   "s"
   ],
   [
    "mem",
@@ -243,11 +267,39 @@
    ""
   ],
   [
-   "memper",
+   "pem",
+   "p"
+  ],
+  [
+   "pem",
    ""
   ],
   [
-   "menge",
+   "men",
+   "t"
+  ],
+  [
+   "men",
+   ""
+  ],
+  [
+   "pen",
+   "t"
+  ],
+  [
+   "pen",
+   ""
+  ],
+  [
+   "me",
+   ""
+  ],
+  [
+   "pe",
+   ""
+  ],
+  [
+   "bel",
    ""
   ],
   [
@@ -255,7 +307,23 @@
    ""
   ],
   [
+   "be",
+   ""
+  ],
+  [
+   "per",
+   ""
+  ],
+  [
+   "pel",
+   ""
+  ],
+  [
    "ter",
+   ""
+  ],
+  [
+   "te",
    ""
   ],
   [
@@ -267,33 +335,42 @@
    ""
   ],
   [
-   "pe",
+   "se",
    ""
-  ],
-  [
-   "peng",
-   "k"
-  ],
-  [
-   "peny",
-   "s"
-  ],
-  [
-   "pen",
-   "t"
-  ],
-  [
-   "pem",
-   "p"
   ]
  ],
  "suffix_strip": [
   "kan",
   "an",
-  "i",
+  "i"
+ ],
+ "particle_strip": [
   "nya",
   "lah",
   "kah",
-  "pun"
- ]
+  "tah",
+  "pun",
+  "ku",
+  "mu"
+ ],
+ "infix_words": {
+  "telunjuk": "tunjuk",
+  "kelangkang": "kangkang",
+  "celoreng": "coreng",
+  "gemuruh": "guruh",
+  "gemetar": "getar",
+  "kemuncup": "kuncup",
+  "kemuning": "kuning",
+  "gelembung": "gembung",
+  "cemerlang": "cerlang",
+  "gerigi": "gigi",
+  "serabut": "sabut",
+  "selerak": "serak",
+  "cerucuk": "cucuk",
+  "sinambung": "sambung",
+  "belajar": "ajar",
+  "belunjur": "unjur",
+  "pelajar": "ajar",
+  "pelunjur": "unjur"
+ }
 }

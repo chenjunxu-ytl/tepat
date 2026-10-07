@@ -47,6 +47,8 @@ class Checker:
                 self.config_warnings.append(f"Skipped rule {i}: {e}")
         self.affixes = data.get('affix_strip',[])
         self.suffixes = data.get('suffix_strip',[])
+        self.particles = data.get('particle_strip',[])
+        self.infix_words = data.get('infix_words',{})
         self.suffix_map = data.get('ms_id_suffix_map',[])
         self.indo = json.loads(self.indo_path.read_text(encoding='utf-8'))
         self.indo_words = set(self.indo['indo_only_words'])
@@ -55,19 +57,201 @@ class Checker:
         self.context_words = self.indo.get('context_words',{})
         self.pairs = self.indo.get('suggestions',{})
 
+    # TD 词素音位还原表（研究验证 2026-10-07）：(表面前缀, rest 首字母) → 词根还原段。
+    # 规则属于具体前缀：men+t→tulis（还原 t）、meng+V→ambil/karang（k 可选还原）、
+    # meny+s→sapu / meny+ny→nyanyi。None = 组合不合法。
+    _NASAL_TABLE = {
+        # meng-/peng-：g/h 原样；k 融化但借词保留 → 双解；元音 → karang 双解
+        'meng': {'g': ('',), 'h': ('',), 'k': ('', 'k'),
+                 'a': ('', 'k'), 'e': ('', 'k'), 'i': ('', 'k'), 'o': ('', 'k'), 'u': ('', 'k')},
+        'peng': {'g': ('',), 'h': ('',), 'k': ('', 'k'),
+                 'a': ('', 'k'), 'e': ('', 'k'), 'i': ('', 'k'), 'o': ('', 'k'), 'u': ('', 'k')},
+        # meny-/peny-：s 融化（rest 是剥掉 s 后的形态，还原 s）；元音不再生成（meny 不接元音词根）
+        'meny': {'s': ('s',), 'a': ('s',), 'e': ('s',), 'i': ('s',), 'o': ('s',), 'u': ('s',)},
+        'peny': {'s': ('s',), 'a': ('s',), 'e': ('s',), 'i': ('s',), 'o': ('s',), 'u': ('s',)},
+        # mem-/pem-：b/f/v 原样；p 融化但借词/极端 f 双解；元音 → tulis 型还原 p
+        'mem': {'b': ('',), 'f': ('',), 'v': ('',), 'p': ('', 'p'),
+                'a': ('p',), 'e': ('p',), 'i': ('p',), 'o': ('p',), 'u': ('p',)},
+        'pem': {'b': ('',), 'f': ('',), 'v': ('',), 'p': ('', 'p'),
+                'a': ('p',), 'e': ('p',), 'i': ('p',), 'o': ('p',), 'u': ('p',)},
+        # men-/pen-：c/d/j/z 原样；t 融化但阿拉伯借词双解；元音 → tulis 型还原 t
+        'men': {'c': ('',), 'd': ('',), 'j': ('',), 'z': ('',), 't': ('', 't'),
+                'a': ('t',), 'e': ('t',), 'i': ('t',), 'o': ('t',), 'u': ('t',)},
+        'pen': {'c': ('',), 'd': ('',), 'j': ('',), 'z': ('',), 't': ('', 't'),
+                'a': ('t',), 'e': ('t',), 'i': ('t',), 'o': ('t',), 'u': ('t',)},
+        # me-/pe-：l/m/n/r/w/y/ny 原样
+        'me': {'l': ('',), 'm': ('',), 'n': ('',), 'r': ('',), 'w': ('',), 'y': ('',), 'ny': ('',)},
+        'pe': {'l': ('',), 'm': ('',), 'n': ('',), 'r': ('',), 'w': ('',), 'y': ('',), 'ny': ('',)},
+    }
+
+    def _strip_prefix(self, base):
+        """对一个 stem 生成全部 (前缀, 词根候选)。TD 词素音位规则，非法组合不出候选。"""
+        out = []
+        # 最长优先：memper/mempel/diper/dipel > menge/penge > meng/peng/meny/peny > mem/pem/men/pen > me/pe
+        for pre in ('memper', 'mempel', 'diper', 'dipel', 'menge', 'penge'):
+            if base.startswith(pre) and len(base) > len(pre) + 1:
+                out.append((pre, base[len(pre):]))
+        # meny/peny 特例：menyanyi 的 ny- 词根 = me + nyanyi（只剥 me）
+        if base.startswith('meny') and len(base) > 6 and base[4:6] == 'ny':
+            out.append(('meny', base[3:]))          # me|nyanyi → nyanyi
+        if base.startswith('peny') and len(base) > 6 and base[4:6] == 'ny':
+            out.append(('peny', base[3:]))          # pe|nyanyi → nyanyi
+        for pre, table in self._NASAL_TABLE.items():
+            if not base.startswith(pre) or len(base) <= len(pre) + 2:
+                continue
+            rest = base[len(pre):]
+            first = 'ny' if rest.startswith('ny') else rest[:1]
+            restores = table.get(first)
+            if restores is None:
+                continue
+            for r in restores:
+                out.append((pre, r + rest))
+        # beR- 家族：ber/be（bel- 白名单词已提前返回）
+        if base.startswith('ber') and len(base) > 5:
+            out.append(('ber', base[3:]))
+        if base.startswith('be') and len(base) > 4:
+            rest = base[2:]
+            if rest[:1] in 'aeiou':  # berenang → renang（r 还原）
+                out.append(('be', 'r' + rest))
+            else:                     # bekerja → kerja
+                out.append(('be', rest))
+        # per-（动词性/peR-）
+        if base.startswith('per') and len(base) > 5:
+            out.append(('per', base[3:]))
+        # ter/te（terasa→rasa 由 te+r 覆盖；terbesar→besar 由 ter 覆盖）
+        if base.startswith('ter') and len(base) > 5:
+            out.append(('ter', base[3:]))
+        if base.startswith('te') and len(base) > 4:
+            out.append(('te', base[2:]))
+        if base.startswith('di') and len(base) > 4:
+            out.append(('di', base[2:]))
+        if base.startswith('ke') and len(base) > 4:
+            out.append(('ke', base[2:]))
+        if base.startswith('se') and len(base) > 4:
+            out.append(('se', base[2:]))
+        return out
+
     def roots(self, word):
+        """Kata dasar 候选生成（TD 完整体系，研究验证 2026-10-07）。
+
+        剥离只产生候选，DBP 词表才有决定权：
+          partikel → akhiran → awalan（+awalan 后再剥 akhiran 覆盖 apitan），
+          词素音位还原按 TD 规则（men+tulis→tulis，mentadbir→tadbir 双解），
+          非法组合（men+ulis 无还原）根本不出候选。
+        拆烂的碎片（makan→mak）长度守卫 + 词表 gate 双重过滤，不会出现。
+        """
+        def known(w):  # 三态 gate：词典或语料任一确认
+            return self.store.lexical(w)["state"] != "unknown"
+
+        # 白名单：sisipan 与 bel-/pel- 词（~18 个）不可通用逆转，直接查表
+        if word in self.infix_words and known(self.infix_words[word]):
+            return [self.infix_words[word]]
+
+        # 整词已知时的裸词根保护（makan 不拆 mak、terima 不拆 rima）：
+        # 只作用于"前缀剥离"。后缀剥离照常（makanan→makan 是合法的 apitan 逆转，
+        # 词根+后缀的碎片是自由形式）。危险前缀 ter/di/ke/se/per 中，te/be/per
+        # 的脱落形（terasa→te+rasa、bekerja→be+kerja）例外——**整词是词典词**且
+        # 还原出词典词时放行（terima 是 corpus-only，不给 te+rima）。
+        word_known = word == normalize(word) and self.store.lexical(word)["state"] != "unknown"
+        word_dict = word == normalize(word) and word in self.store.lexicon
+        prefix_block = False
+        prefix_allow = None
+        corpus_whole = False
+        if word_known and not word.startswith(('memper', 'mempel', 'diper', 'dipel',
+                                               'menge', 'penge', 'meng', 'peng',
+                                               'meny', 'peny', 'mem', 'pem', 'men', 'pen',
+                                               'me', 'pe', 'ber', 'bel')):
+            if word.startswith(('ter', 'di', 'ke', 'se', 'per', 'be', 'te')):
+                prefix_block = True
+                if word_dict:
+                    allow = set()
+                    for pre, root in self._strip_prefix(word):
+                        if pre in ('te', 'be', 'per'):
+                            # bekerja→kerja（kerja corpus 高频）：词典或高频都放行
+                            if root in self.store.lexicon or sum(
+                                    r['c'] for r in self.store.support(root)) >= 200:
+                                allow.add(root)
+                    if allow:
+                        prefix_allow = allow
+                        prefix_block = False
+            else:
+                # makan/terima 这类非危险前缀的已知词：前缀不剥；
+                # corpus-only 整词（makan）连后缀碎片也只收词典词（mak 是 corpus 碎片 → 拦）
+                prefix_block = 'nonrisky'
+                corpus_whole = not word_dict
+        if prefix_allow:
+            return sorted(prefix_allow)
+
         candidates = set()
-        for pre,restore in self.affixes:
-            if word.startswith(pre) and len(word)>len(pre)+2:
-                base = restore+word[len(pre):]
-                candidates.add(base)
-                for suffix in self.suffixes:
-                    if base.endswith(suffix) and len(base)>len(suffix)+2:
-                        candidates.add(base[:-len(suffix)])
-        for suffix in self.suffixes:
-            if word.endswith(suffix) and len(word)>len(suffix)+2:
-                candidates.add(word[:-len(suffix)])
-        return sorted(w for w in candidates if w in self.store.lexicon and w!=word)
+        # ① 剥 partikel（-nya/-lah/-kah/-tah/-pun/-ku/-mu）；剥后的 stem 直接算候选
+        #    （makanlah→makan、adakah→ada——partikel 不改变词根，绕过 corpus_whole
+        #    收窄：它剥的是附着成分，不是词根碎片）
+        stems = {word}
+        particle_stems = set()
+        for p in self.particles:
+            if word.endswith(p) and len(word) > len(p) + 2:
+                stem = word[:-len(p)]
+                stems.add(stem)
+                if stem != word:
+                    particle_stems.add(stem)
+                    candidates.add(stem)
+        # ② 剥 akhiran（-kan/-an/-i）；剥后 stem 也是候选（makanan→makan）
+        bases = set()
+        for base in stems:
+            bases.add(base)
+            for s in self.suffixes:
+                if base.endswith(s) and len(base) > len(s) + 2:
+                    stripped = base[:-len(s)]
+                    bases.add(stripped)
+                    if stripped != word:
+                        candidates.add(stripped)  # 纯后缀词根（makanan→makan）
+        # ③ 剥 awalan（词素音位规则）+ awalan 后再剥 akhiran（menggunakan→guna）
+        # 已知词的裸词根保护：prefix_block 时跳过前缀剥离（makan 不剥 ma/mek）
+        if prefix_block:
+            for base in bases:
+                if base == word or base in stems:
+                    continue  # 整词/词干的前缀不剥；② 已产出后缀候选
+                for _pre, root in self._strip_prefix(base):
+                    if root != word:
+                        candidates.add(root)
+        else:
+            for base in bases:
+                for pre, root in self._strip_prefix(base):
+                    if root != word:
+                        candidates.add(root)
+                    for s in self.suffixes:
+                        if root.endswith(s) and len(root) > len(s) + 2:
+                            deeper = root[:-len(s)]
+                            if deeper != word:
+                                candidates.add(deeper)
+        candidates.discard(word)
+        # gate：词典词直接收；corpus 词根要高频（makan 4678 过，mukul 9 拦）。
+        # corpus-only 整词（makan）：后缀碎片只收词典词（mak 是 corpus 碎片 → 拦）；
+        # partikel stem（makanlah→makan）不受此限——剥的是附着成分，词根完整。
+        passed = []
+        for w in sorted(candidates):
+            if w in self.store.lexicon:
+                passed.append(w)
+            elif w in particle_stems or not corpus_whole:
+                support = self.store.support(w)
+                if sum(r['c'] for r in support) >= 200:
+                    passed.append(w)
+        # 深根优先：候选本身还能剥出另一个已过关候选的（gunakan=guna+kan、
+        # penulis=pen+tulis、diberi=di+beri 都是中间形态）让位给更深词根。
+        keep = []
+        for w in passed:
+            deeper = False
+            for s in self.suffixes:
+                if w.endswith(s) and w[:-len(s)] in passed:
+                    deeper = True
+            for pre, root in self._strip_prefix(w):
+                if root in passed or root != w and any(
+                        root.endswith(s) and root[:-len(s)] in passed
+                        for s in self.suffixes):
+                    deeper = True
+            if not deeper:
+                keep.append(w)
+        return keep
 
     def suggestions(self, word):
         if len(word)>28:
