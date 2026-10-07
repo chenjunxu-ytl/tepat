@@ -208,10 +208,10 @@
         </div>
       </div>
       <div class="bmc-search-bar">
-        <input type="text" class="bmc-search-input" placeholder="Taip perkataan untuk semak..." value="${esc(initialQuery)}">
+        <input type="text" class="bmc-search-input" placeholder="Type a word to check..." value="${esc(initialQuery)}">
         <div class="bmc-search-btns">
-          <button class="bmc-pill-btn bmc-pill-prpm" title="Semak Kamus PRPM">PRPM</button>
-          <button class="bmc-pill-btn bmc-pill-scan" title="Semak Peraturan Tatabahasa">Semak</button>
+          <button class="bmc-pill-btn bmc-pill-prpm" title="Look up in the PRPM dictionary">PRPM</button>
+          <button class="bmc-pill-btn bmc-pill-scan" title="Run the grammar rule check">Check</button>
         </div>
       </div>
       <div class="bmc-body"></div>
@@ -255,7 +255,7 @@
           }
         }
       } else {
-        btnGrab.title = 'Aktifkan mod auto-ambil teks (pilih teks terus dihantar ke sini)';
+        btnGrab.title = 'Auto-grab mode: select text anywhere and it is sent here automatically';
       }
     };
 
@@ -299,14 +299,14 @@
   }
 
   function openBlankPanel() {
-    panel = mkPanel('Tepat — Semakan', '', 'prpm');
+    panel = mkPanel('Tepat — Check', '', 'prpm');
     const b = panelBody();
     if (b) {
       b.innerHTML = `
         <div class="bmc-item" style="text-align:center;padding:16px 12px;color:#64748b;">
           <div style="font-size:22px;margin-bottom:6px;">📖</div>
-          <div style="font-weight:600;color:#1e293b;margin-bottom:4px;">Taip perkataan atau ayat di atas</div>
-          <div style="font-size:12px;">Tekan <b>PRPM</b> untuk semak kamus atau <b>Semak</b> untuk tatabahasa.</div>
+          <div style="font-weight:600;color:#1e293b;margin-bottom:4px;">Type a word or sentence above</div>
+          <div style="font-size:12px;">Press <b>PRPM</b> to look words up, or <b>Check</b> for the grammar scan.</div>
         </div>
       `;
     }
@@ -321,7 +321,7 @@
     return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   }
 
-  function cuteLoader(text = 'Menyemak…') {
+  function cuteLoader(text = 'Checking…') {
     return `
       <div class="bmc-loading-box">
         <div class="bmc-cute-dots">
@@ -353,10 +353,10 @@
     if (!words.length) return;
 
     let done = 0;
-    const title = words.length === 1 ? `PRPM — ${words[0]}` : `PRPM (${words.length} kata)`;
+    const title = words.length === 1 ? `PRPM — ${words[0]}` : `PRPM (${words.length} words)`;
     const updateTitle = () => {
       if (panel && words.length > 1)
-        panel.querySelector('.bmc-title-text').textContent = `PRPM (${done}/${words.length} kata)`;
+        panel.querySelector('.bmc-title-text').textContent = `PRPM (${done}/${words.length} words)`;
     };
     if (shouldCreatePanel || !panel) {
       panel = mkPanel(title, cleanText, 'prpm');
@@ -385,9 +385,9 @@
           <span class="bmc-tab-btn bmc-tab-btn-active" data-view="chips">☰ Semua</span>
         </div>
         <div id="bmc-prpm-attention" style="display:none">
-          <div class="bmc-att-head" data-att="miss">✗ Tidak ditemui <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head" data-att="miss">✗ Not found <span class="bmc-att-toggle">▾</span></div>
           <div data-group="miss"></div>
-          <div class="bmc-att-head" data-att="warn">? Perlu semakan <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head" data-att="warn">? Needs review <span class="bmc-att-toggle">▾</span></div>
           <div data-group="warn"></div>
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
@@ -492,12 +492,12 @@
         chip.classList.remove('bmc-chip-pending');
         chip.classList.add(`bmc-chip-${status === 'unreachable' ? 'warn' : status}`);
         if (status === 'hit') {
-          chip.dataset.def = def || '(entri ditemui)';
+          chip.dataset.def = def || '(entry found)';
         } else if (status === 'miss') {
-          attention('miss', `<div class="bmc-item bmc-item-miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span><span class="bmc-badge bmc-badge-miss" title="Tiada entri">✗</span></div><div class="bmc-miss-note">Tiada entri kamus ditemui</div></div>`);
+          attention('miss', `<div class="bmc-item bmc-item-miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span><span class="bmc-badge bmc-badge-miss" title="No entry">✗</span></div><div class="bmc-miss-note">No dictionary entry found</div></div>`);
         } else {
-          const note = status === 'unreachable' ? 'Tidak dapat menghubungi PRPM' : (def || 'Tiada entri tepat, ada cadangan berkaitan');
-          attention('warn', `<div class="bmc-item bmc-item-warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-warn" title="Cadangan / tidak sah">?</span></div><div class="bmc-warn-note">${esc(note)}</div></div>`);
+          const note = status === 'unreachable' ? 'Could not reach PRPM' : (def || 'No exact entry — related suggestions available');
+          attention('warn', `<div class="bmc-item bmc-item-warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-warn" title="Suggestion / unverifiable">?</span></div><div class="bmc-warn-note">${esc(note)}</div></div>`);
         }
         bumpSummary(status === 'unreachable' ? 'warn' : status);
       } else {
@@ -506,20 +506,20 @@
           el.classList.add('bmc-item-hit');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-hit" title="Wujud dalam PRPM">✓</span>`;
+            <span class="bmc-badge bmc-badge-hit" title="Found in PRPM">✓</span>`;
           if (def) el.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(def)}</div>`);
         } else if (status === 'miss') {
           el.classList.add('bmc-item-miss');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word bmc-word-err">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-miss" title="Tiada entri">✗</span>`;
-          el.insertAdjacentHTML('beforeend', `<div class="bmc-miss-note">Tiada entri kamus ditemui</div>`);
+            <span class="bmc-badge bmc-badge-miss" title="No entry">✗</span>`;
+          el.insertAdjacentHTML('beforeend', `<div class="bmc-miss-note">No dictionary entry found</div>`);
         } else {
-          const note = status === 'unreachable' ? 'Tidak dapat menghubungi PRPM' : (def || 'Tiada entri tepat, ada cadangan berkaitan');
+          const note = status === 'unreachable' ? 'Could not reach PRPM' : (def || 'No exact entry — related suggestions available');
           el.classList.add('bmc-item-warn');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-warn" title="Cadangan / tidak sah">?</span>`;
+            <span class="bmc-badge bmc-badge-warn" title="Suggestion / unverifiable">?</span>`;
           el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">${esc(note)}</div>`);
         }
       }
@@ -538,10 +538,10 @@
   async function runCheck(text, shouldCreatePanel = true) {
     const cleanText = sanitizeText(text);
     if (shouldCreatePanel || !panel) {
-      panel = mkPanel('Hasil Semakan', cleanText, 'check');
+      panel = mkPanel('Check results', cleanText, 'check');
     } else {
       currentMode = 'check';
-      panel.querySelector('.bmc-title-text').textContent = 'Hasil Semakan';
+      panel.querySelector('.bmc-title-text').textContent = 'Check results';
       panel.querySelector('.bmc-search-input').value = cleanText;
     }
 
@@ -556,8 +556,8 @@
     } catch {
       panelBody().innerHTML = `
         <div class="bmc-err-box">
-          <div class="bmc-err-title">Tepat.exe Tidak Aktif</div>
-          <div class="bmc-err-desc">Sila pastikan aplikasi Tepat berjalan di komputer anda (localhost:${PORT}).</div>
+          <div class="bmc-err-title">Tepat.exe is not running</div>
+          <div class="bmc-err-desc">Make sure the Tepat app is running on this computer (localhost:${PORT}).</div>
         </div>
       `;
       return;
@@ -581,14 +581,14 @@
       for (const ref of r.references || []) rows.push(`<div><b>${esc(ref.source)}</b>: ${esc(ref.text.slice(0,500))}</div>`);
       let target = btn.closest('.bmc-item').querySelector('.bmc-local-evidence');
       if (!target) { target=document.createElement('div');target.className='bmc-local-evidence';btn.closest('.bmc-item').appendChild(target); }
-      target.innerHTML = rows.length ? rows.join('') : 'Tiada bukti tempatan ditemui; semak sumber luar.';
-    } catch { showToast('Bukti tempatan tidak dapat dimuatkan.',3000); }
+      target.innerHTML = rows.length ? rows.join('') : 'No local evidence found; check external sources.';
+    } catch { showToast('Could not load local evidence.',3000); }
     finally { btn.disabled=false; }
   });
 
   function prpmBtn(word) {
     if (!prpmEnabled) return '';
-    return `<button class="bmc-kamus-btn" data-w="${esc(word)}" title="Semak terus di Kamus PRPM">Kamus</button>`;
+    return `<button class="bmc-kamus-btn" data-w="${esc(word)}" title="Look up directly in PRPM">Dictionary</button>`;
   }
 
   // ── 行内 Kamus 按钮点击 ──
@@ -635,11 +635,11 @@
     } else if (r.status === 'miss') {
       btn.replaceWith(Object.assign(document.createElement('span'), {
         className: 'bmc-badge bmc-badge-miss',
-        title: 'Tiada dalam PRPM',
+        title: 'Not in PRPM',
         textContent: '✗'
       }));
       if (item && !item.querySelector('.bmc-miss-note')) {
-        item.insertAdjacentHTML('beforeend', `<div class="bmc-miss-note">Tiada entri ditemui dalam kamus</div>`);
+        item.insertAdjacentHTML('beforeend', `<div class="bmc-miss-note">No entry found in the dictionary</div>`);
       }
     } else {
       btn.replaceWith(Object.assign(document.createElement('span'), {
@@ -658,24 +658,24 @@
 
     panelBody().innerHTML = `
       <div class="bmc-raise-form">
-        <label class="bmc-form-label">Teks yang ditandakan
+        <label class="bmc-form-label">Marked text
           <div class="bmc-sel-preview">${esc(text.slice(0, 300))}${text.length > 300 ? '…' : ''}</div>
         </label>
-        <label class="bmc-form-label">Jenis kesalahan
+        <label class="bmc-form-label">Error type
           <select id="bmc-type" class="bmc-input-select">
-            <option value="spelling">Ejaan (spelling)</option>
-            <option value="grammar">Tatabahasa (grammar)</option>
-            <option value="terminology">Istilah (terminology)</option>
-            <option value="collocation">Gabungan kata (collocation)</option>
-            <option value="other">Lain-lain</option>
+            <option value="spelling">Spelling</option>
+            <option value="grammar">Grammar</option>
+            <option value="terminology">Terminology</option>
+            <option value="collocation">Collocation</option>
+            <option value="other">Other</option>
           </select>
         </label>
-        <label class="bmc-form-label">Penjelasan (pilihan)
-          <textarea id="bmc-why" class="bmc-input-textarea" rows="3" placeholder="Kenapa ini salah? / Bentuk yang betul?"></textarea>
+        <label class="bmc-form-label">Explanation (optional)
+          <textarea id="bmc-why" class="bmc-input-textarea" rows="3" placeholder="Why is this wrong? / What is the correct form?"></textarea>
         </label>
         <div class="bmc-row">
-          <button id="bmc-save" class="bmc-btn-primary">Simpan</button>
-          <button id="bmc-cancel" class="bmc-btn-secondary">Batal</button>
+          <button id="bmc-save" class="bmc-btn-primary">Save</button>
+          <button id="bmc-cancel" class="bmc-btn-secondary">Cancel</button>
         </div>
         <div id="bmc-msg" class="bmc-msg"></div>
       </div>
@@ -694,7 +694,7 @@
       chrome.storage.local.get({ log: [] }, (s) => {
         const log = s.log.concat(entry);
         chrome.storage.local.set({ log }, () => {
-          panel.querySelector('#bmc-msg').textContent = `✓ Disimpan (${log.length} entri dalam log)`;
+          panel.querySelector('#bmc-msg').textContent = `✓ Saved (${log.length} entries in log)`;
           setTimeout(removeUI, 1200);
         });
       });
@@ -785,12 +785,12 @@
       fullText += raw + '\n';
     }
     fullText = fullText.slice(0,30000);
-    if (!fullText.trim()) { showToast('Tiada teks sesuai ditemui.',3000);return; }
+    if (!fullText.trim()) { showToast('No suitable text found.',3000);return; }
     let r;
     try {
       r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fullText})}).then(x=>x.json());
       if (r.error || r.engine!=='evidence-v2') throw new Error(r.error || 'Versi Tepat perlu dikemas kini.');
-    } catch (e) { showToast(esc(e.message || 'Semakan tidak selesai.'),4000);return; }
+    } catch (e) { showToast(esc(e.message || 'The check did not complete.'),4000);return; }
     let hitCount=0;
     for (const {node,start,raw} of nodes) {
       if (!node.parentNode) continue;
@@ -810,8 +810,8 @@
       if (node.nodeValue.length>raw.length) frag.appendChild(document.createTextNode(node.nodeValue.slice(raw.length)));
       node.parentNode.replaceChild(frag,node);
     }
-    showToast(`Imbasan sehingga 30,000 aksara: <b>${hitCount}</b> bahagian ditandakan. Fakta belum disemak.
-      <button id="bmc-btn-clear-hl" style="margin-left:8px;padding:2px 8px;">Padam Serlah</button>`,12000);
+    showToast(`Scanned up to 30,000 characters: <b>${hitCount}</b> passages marked. Facts are not checked.
+      <button id="bmc-btn-clear-hl" style="margin-left:8px;padding:2px 8px;">Clear marks</button>`,12000);
 
     setTimeout(() => {
       const btn = document.querySelector('#bmc-btn-clear-hl');
@@ -876,7 +876,7 @@
     }
     const packs = await ruleBookPacks();
     if (!packs.length) {
-      panelBody().innerHTML = '<div class="bmc-err-box"><div class="bmc-err-title">Tiada pakej peraturan (server tidak dapat dihubungi?)</div></div>';
+      panelBody().innerHTML = '<div class="bmc-err-box"><div class="bmc-err-title">No rule packs (server unreachable?)</div></div>';
       return;
     }
     const r = ruleBookScanSync(cleanText, packs);
@@ -887,7 +887,7 @@
     const notes = r.findings.filter(f => f.conf === 'note');
     const itemHtml = (f, kind) => {
       const dot = { error: '🔴', warn: '🟠', note: '🟡' }[kind];
-      const label = { error: 'kesalahan', warn: 'perlu konteks — hover untuk nuansa', note: 'peringatan' }[kind];
+      const label = { error: 'error', warn: 'needs context — hover for nuance', note: 'reminder' }[kind];
       const tip = TepatResults.escapeHtml(
         kind === 'warn'
           ? `${f.rule}: ${f.note}\nRegex tidak boleh menilai konteks — ini peringatan, bukan penghakiman. Rujuk Rule Book ${f.rule} sebelum memutuskan.`
@@ -904,12 +904,12 @@
     const suppressedNote = r.suppressed.length
       ? `<div class="bmc-foot">${r.suppressed.length} padanan diabaikan (kekecualian NF/LR)</div>` : '';
     panelBody().innerHTML = (errors.length || warns.length || notes.length)
-      ? section('Kesalahan', errors, 'error')
-        + section('Perlu konteks', warns, 'warn')
-        + section('Peringatan', notes, 'note')
+      ? section('Errors', errors, 'error')
+        + section('Needs context', warns, 'warn')
+        + section('Reminders', notes, 'note')
         + suppressedNote
-        + `<div class="bmc-foot">${errors.length} kesalahan · ${warns.length} perlu konteks · ${notes.length} peringatan · ${packs.length} pakej · semakan tempatan (offline)</div>`
-      : `<div class="bmc-clean">✓ Tiada kesalahan mengikut Rule Book. (${packs.map(p => p.meta.title).join('; ')})</div>`;
+        + `<div class="bmc-foot">${errors.length} errors · ${warns.length} need context · ${notes.length} reminders · ${packs.length} packs · local check (offline)</div>`
+      : `<div class="bmc-clean">✓ No findings according to the Rule Book. (${packs.map(p => p.meta.title).join('; ')})</div>`;
   }
 
   // ── 消息监听与快捷键 ──

@@ -6,27 +6,18 @@ fetch(API + '/api/health')
   .then((r) => r.json())
   .then((h) => {
     const el = $('#status');
-    if (el) {
-      el.className = 'status-badge status-ok';
-      el.textContent = `✓ Aktif (${h.words.toLocaleString()} bentuk DBP)`;
-    }
+    if (!el) return;
+    el.className = 'status-badge status-ok';
+    const mode = h.mode === 'core' ? 'core' : `${(h.words || 0).toLocaleString()} forms`;
+    el.textContent = `✓ Running (${mode})`;
   })
   .catch(() => {
     const el = $('#status');
     if (el) {
       el.className = 'status-badge status-bad';
-      el.textContent = '✗ Tepat Tidak Aktif';
+      el.textContent = '✗ Not running';
     }
   });
-
-// ── 日志数量显示 ──
-function refreshLogCount() {
-  chrome.storage.local.get({ log: [] }, (s) => {
-    const el = $('#log-count');
-    if (el) el.textContent = s.log.length;
-  });
-}
-refreshLogCount();
 
 // 获取当前活动标签页并发送指令（若页面未注入 content script 则自动注入后发送）
 async function sendToActiveTab(msg) {
@@ -34,8 +25,9 @@ async function sendToActiveTab(msg) {
   if (!tab?.id) return;
 
   // 内部页面（chrome://, edge://, about:）无法注入
-  if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
-    alert('Fungsi ini hanya boleh dijalankan di laman web biasa (bukan laman tetapan pelayar).');
+  if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') ||
+      tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
+    alert('This action only works on regular web pages (not browser settings pages).');
     return;
   }
 
@@ -47,52 +39,26 @@ async function sendToActiveTab(msg) {
     try {
       await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content.css'] });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['results.js', 'content.js'] });
-      // 稍微延迟让 content script 监听器就绪
       setTimeout(async () => {
         try {
           await chrome.tabs.sendMessage(tab.id, msg);
           window.close();
         } catch {
-          alert('Sila muat semula (refresh) laman web ini sekali untuk membolehkan semakan.');
+          alert('Please refresh this page once to enable checking.');
         }
       }, 100);
     } catch {
-      alert('Sila muat semula (refresh) laman web ini sekali untuk membolehkan semakan.');
+      alert('Please refresh this page once to enable checking.');
     }
   }
 }
 
-// ── 选项 1: 全页扫描并在页面高亮标记 ──
-$('#opt-scan-page').onclick = () => {
-  sendToActiveTab({ type: 'scan-full-page' });
-};
+$('#opt-scan-page').onclick = () => sendToActiveTab({ type: 'scan-full-page' });
+$('#opt-open-panel').onclick = () => sendToActiveTab({ type: 'open-panel' });
+$('#opt-clear-hl').onclick = () => sendToActiveTab({ type: 'clear-highlights' });
 
-// ── 选项 2: 打开弹窗 (在页面显示我们做好的高亮弹窗) ──
-$('#opt-open-panel').onclick = () => {
-  sendToActiveTab({ type: 'open-panel' });
+// Dashboard = server frontend（rules / proposals / settings）
+$('#opt-open-dashboard').onclick = () => {
+  chrome.tabs.create({ url: API + '/' });
+  window.close();
 };
-
-// ── 选项 3: 导出日志 JSON ──
-$('#opt-export-log').onclick = () => {
-  chrome.storage.local.get({ log: [] }, (s) => {
-    if (!s.log.length) {
-      alert('Tiada log kesalahan tersimpan untuk dieksport.');
-      return;
-    }
-    const blob = new Blob([JSON.stringify(s.log, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `tepat-log-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    window.close();
-  });
-};
-
-// ── 清除全页高亮标记 ──
-const btnClearHl = $('#opt-clear-hl');
-if (btnClearHl) {
-  btnClearHl.onclick = () => {
-    sendToActiveTab({ type: 'clear-highlights' });
-  };
-}

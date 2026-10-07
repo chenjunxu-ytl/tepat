@@ -8,31 +8,31 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'bmc-root',
-      title: 'BM Checker',
+      title: 'Tepat',
       contexts: ['selection']
     });
     chrome.contextMenus.create({
       id: 'bmc-prpm',
       parentId: 'bmc-root',
-      title: '📖 Semak PRPM (kamus)',
+      title: '📖 PRPM lookup (dictionary)',
       contexts: ['selection']
     });
     chrome.contextMenus.create({
       id: 'bmc-check',
       parentId: 'bmc-root',
-      title: '✓ Semak bahasa (bukti + peraturan)',
+      title: '✓ Check text (evidence + rules)',
       contexts: ['selection']
     });
     chrome.contextMenus.create({
       id: 'bmc-rulebook',
       parentId: 'bmc-root',
-      title: '📘 Rule Book (settle rules)',
+      title: '📘 Rule Book (settled rules)',
       contexts: ['selection']
     });
     chrome.contextMenus.create({
       id: 'bmc-raise',
       parentId: 'bmc-root',
-      title: '✗ Raise Error (log kesalahan)',
+      title: '✗ Raise Error (log a mistake)',
       contexts: ['selection']
     });
   });
