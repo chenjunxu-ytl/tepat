@@ -412,12 +412,35 @@ def _prpm_definition(page: str) -> str:
 
 
 def prpm_lookup(word: str) -> dict:
-    """三态 + 释义: {'status': 'hit'|'miss'|'unreachable', 'definition': str}"""
+    """三态 + 释义: {'status': 'hit'|'miss'|'unreachable', 'definition': str}
+
+    core 模式假 miss 防线（用户裁决 2026-10-07，实测 PRPM 不收虚词/partikel 组合）：
+      1. 功能词短路——dan/ada/itu 等封闭集直接 hit，不打 PRPM
+      2. miss 后自动剥 partikel/后缀重查——nilainya→nilai、apakah→apa；
+         词根命中即报 hit，附带 root 信息
+    """
+    from checker import FUNCTION_WORDS
+    if word in FUNCTION_WORDS:
+        return {"word": word, "status": "hit",
+                "definition": "Kata tugas (fungsi) — PRPM tidak menyenaraikan kata tugas sebagai entri.",
+                "function_word": True}
     cached = cache_get_full(word)
     if cached:
         # 防御旧缓存坏条目：若记录为 hit 且包含 Carian kata tiada，视为无效重新查询
         if cached["status"] == "hit" and "Carian kata tiada" in (cached.get("definition") or ""):
             cached = None
+        elif cached["status"] in {"miss", "warn"}:
+            # 缓存的 miss/warn 同样走词根重查（nilainya 旧缓存 miss → nilai hit）
+            root_hit = _prpm_root_retry(word)
+            if root_hit:
+                return {"word": word, "status": "hit",
+                        "definition": root_hit["definition"],
+                        "root": root_hit["root"],
+                        "root_note": f"entri untuk akar kata '{root_hit['root']}'",
+                        "from_cache": True}
+            return {"word": word, "status": cached["status"],
+                    "definition": cached.get("definition") or "",
+                    "from_cache": True}
         else:
             return {"word": word, "status": cached["status"],
                     "definition": cached.get("definition") or "",
@@ -435,7 +458,74 @@ def prpm_lookup(word: str) -> dict:
         if status in {"hit", "miss", "warn"}:
             cache_put(word, status, definition)
         time.sleep(0.2)  # 槽内小间隔：3 并发 × 0.2s ≈ 均匀 15 req/s 以下
+        if status in {"miss", "warn"}:
+            # 剥 partikel/akhiran/awalan 后重查词根（PRPM 不收组合形）
+            root_hit = _prpm_root_retry(word)
+            if root_hit:
+                return {"word": word, "url": url, "status": "hit",
+                        "definition": root_hit["definition"],
+                        "root": root_hit["root"],
+                        "root_note": f"entri untuk akar kata '{root_hit['root']}' (bentuk penuh = {root_hit['root']} + imbuhan)"}
         return {"word": word, "url": url, **parsed}
+
+
+_PARTICLES_FOR_PRPM = ("nya", "lah", "kah", "tah", "pun", "ku", "mu")
+_SUFFIXES_FOR_PRPM = ("kan", "an", "i")
+_PREFIXES_FOR_PRPM = ("meng", "mem", "men", "di", "ke", "ber", "ter", "se", "pe")
+
+
+def _strip_particles_suffix(word: str) -> list[str]:
+    """PRPM 重查用的轻量剥离候选（无需 evidence 词表——PRPM 自己是 gate）。
+    生成剥 partikel → 剥后缀 → 剥前缀的**全部中间形态**（perbezaannya →
+    perbezaan、perbeza；dibeli → beli），从长到短，调用方按序试到 hit 为止。"""
+    stems = [word]
+    # partikel 一层
+    for p in _PARTICLES_FOR_PRPM:
+        if word.endswith(p) and len(word) > len(p) + 2:
+            stems.append(word[:-len(p)])
+            break
+    # 后缀一层（作用于每个已有 stem，保留剥前形态）
+    out = list(stems)
+    for base in stems:
+        for s in _SUFFIXES_FOR_PRPM:
+            if base.endswith(s) and len(base) > len(s) + 2:
+                cand = base[:-len(s)]
+                out.append(cand)
+    # 前缀一层（men- 家族配还原近似；PRPM gate 会兜底）
+    finals = list(out)
+    for base in out:
+        for pre in _PREFIXES_FOR_PRPM:
+            if base.startswith(pre) and len(base) > len(pre) + 2:
+                finals.append(base[len(pre):])
+    # 排序原则（用户裁决 2026-10-07）：**剥 partikel 的直接 stem 最优先**
+    # （termasuklah→termasuk 是最保守正确的分析），其次 partikel+后缀 stem，
+    # 最后前缀剥离形态按长→短。masuklah 这类"后缀没剥完+前缀剥了"的混合
+    # 形态排最后。
+    direct = stems[1:]  # partikel 剥离直接形态
+    suffix_stems = [w for w in out if w not in stems]
+    prefix_stems = [w for w in finals if w not in out]
+    ordered, seen = [], {word}
+    for group in (direct, suffix_stems, prefix_stems):
+        for w in sorted(set(group), key=len, reverse=True):
+            if len(w) >= 3 and w not in seen:
+                seen.add(w)
+                ordered.append(w)
+    return ordered[:6]
+
+
+def _prpm_root_retry(word: str) -> dict | None:
+    """miss 后的词根重查：按长→短试全部剥离候选，第一个 hit 即返回。
+    递归经 prpm_lookup 走缓存，成功后把原词也缓存为 hit（下次秒回）。
+    FUNCTION_WORD 短路的 hit 不算数——keadaannya→adaannya→ada 这条链会把
+    剥出来的碎片虚词当依据，是假阳性（keadaan 本身 PRPM 是 miss）。"""
+    from checker import FUNCTION_WORDS
+    for root in _strip_particles_suffix(word):
+        result = prpm_lookup(root)
+        if result["status"] == "hit" and not result.get("function_word") \
+                and root not in FUNCTION_WORDS:
+            cache_put(word, "hit", result.get("definition", ""))
+            return {"root": root, "definition": result.get("definition", "")}
+    return None
 
 
 def parse_prpm(page: str) -> dict:

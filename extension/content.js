@@ -366,76 +366,164 @@
       panel.querySelector('.bmc-search-input').value = cleanText;
     }
 
+    // 大批量模式（用户裁决 2026-10-07，>8 词自动启用）：
+    // sticky summary bar + 两个 tab view（Attention = miss/warn 全条目可折叠，
+    // Chips = 全部词的紧凑标签）——识别错误的词天然浮出在 Attention，
+    // 面板高度不再随词数线性堆高。tab 切换放 summary bar 右侧。
+    const compact = words.length > 8;
+    const groups = { hit: [], miss: [], warn: [], pending: new Set(words) };
+
     const b = panelBody();
-    b.innerHTML = words.map(w =>
-      `<div class="bmc-item bmc-item-pending" id="bmc-p-${CSS.escape(w)}">
-        <div class="bmc-item-main">
-          <span class="bmc-word">${esc(w)}</span>
-          <span class="bmc-badge bmc-badge-pending">…</span>
+    if (compact) {
+      b.innerHTML = `
+        <div class="bmc-prpm-summary" id="bmc-prpm-summary">
+          <span class="bmc-sum-chip bmc-sum-miss" data-g="miss">✗ <b>0</b></span>
+          <span class="bmc-sum-chip bmc-sum-warn" data-g="warn">? <b>0</b></span>
+          <span class="bmc-sum-chip bmc-sum-hit" data-g="hit">✓ <b>0</b></span>
+          <span style="flex:1"></span>
+          <span class="bmc-tab-btn" data-view="attention">⚠ Attention</span>
+          <span class="bmc-tab-btn bmc-tab-btn-active" data-view="chips">☰ Semua</span>
         </div>
-      </div>`
-    ).join('');
+        <div id="bmc-prpm-attention" style="display:none">
+          <div class="bmc-att-head" data-att="miss">✗ Tidak ditemui <span class="bmc-att-toggle">▾</span></div>
+          <div data-group="miss"></div>
+          <div class="bmc-att-head" data-att="warn">? Perlu semakan <span class="bmc-att-toggle">▾</span></div>
+          <div data-group="warn"></div>
+        </div>
+        <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
+          `<span class="bmc-chip bmc-chip-pending" data-w="${esc(w)}">${esc(w)}</span>`).join('')}</div>`;
+      // tab 切换
+      b.querySelector('#bmc-prpm-summary').addEventListener('click', e => {
+        const tabBtn = e.target.closest('.bmc-tab-btn');
+        if (tabBtn) {
+          b.querySelectorAll('.bmc-tab-btn').forEach(t =>
+            t.classList.toggle('bmc-tab-btn-active', t === tabBtn));
+          b.querySelector('#bmc-prpm-attention').style.display =
+            tabBtn.dataset.view === 'attention' ? '' : 'none';
+          b.querySelector('#bmc-prpm-chips').style.display =
+            tabBtn.dataset.view === 'chips' ? '' : 'none';
+          return;
+        }
+        const chip = e.target.closest('.bmc-sum-chip');
+        if (!chip) return;
+        // 计数徽章：跳到 attention tab 的对应组（miss/warn）或 chips
+        if (chip.dataset.g === 'hit') {
+          b.querySelector('.bmc-tab-btn[data-view="chips"]').click();
+          b.querySelector('#bmc-prpm-chips').scrollIntoView({ behavior: 'smooth' });
+        } else {
+          b.querySelector('.bmc-tab-btn[data-view="attention"]').click();
+          const sec = b.querySelector(`#bmc-prpm-attention [data-group="${chip.dataset.g}"]`);
+          if (sec && sec.children.length) sec.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+      // Attention 组头点击折叠/展开
+      b.querySelector('#bmc-prpm-attention').addEventListener('click', e => {
+        const head = e.target.closest('.bmc-att-head');
+        if (!head) return;
+        const grp = head.nextElementSibling;
+        const collapsed = grp.style.display === 'none';
+        grp.style.display = collapsed ? '' : 'none';
+        head.querySelector('.bmc-att-toggle').textContent = collapsed ? '▾' : '▸';
+      });
+      b.querySelector('#bmc-prpm-chips').addEventListener('click', e => {
+        const chip = e.target.closest('.bmc-chip');
+        if (!chip || !chip.dataset.def) return;
+        // 点击 chip 展开/收起该词释义
+        let box = chip.nextElementSibling;
+        if (box && box.classList.contains('bmc-chip-def')) { box.remove(); return; }
+        box = document.createElement('div');
+        box.className = 'bmc-chip-def';
+        box.textContent = chip.dataset.def;
+        chip.after(box);
+      });
+    } else {
+      b.innerHTML = words.map(w =>
+        `<div class="bmc-item bmc-item-pending" id="bmc-p-${CSS.escape(w)}">
+          <div class="bmc-item-main">
+            <span class="bmc-word">${esc(w)}</span>
+            <span class="bmc-badge bmc-badge-pending">…</span>
+          </div>
+        </div>`
+      ).join('');
+    }
+
+    const attention = (group, html) => {
+      // compact 模式：miss/warn 全条目插入 attention tab 的对应组
+      if (!compact) return;
+      const sec = b.querySelector(`#bmc-prpm-attention [data-group="${group}"]`);
+      if (sec) {
+        sec.insertAdjacentHTML('beforeend', html);
+        // 第一个 miss/warn 出现时自动切到 Attention tab（问题词优先看见）
+        if (sec.children.length === 1) {
+          b.querySelector('.bmc-tab-btn[data-view="attention"]').click();
+        }
+      }
+    };
+    const bumpSummary = (group) => {
+      if (!compact) return;
+      const chip = b.querySelector(`#bmc-prpm-summary .bmc-sum-${group} b`);
+      if (chip) chip.textContent = groups[group].length;
+    };
 
     const lookupOne = async (w) => {
-      const el = b.querySelector(`#bmc-p-${CSS.escape(w)}`);
-      if (!el) return;
+      let el = b.querySelector(`#bmc-p-${CSS.escape(w)}`);
+      const chip = compact ? b.querySelector(`.bmc-chip[data-w="${CSS.escape(w)}"]`) : null;
+      if (!el && !chip) return;
+      let status = 'warn', def = '';
       try {
         const r = await fetch(`${API}/api/prpm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ word: w })
         }).then(x => x.json());
-
-        el.classList.remove('bmc-item-pending');
         const isSuggestion = r.status === 'warn' ||
           (r.definition && /adakah anda bermaksud/i.test(r.definition));
+        status = isSuggestion ? 'warn' : r.status;
+        def = r.definition || '';
+      } catch {
+        status = 'unreachable';
+        def = 'Tepat.exe tidak berjalan di latar belakang';
+      }
+      groups.pending.delete(w);
+      groups[status in groups ? status : 'warn'].push(w);
 
-        if (isSuggestion) {
-          el.classList.add('bmc-item-warn');
-          el.querySelector('.bmc-item-main').innerHTML = `
-            <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-warn" title="Cadangan perkataan terdekat">?</span>
-          `;
-          if (r.definition) {
-            el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">${esc(r.definition)}</div>`);
-          } else {
-            el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">Tiada entri tepat, ada cadangan berkaitan</div>`);
-          }
-        } else if (r.status === 'hit') {
+      if (compact) {
+        // chip 着色；miss/warn 额外在 attention 区展开
+        chip.classList.remove('bmc-chip-pending');
+        chip.classList.add(`bmc-chip-${status === 'unreachable' ? 'warn' : status}`);
+        if (status === 'hit') {
+          chip.dataset.def = def || '(entri ditemui)';
+        } else if (status === 'miss') {
+          attention('miss', `<div class="bmc-item bmc-item-miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span><span class="bmc-badge bmc-badge-miss" title="Tiada entri">✗</span></div><div class="bmc-miss-note">Tiada entri kamus ditemui</div></div>`);
+        } else {
+          const note = status === 'unreachable' ? 'Tidak dapat menghubungi PRPM' : (def || 'Tiada entri tepat, ada cadangan berkaitan');
+          attention('warn', `<div class="bmc-item bmc-item-warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-warn" title="Cadangan / tidak sah">?</span></div><div class="bmc-warn-note">${esc(note)}</div></div>`);
+        }
+        bumpSummary(status === 'unreachable' ? 'warn' : status);
+      } else {
+        el.classList.remove('bmc-item-pending');
+        if (status === 'hit') {
           el.classList.add('bmc-item-hit');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-hit" title="Wujud dalam PRPM">✓</span>
-          `;
-          if (r.definition) {
-            el.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(r.definition)}</div>`);
-          }
-        } else if (r.status === 'miss') {
+            <span class="bmc-badge bmc-badge-hit" title="Wujud dalam PRPM">✓</span>`;
+          if (def) el.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(def)}</div>`);
+        } else if (status === 'miss') {
           el.classList.add('bmc-item-miss');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word bmc-word-err">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-miss" title="Tiada entri">✗</span>
-          `;
+            <span class="bmc-badge bmc-badge-miss" title="Tiada entri">✗</span>`;
           el.insertAdjacentHTML('beforeend', `<div class="bmc-miss-note">Tiada entri kamus ditemui</div>`);
         } else {
+          const note = status === 'unreachable' ? 'Tidak dapat menghubungi PRPM' : (def || 'Tiada entri tepat, ada cadangan berkaitan');
           el.classList.add('bmc-item-warn');
           el.querySelector('.bmc-item-main').innerHTML = `
             <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-warn" title="PRPM tidak dapat dicapai">?</span>
-          `;
-          el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">Tidak dapat menghubungi PRPM</div>`);
+            <span class="bmc-badge bmc-badge-warn" title="Cadangan / tidak sah">?</span>`;
+          el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">${esc(note)}</div>`);
         }
-      } catch {
-        el.classList.remove('bmc-item-pending');
-        el.classList.add('bmc-item-warn');
-        el.querySelector('.bmc-item-main').innerHTML = `
-          <span class="bmc-word">${esc(w)}</span>
-          <span class="bmc-badge bmc-badge-warn" title="Exe tidak berjalan">?</span>
-        `;
-        el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">Tepat.exe tidak berjalan di latar belakang</div>`);
-      } finally {
-        done++;updateTitle();
       }
+      done++; updateTitle();
     };
 
     // 并发 6 打 server（server 侧 3 槽信号量 + 缓存秒回，这里多点没关系），
