@@ -514,17 +514,43 @@ def _strip_particles_suffix(word: str) -> list[str]:
 
 
 def _prpm_root_retry(word: str) -> dict | None:
-    """miss 后的词根重查：按长→短试全部剥离候选，第一个 hit 即返回。
-    递归经 prpm_lookup 走缓存，成功后把原词也缓存为 hit（下次秒回）。
-    FUNCTION_WORD 短路的 hit 不算数——keadaannya→adaannya→ada 这条链会把
-    剥出来的碎片虚词当依据，是假阳性（keadaan 本身 PRPM 是 miss）。"""
+    """miss 后的词根重查。四条修复规则（实测 PRPM 真值标定 2026-10-07）：
+    A. 连字符词拆分重查（litium-ion → litium HIT + ion HIT = 组件全在）
+    B. 英文复数 s 剥离（cycles → cycle）
+    C. FUNCTION_WORD 短路 hit 不作依据（keadaannya→adaannya→ada 假链）——
+       例外：ke-X-an 构词时 X 是虚词合法（keadaannya = ke+ada+an）
+    D. 常规剥离链按直接 stem 优先"""
     from checker import FUNCTION_WORDS
+    # A. 连字符词：组件全部 hit 才算
+    if "-" in word and len(word) > 4:
+        parts = [p for p in word.split("-") if len(p) >= 2]
+        if len(parts) >= 2:
+            results = [prpm_lookup(p) for p in parts]
+            if all(r["status"] == "hit" for r in results):
+                defs = " | ".join(f"{p}: {(r.get('definition') or '')[:60]}"
+                                  for p, r in zip(parts, results))
+                cache_put(word, "hit", defs)
+                return {"root": " + ".join(parts), "definition": defs}
+    # B. 英文复数：cycle-s
+    if word.endswith("s") and len(word) > 4 and not word.endswith("ss"):
+        result = prpm_lookup(word[:-1])
+        if result["status"] == "hit":
+            cache_put(word, "hit", result.get("definition", ""))
+            return {"root": word[:-1], "definition": result.get("definition", "")}
     for root in _strip_particles_suffix(word):
         result = prpm_lookup(root)
-        if result["status"] == "hit" and not result.get("function_word") \
-                and root not in FUNCTION_WORDS:
-            cache_put(word, "hit", result.get("definition", ""))
-            return {"root": root, "definition": result.get("definition", "")}
+        if result["status"] != "hit":
+            continue
+        if result.get("function_word") or root in FUNCTION_WORDS:
+            # C. ke-...-an 构词的虚词词根放行：word = ke + root + (an/annya)
+            if word.startswith("ke") and (word == "ke" + root
+                                          or word == "ke" + root + "an"
+                                          or word == "ke" + root + "annya"):
+                pass  # 合法构词，放行
+            else:
+                continue
+        cache_put(word, "hit", result.get("definition", ""))
+        return {"root": root, "definition": result.get("definition", "")}
     return None
 
 
@@ -540,9 +566,21 @@ def parse_prpm(page: str) -> dict:
         sug_text = m_sug.group(1).strip() if m_sug else body[:200]
         return {"status": "warn", "definition": sug_text}
     if "Carian kata tiada di dalam kamus terkini" in body or "Tiada maklumat" in body:
-        return {"status": "miss", "definition": ""}
+        # PRPM 不收部分常用短词（hal/air 实测无条目）——miss 的 note 如实告知
+        # 口径限制，避免把工具使用者教成"PRPM 没有 = 错字"
+        return {"status": "miss", "definition": "",
+                "note": "PRPM tiada entri. Kamus Dewan tidak menyenaraikan semua "
+                        "kata pendek/kata terbitan; ketiadaan bukti bukti salah ejaan."}
     if "Definisi" not in body:
         return {"status": "unreachable", "note": "Dictionary definition could not be verified"}
+    # 字典源区分（用户裁决 2026-10-07）：PRPM 同页混排 Kamus Bahasa Inggeris
+    # （英→马，任何英文词都命中）和 Kamus Bahasa Melayu（Kamus Dewan/Pelajar）。
+    # 马来语存在性检查只认马来语字典——英文词条降级 warn，提示换马来语词。
+    if re.match(r"\s*Kamus Bahasa Inggeris", body):
+        definition = re.split(r"Definisi\s*:", body, maxsplit=1)[-1].strip()
+        return {"status": "warn", "definition": definition[:4000],
+                "note": "Entri Inggeris (Kamus Inggeris-Melayu) — bukan kata Melayu; "
+                        "pertimbangkan bentuk Melayu (ujian / menguji)."}
     definition = re.split(r"Definisi\s*:", body, maxsplit=1)[-1].strip()
     if not definition:
         return {"status": "unreachable", "note": "Dictionary definition was empty"}
