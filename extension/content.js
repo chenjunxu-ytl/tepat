@@ -430,37 +430,87 @@
         head.querySelector('.bmc-att-toggle').textContent = collapsed ? '▾' : '▸';
       });
       const chipsBox = b.querySelector('#bmc-prpm-chips');
-      // flag 提交（chips 与 attention 共用）：word + 所在 chip 上下文
-      const submitFlag = async (word, ic) => {
-        if (!word || ic.classList.contains('done')) return;
-        ic.textContent = '…';
-        try {
-          const r = await fetch(`${API}/api/flag`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ word, page: location.href.slice(0, 300) })
-          }).then(x => x.json());
-          if (!r.ok) throw new Error(r.error || 'flag failed');
-          ic.textContent = '⚑';
-          ic.classList.add('done');
-          ic.title = `Flagged (${r.kind}) — issue opened`;
-          // 本地防重（chrome.storage.local）+ 全部该词的 chip 标橙
-          chrome.storage.local.get({ flaggedWords: {} }, (s) => {
-            s.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue, kind: r.kind };
-            chrome.storage.local.set({ flaggedWords: s.flaggedWords });
-          });
-          b.querySelectorAll(`[data-w="${CSS.escape(word)}"], [data-att-w="${CSS.escape(word)}"]`)
-            .forEach(el => el.classList.add('bmc-chip-flagged'));
-        } catch (err) {
-          ic.textContent = '⚑';
-          ic.title = `✗ ${err.message}`;
-        }
+      // flag 弹窗（用户裁决 2026-10-08）：三选一 + optional note + Submit。
+      // 简单实现：面板内浮层，同时只存在一个。
+      const openFlagDialog = (word, anchor) => {
+        b.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
+        chrome.storage.local.get({ flaggedWords: {} }, (s) => {
+          const existing = s.flaggedWords[word];
+          const dlg = document.createElement('div');
+          dlg.className = 'bmc-flag-dialog';
+          if (existing) {
+            // 已 flag → unflag（关闭 issue）
+            dlg.innerHTML = `
+              <div class="bmc-flag-title">⚑ ${esc(word)}</div>
+              <div class="bmc-flag-sub">Flagged as <b>${esc(existing.kind || '')}</b></div>
+              <div class="bmc-flag-row">
+                <button class="bmc-flag-un" data-act="unflag">Unflag (close issue)</button>
+                <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
+              </div>`;
+            dlg.querySelector('[data-act="unflag"]').onclick = async () => {
+              dlg.querySelector('.bmc-flag-un').textContent = 'Closing…';
+              try {
+                const r = await fetch(`${API}/api/unflag`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ word, issue: existing.issue })
+                }).then(x => x.json());
+                if (!r.ok) throw new Error(r.error || 'unflag failed');
+                chrome.storage.local.get({ flaggedWords: {} }, (s2) => {
+                  delete s2.flaggedWords[word];
+                  chrome.storage.local.set({ flaggedWords: s2.flaggedWords });
+                });
+                b.querySelectorAll(`[data-w="${CSS.escape(word)}"], [data-att-w="${CSS.escape(word)}"]`)
+                  .forEach(el => { el.classList.remove('bmc-chip-flagged');
+                    const icn = el.querySelector('.bmc-chip-flag-ic'); icn && icn.classList.remove('done'); });
+                dlg.remove();
+              } catch (err) {
+                dlg.querySelector('.bmc-flag-un').textContent = `✗ ${err.message}`;
+              }
+            };
+          } else {
+            dlg.innerHTML = `
+              <div class="bmc-flag-title">⚑ Flag "${esc(word)}"</div>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="underflag"> Under-flagged — problem missed</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="mismeaning"> Wrong meaning — flag is off-target</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="overflag"> Over-flagged — word is fine</label>
+              <input type="text" class="bmc-flag-note" placeholder="Explanation (optional)">
+              <div class="bmc-flag-row">
+                <button class="bmc-flag-go" disabled>Submit</button>
+                <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
+              </div>`;
+            const go = dlg.querySelector('.bmc-flag-go');
+            dlg.querySelectorAll('input[name="bmc-fk"]').forEach(r =>
+              r.addEventListener('change', () => go.disabled = false));
+            go.onclick = async () => {
+              const kind = dlg.querySelector('input[name="bmc-fk"]:checked')?.value;
+              const note = dlg.querySelector('.bmc-flag-note').value.trim();
+              if (!kind) return;
+              go.disabled = true; go.textContent = 'Submitting…';
+              try {
+                const r = await fetch(`${API}/api/flag`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ word, kind, note, page: location.href.slice(0, 300) })
+                }).then(x => x.json());
+                if (!r.ok) throw new Error(r.error || 'flag failed');
+                chrome.storage.local.get({ flaggedWords: {} }, (s2) => {
+                  s2.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue, kind: r.kind };
+                  chrome.storage.local.set({ flaggedWords: s2.flaggedWords });
+                });
+                b.querySelectorAll(`[data-w="${CSS.escape(word)}"], [data-att-w="${CSS.escape(word)}"]`)
+                  .forEach(el => { el.classList.add('bmc-chip-flagged');
+                    const icn = el.querySelector('.bmc-chip-flag-ic'); icn && icn.classList.add('done'); });
+                dlg.remove();
+              } catch (err) {
+                go.disabled = false; go.textContent = `✗ ${err.message}`;
+              }
+            };
+          }
+          dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+          (anchor || b).after(dlg);
+        });
       };
-      const flagTitle = (st) => ({
-        miss: 'This word exists — report missing',
-        warn: 'This flag is wrong — report false alarm',
-        hit: 'This word is actually wrong',
-      }[st] || 'Flag word');
 
       // chips：flag icon 悬停时才插入 DOM（不默认渲染）；已 flag 的常驻
       const ensureChipFlag = (chipEl) => {
@@ -480,13 +530,12 @@
         if (chipEl && chipEl.dataset.st) ensureChipFlag(chipEl);
       });
       chipsBox.addEventListener('click', async e => {
-        // ── flag 图标：chip 行内右侧，不进 details 流 ──
+        // ── flag 图标：chip 行内右侧，点开选择弹窗 ──
         const ic = e.target.closest('.bmc-chip-flag-ic');
         if (ic) {
           e.stopPropagation();
           const chipEl = ic.closest('.bmc-chip');
-          ic.title = flagTitle(chipEl?.dataset.st);
-          submitFlag(chipEl?.dataset.w, ic);
+          openFlagDialog(chipEl?.dataset.w, chipEl);
           return;
         }
         // ── chip 主体：展开 details（单展开互斥）──
@@ -511,8 +560,7 @@
         if (!ic) return;
         e.stopPropagation();
         const box = ic.closest('[data-att-w]');
-        ic.title = flagTitle(box?.dataset.st);
-        submitFlag(box?.dataset.attW, ic);
+        openFlagDialog(box?.dataset.attW, box);
       });
       // 已 flag 过的词显示标记（chrome.storage.local 防重）
       chrome.storage.local.get({ flaggedWords: {} }, (s) => {

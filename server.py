@@ -206,34 +206,18 @@ def _gh_open_proposal_issue(rule: dict, regex_valid: bool) -> str:
     return _gh_create_issue(title[:120], body, ["rule-proposal"])
 
 
-# word flag 分类（用户裁决 2026-10-08）：强迫分类但零认知负担——类别由词的
-# 查询状态确定性映射，用户看到的按钮文案跟状态走，点下去就是那一类。
-# admin 在 GitHub 上按 flag:<kind> label 筛选审核。
+# word flag 分类（用户裁决 2026-10-08）：三个报告者视角选项 + optional 说明。
+# kind 由用户在小弹窗里选（不再按状态自动映射——那套语义跟用户直觉不贴）。
 FLAG_KINDS = {
-    "should-exist":   "word exists but was not found (miss)",
-    "false-positive": "flagged/suggested incorrectly (warn)",
-    "term-exception": "accepted technical term — keep as-is",
-    "suspicious-pass": "word passed but is actually wrong",
+    "underflag":   "should have been flagged but was not (missed / passed wrongly)",
+    "mismeaning":  "flagged but the suggestion/meaning is wrong",
+    "overflag":    "flagged but the word is fine — false alarm",
 }
-
-
-def _flag_kind_for_status(status: str, definition: str) -> str:
-    """状态 → 确定性 flag 类别（前端按钮文案同一映射）。"""
-    if status == "miss":
-        return "should-exist"
-    if status == "warn":
-        # 英文字典命中的 warn 是"术语该保留"；PRPM 建议词的 warn 是"误报"
-        if _looks_english_entry(definition or "") or "Inggeris" in (definition or ""):
-            return "term-exception"
-        return "false-positive"
-    if status == "hit":
-        return "suspicious-pass"
-    return "false-positive"  # unreachable 等异常态归 false-positive 审核时人工分
 
 
 def _gh_open_word_flag(word: str, kind: str, status: str, definition: str,
                        note: str, page_url: str) -> str:
-    """word flag 开成 GitHub Issue：确定性 kind label + 客观查询事实。"""
+    """word flag 开成 GitHub Issue：用户选的 kind + 客观查询事实。"""
     if kind not in FLAG_KINDS:
         raise RuntimeError(f"unknown flag kind: {kind}")
     title = f"[flag:{kind}] {word}"
@@ -246,6 +230,29 @@ def _gh_open_word_flag(word: str, kind: str, status: str, definition: str,
             f"**flagged_at:** {int(time.time())}\n"
             + "\n\n_Auto-filed by Tepat extension._")
     return _gh_create_issue(title[:120], body, ["word-flag", f"flag:{kind}"])
+
+
+def _gh_close_issue(issue_url: str) -> None:
+    """关闭一条 flag Issue（unflag = 撤回审核请求；数据留档不删）。"""
+    import urllib.error as _ue
+    import urllib.request as _rq
+    token = _gh_token()
+    if not token:
+        raise RuntimeError("no GitHub token configured")
+    # html_url -> api url：.../repo/issues/N -> .../repos/repo/issues/N
+    m = re.search(r"github\.com/([^/]+/[^/]+)/issues/(\d+)", issue_url)
+    if not m:
+        raise RuntimeError(f"cannot parse issue url: {issue_url}")
+    req = _rq.Request(
+        f"https://api.github.com/repos/{m.group(1)}/issues/{m.group(2)}",
+        data=json.dumps({"state": "closed"}).encode(),
+        headers={"Authorization": f"Bearer {token}",
+                 "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json"},
+        method="PATCH")
+    with _rq.urlopen(req, timeout=15) as resp:
+        if resp.status not in (200, 201):
+            raise RuntimeError(f"close failed: HTTP {resp.status}")
 
 
 def _gh_create_issue(title: str, body: str, labels: list[str]) -> str:
@@ -1002,12 +1009,16 @@ class Handler(BaseHTTPRequestHandler):
                              "github_issue": gh_url or None,
                              "github_error": gh_error})
         elif self.path == "/api/flag":
-            # 词级 flag（用户裁决 2026-10-08）：免 token 的用户反馈通道。
-            # 强迫分类但零认知负担——kind 由状态确定性映射，server 端校验
-            # 前端传的 kind 与实际查询状态一致（防错报类别）。
+            # 词级 flag（用户裁决 2026-10-08）：免 token 反馈通道。
+            # kind 三选一由用户在小弹窗选（underflag/mismeaning/overflag），
+            # optional note；状态/定义以 server 查询为准。
             word = str(req.get("word") or "").strip().lower()[:60]
+            kind = str(req.get("kind") or "").strip()
             if not word or re.search(r"\s", word):
                 self._json(400, {"error": "single word required"})
+                return
+            if kind not in FLAG_KINDS:
+                self._json(400, {"error": "kind must be underflag/mismeaning/overflag"})
                 return
             note = str(req.get("note") or "").strip()[:500]
             page_url = str(req.get("page") or "").strip()[:300]
@@ -1016,7 +1027,6 @@ class Handler(BaseHTTPRequestHandler):
             status = result.get("status", "unknown")
             definition = result.get("definition", "")
             root = result.get("root", "")
-            kind = _flag_kind_for_status(status, definition)
             try:
                 gh_url = _gh_open_word_flag(word, kind, status, definition,
                                             (f"{note} | root: {root}" if root else note),
@@ -1027,6 +1037,21 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[flag] {word} ({status}/{kind}) -> {gh_url}")
             self._json(200, {"ok": True, "word": word, "status": status, "kind": kind,
                              "github_issue": gh_url})
+        elif self.path == "/api/unflag":
+            # unflag = 关闭对应 GitHub Issue（撤回审核请求；数据留档）。
+            # issue url 由前端从 chrome.storage.local 的 flaggedWords 带来。
+            word = str(req.get("word") or "").strip().lower()[:60]
+            issue_url = str(req.get("issue") or "").strip()[:300]
+            if not word or not issue_url.startswith("https://github.com/"):
+                self._json(400, {"error": "word and issue url required"})
+                return
+            try:
+                _gh_close_issue(issue_url)
+            except RuntimeError as e:
+                self._json(502, {"error": f"close issue failed: {e}"})
+                return
+            _log(f"[unflag] {word} -> closed {issue_url}")
+            self._json(200, {"ok": True, "word": word, "closed": issue_url})
         elif self.path == "/api/proposals/accept":
             # admin 批准申请：把规则追加进 rules-pack.json 的 rules 数组尾部。
             if not IS_ADMIN_MACHINE:

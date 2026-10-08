@@ -834,3 +834,30 @@
 .bmc-att-toggle{ font-size: 10px; opacity: .7; }
 .bmc-att-hit-head{ color: #15803d; }
 .bmc-chip-flagged .bmc-chip-flag-ic{ opacity: 0.9; color: #d97706; }
+
+/* ── flag 弹窗（三选一 + optional note + submit）── */
+.bmc-flag-dialog{
+  flex-basis: 100%; margin: 4px 0 8px;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 10px;
+  padding: 10px 12px; box-shadow: 0 6px 18px rgba(15,23,42,.12);
+}
+.bmc-flag-title{ font-size: 13px; font-weight: 700; color: #0f172a; }
+.bmc-flag-sub{ font-size: 11.5px; color: #64748b; margin: 2px 0 6px; }
+.bmc-flag-opt{
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: #1e293b; padding: 4px 0; cursor: pointer;
+}
+.bmc-flag-note{
+  width: 100%; margin-top: 6px; padding: 6px 9px;
+  border: 1px solid #cbd5e1; border-radius: 7px; font: 12px system-ui;
+}
+.bmc-flag-row{ display: flex; gap: 8px; margin-top: 8px; }
+.bmc-flag-go, .bmc-flag-un{
+  font: 600 12px system-ui; padding: 6px 14px; border-radius: 7px;
+  border: none; background: #2563eb; color: #fff; cursor: pointer;
+}
+.bmc-flag-go:disabled{ background: #94a3b8; cursor: default; }
+.bmc-flag-cancel{
+  font: 12px system-ui; padding: 6px 12px; border-radius: 7px;
+  border: 1px solid #cbd5e1; background: #fff; color: #475569; cursor: pointer;
+}
