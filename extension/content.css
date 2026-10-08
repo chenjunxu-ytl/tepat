@@ -869,7 +869,7 @@
   position: fixed; z-index: 99999;
   transform: translateY(-50%);
   font-size: 12px; line-height: 1;
-  padding: 5px; border-radius: 8px;
+  padding: 5px 4px 5px 10px; border-radius: 8px;
   background: #fff; border: 1px solid #cbd5e1;
   box-shadow: 0 2px 8px rgba(15,23,42,.18);
   color: #64748b; cursor: pointer; user-select: none;

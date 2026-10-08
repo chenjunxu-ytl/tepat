@@ -527,8 +527,9 @@
         const r = chipEl.getBoundingClientRect();
         floatIc.style.display = 'block';
         floatIc.classList.toggle('done', chipEl.classList.contains('bmc-chip-flagged'));
-        // chip 右上角外飘（叠在 chips 区 gap/空白上，不占 chip 文档流）
-        floatIc.style.left = `${r.right + 3}px`;
+        // 紧贴 chip 右缘（-2px 重叠）：鼠标从 chip 滑到 icon 的路径物理连续，
+        // 不存在中间缝隙；icon 的 padding 左半盖住交界带
+        floatIc.style.left = `${r.right - 2}px`;
         floatIc.style.top = `${r.top + r.height / 2}px`;
       };
       const hideFloat = () => { floatIc.style.display = 'none'; floatWord = null; };
