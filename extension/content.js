@@ -35,6 +35,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
   let currentMode = 'prpm'; // 'prpm' | 'check'
   let isPinned = false;
   let isAutoGrab = false;
+  let activeCheck = 'word'; // 'word' | 'grammar'（用户裁决 2026-10-08：默认 word；
+                            // 两个 pill 只有一个亮绿，另一个灰；auto-grab/Enter 跟它走）
   let lastGrabbedText = '';
   let outsideClickListener = null;
 
@@ -52,7 +54,9 @@ const safeStorageSet = (obj) => new Promise((res) => {
         btnGrab.classList.add('bmc-btn-pop');
         setTimeout(() => btnGrab.classList.remove('bmc-btn-pop'), 300);
       }
-      if (currentMode === 'check' || sel.includes(' ') || sel.length > 25) {
+      // 走当前 active 的 check（word/grammar）；多词文本强制 word 视图也
+      // 无妨——grammar 按钮点了才切。
+      if (activeCheck === 'grammar') {
         runCheck(sel, false);
       } else {
         runPrpm(sel, false);
@@ -222,8 +226,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
       <div class="bmc-search-bar">
         <input type="text" class="bmc-search-input" placeholder="Type a word to check..." value="${esc(initialQuery)}">
         <div class="bmc-search-btns">
-          <button class="bmc-pill-btn bmc-pill-prpm" title="Word Check">Word</button>
-          <button class="bmc-pill-btn bmc-pill-scan" title="Grammar Check">Grammar</button>
+          <button class="bmc-pill-btn bmc-pill-check${activeCheck === 'word' ? ' bmc-pill-on' : ''}" data-check="word" title="Word Check">Word</button>
+          <button class="bmc-pill-btn bmc-pill-check${activeCheck === 'grammar' ? ' bmc-pill-on' : ''}" data-check="grammar" title="Grammar Check">Grammar</button>
         </div>
       </div>
       <div class="bmc-body"></div>
@@ -234,8 +238,21 @@ const safeStorageSet = (obj) => new Promise((res) => {
     const input = panel.querySelector('.bmc-search-input');
     const btnPin = panel.querySelector('.bmc-pin-btn');
     const btnGrab = panel.querySelector('.bmc-grab-btn');
-    const btnPrpm = panel.querySelector('.bmc-pill-prpm');
-    const btnScan = panel.querySelector('.bmc-pill-scan');
+    const btnPrpm = panel.querySelector('[data-check="word"]');
+    const btnScan = panel.querySelector('[data-check="grammar"]');
+    // 互斥 active 态（用户裁决 2026-10-08）：只有 active 的 pill 亮绿，
+    // 另一个灰。点 pill 即切换 activeCheck（auto-grab/Enter 跟随）+ 触发查询。
+    const setActiveCheck = (which, run = false) => {
+      activeCheck = which;
+      panel.querySelectorAll('.bmc-pill-check').forEach(b =>
+        b.classList.toggle('bmc-pill-on', b.dataset.check === which));
+      if (run) {
+        const q = input.value.trim();
+        if (q) (which === 'grammar' ? runCheck : runPrpm)(q, false);
+      }
+    };
+    btnPrpm.onclick = () => setActiveCheck('word', true);
+    btnScan.onclick = () => setActiveCheck('grammar', true);
 
     btnPin.onclick = () => {
       isPinned = !isPinned;
@@ -260,7 +277,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
         if (sel && sel.length >= 2) {
           lastGrabbedText = sel;
           input.value = sel;
-          if (currentMode === 'check' || sel.includes(' ') || sel.length > 25) {
+          if (activeCheck === 'grammar') {
             runCheck(sel, false);
           } else {
             runPrpm(sel, false);
@@ -271,31 +288,18 @@ const safeStorageSet = (obj) => new Promise((res) => {
       }
     };
 
-    const triggerPrpm = () => {
-      const q = input.value.trim();
-      if (q) runPrpm(q, false);
-    };
-
-    const triggerScan = () => {
-      const q = input.value.trim();
-      if (q) runCheck(q, false);
-    };
-
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         const q = input.value.trim();
         if (!q) return;
-        // 如果当前是 check 模式或输入含空格多词，走 scan；否则走 prpm
-        if (currentMode === 'check' || q.includes(' ')) {
-          triggerScan();
+        // 走当前 active 的 check（默认 word）——不再按内容猜
+        if (activeCheck === 'grammar') {
+          runCheck(q, false);
         } else {
-          triggerPrpm();
+          runPrpm(q, false);
         }
       }
     });
-
-    btnPrpm.onclick = triggerPrpm;
-    btnScan.onclick = triggerScan;
 
     // 默认放在右上并强制最高 z-index 防覆盖
     panel.style.setProperty('z-index', '2147483647', 'important');

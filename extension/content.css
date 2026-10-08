@@ -235,24 +235,26 @@
   transform: scale(0.96);
 }
 
-.bmc-pill-prpm {
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
+/* Word/Grammar 互斥 pill（用户裁决 2026-10-08）：只有 active 亮绿，
+   另一个灰。 */
+.bmc-pill-check {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
 }
 
-.bmc-pill-prpm:hover {
-  background: #dbeafe;
+.bmc-pill-check:hover {
+  background: #e2e8f0;
 }
 
-.bmc-pill-scan {
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
-}
-
-.bmc-pill-scan:hover {
+.bmc-pill-check.bmc-pill-on {
   background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.bmc-pill-check.bmc-pill-on:hover {
+  background: #d1fae5;
 }
 
 /* 内容体 */
