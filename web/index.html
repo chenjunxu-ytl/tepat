@@ -101,14 +101,15 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-wordflags">
  <h2>Word flags (PRPM)</h2>
- <p class="sub">Decisions land in <code>word-overrides.json</code> (the source of truth for word-level rules) and take effect on every lookup immediately. <b>Accept</b> = pick status + definition (from the issue, the reporter, or your own). <b>Reject</b> = close without an override. Commit the file to the repo so other machines pick it up via Fetch from GitHub.</p>
+ <p class="sub">Decisions land in <code>word-overrides.json</code> (the source of truth for word-level rules) and take effect on every lookup immediately. <b>Accept</b> writes the override with your definition and closes the issue; the word's final status follows the reporter's complaint. <b>Reject</b> = close without an override.</p>
  <div class="card">
   <div class="wf-toolbar">
    <div class="wf-pills">
     <button class="wf-pill wf-pill-active" data-kind="">All</button>
-    <button class="wf-pill" data-kind="underflag">Under-flagged</button>
-    <button class="wf-pill" data-kind="mismeaning">Wrong meaning</button>
-    <button class="wf-pill" data-kind="overflag">Over-flagged</button>
+    <button class="wf-pill" data-kind="underflag">Said: should be found</button>
+    <button class="wf-pill" data-kind="mismeaning">Said: meaning wrong</button>
+    <button class="wf-pill" data-kind="overflag">Said: not a word</button>
+    <button class="wf-pill" data-kind="other">Other</button>
    </div>
    <button class="wf-closed-toggle" id="wf-show-closed" title="Show closed flags">Closed</button>
    <span style="flex:1"></span>
@@ -308,7 +309,9 @@ async function loadFlagsView(which){
   const open = all.filter(f => f.state==='open');
   const closed = all.filter(f => f.state==='closed');
   msg.innerHTML=`<span class="ok">✓ ${open.length} open · ${closed.length} closed</span>`;
-  const kindBadge = k => `<span class="lvl ${k==='overflag'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc(k||'?')}</span>`;
+  const kindLabel = { underflag: 'should be found', mismeaning: 'meaning wrong',
+                      overflag: 'not a word', other: 'other' };
+  const kindBadge = k => `<span class="lvl ${k==='overflag'||k==='other'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc(kindLabel[k] || k || '?')}</span>`;
   // 决策行（仅 word flags 的 open 条目）：status + definition 来源 + Accept/Reject
   const decideRow = f => {
     const id = `wf-d-${f.number}`;
