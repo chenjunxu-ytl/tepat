@@ -240,6 +240,7 @@ FLAG_KINDS = {
     "underflag":   "should have been flagged but was not (missed / passed wrongly)",
     "mismeaning":  "flagged but the suggestion/meaning is wrong",
     "overflag":    "flagged but the word is fine — false alarm",
+    "other":       "something else — see the explanation",
 }
 
 

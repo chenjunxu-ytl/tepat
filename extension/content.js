@@ -522,13 +522,30 @@
               }
             };
           } else {
-            // 词的 flag（用户裁决 2026-10-08）：词没有 over/under 属性，只有
-            // "查询结果对不对"——选项按词的立场写人话，kind 值不变。
+            // 词的 flag（用户裁决 2026-10-08）：选项按词当前显示的状态给——
+            // Found/Not found/Needs review 各自只列出说得通的投诉，kind 值不变。
+            const chipEl = b.querySelector(`.bmc-chip[data-w="${CSS.escape(word)}"]`);
+            const st = chipEl?.dataset.st || (dlg.dataset.st || 'warn');
+            let opts;
+            if (st === 'miss') {
+              opts = `
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="underflag"> It's a real word — it should have been found</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="other"> Other problem</label>`;
+            } else if (st === 'hit') {
+              opts = `
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="mismeaning"> The meaning shown is wrong</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="overflag"> It isn't actually a valid word</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="other"> Other problem</label>`;
+            } else {
+              opts = `
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="mismeaning"> The suggestion shown is wrong</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="overflag"> It's actually a valid word</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="underflag"> It shouldn't have been flagged at all</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="other"> Other problem</label>`;
+            }
             dlg.innerHTML = `
               <div class="bmc-flag-title">⚑ Flag "${esc(word)}"</div>
-              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="underflag"> It's a real word, but it wasn't found</label>
-              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="mismeaning"> It was found, but the meaning shown is wrong</label>
-              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="overflag"> It was found, but it isn't a valid word</label>
+              ${opts}
               <input type="text" class="bmc-flag-note" placeholder="Explanation (optional)">
               <div class="bmc-flag-row">
                 <button class="bmc-flag-go" disabled>Submit</button>
