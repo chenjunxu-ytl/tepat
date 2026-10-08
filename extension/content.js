@@ -461,8 +461,8 @@
                   chrome.storage.local.set({ flaggedWords: s2.flaggedWords });
                 });
                 b.querySelectorAll(`[data-w="${CSS.escape(word)}"], [data-att-w="${CSS.escape(word)}"]`)
-                  .forEach(el => { el.classList.remove('bmc-chip-flagged');
-                    const icn = el.querySelector('.bmc-chip-flag-ic'); icn && icn.classList.remove('done'); });
+                  .forEach(el => el.classList.remove('bmc-chip-flagged'));
+                syncFloatState(word, false);
                 dlg.remove();
               } catch (err) {
                 dlg.querySelector('.bmc-flag-un').textContent = `✗ ${err.message}`;
@@ -499,8 +499,8 @@
                   chrome.storage.local.set({ flaggedWords: s2.flaggedWords });
                 });
                 b.querySelectorAll(`[data-w="${CSS.escape(word)}"], [data-att-w="${CSS.escape(word)}"]`)
-                  .forEach(el => { el.classList.add('bmc-chip-flagged');
-                    const icn = el.querySelector('.bmc-chip-flag-ic'); icn && icn.classList.add('done'); });
+                  .forEach(el => el.classList.add('bmc-chip-flagged'));
+                syncFloatState(word, true);
                 dlg.remove();
               } catch (err) {
                 go.disabled = false; go.textContent = `✗ ${err.message}`;
@@ -512,32 +512,49 @@
         });
       };
 
-      // chips：flag icon 悬停时才插入 DOM（不默认渲染）；已 flag 的常驻
-      const ensureChipFlag = (chipEl) => {
-        if (chipEl.querySelector('.bmc-chip-flag-ic')) return;
-        const ic = document.createElement('span');
-        ic.className = 'bmc-chip-flag-ic';
-        ic.textContent = '⚑';
-        if (chipEl.classList.contains('bmc-chip-flagged')) ic.classList.add('done');
-        chipEl.appendChild(ic);
-        // hover 结束移除（已 flag 的常驻）
-        chipEl.addEventListener('mouseleave', () => {
-          if (!ic.classList.contains('done')) ic.remove();
-        }, { once: true });
+      // chips flag（用户裁决 2026-10-08）：icon 不进 chip DOM、不留 padding——
+      // 单个面板级悬浮层（position:fixed）跟随 hover 的 chip，浮在 chip 右上角
+      // 外侧的空白处。chip 宽度从渲染起恒定，不存在挤行；icon 有自己的热区，
+      // 鼠标移到 icon 上不算离开 chip 区域（由 float 层的 pointerenter 保持）。
+      const floatIc = document.createElement('div');
+      floatIc.className = 'bmc-flag-float';
+      floatIc.textContent = '⚑';
+      floatIc.style.display = 'none';
+      panel.appendChild(floatIc);
+      let floatWord = null;
+      const placeFloat = (chipEl) => {
+        floatWord = chipEl.dataset.w;
+        const r = chipEl.getBoundingClientRect();
+        floatIc.style.display = 'block';
+        floatIc.classList.toggle('done', chipEl.classList.contains('bmc-chip-flagged'));
+        // chip 右上角外飘（叠在 chips 区 gap/空白上，不占 chip 文档流）
+        floatIc.style.left = `${r.right + 3}px`;
+        floatIc.style.top = `${r.top + r.height / 2}px`;
       };
+      const hideFloat = () => { floatIc.style.display = 'none'; floatWord = null; };
       chipsBox.addEventListener('mouseover', e => {
+        if (e.target.closest('.bmc-flag-float')) return;  // icon 自身热区：保持
         const chipEl = e.target.closest('.bmc-chip');
-        if (chipEl && chipEl.dataset.st) ensureChipFlag(chipEl);
+        if (chipEl && chipEl.dataset.st) placeFloat(chipEl);
+        else if (!e.target.closest('.bmc-chip')) hideFloat();
       });
+      chipsBox.addEventListener('mouseleave', hideFloat);
+      // 滚动面板时重新贴位（fixed 坐标会脱节）
+      panel.addEventListener('scroll', () => {
+        const chipEl = floatWord && b.querySelector(`.bmc-chip[data-w="${CSS.escape(floatWord)}"]`);
+        if (chipEl && floatIc.style.display !== 'none') placeFloat(chipEl);
+      }, { passive: true });
+      floatIc.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!floatWord) return;
+        const chipEl = b.querySelector(`.bmc-chip[data-w="${CSS.escape(floatWord)}"]`);
+        openFlagDialog(floatWord, chipEl);
+      });
+      // flag/unflag 后同步悬浮层状态
+      const syncFloatState = (word, flagged) => {
+        if (floatWord === word) floatIc.classList.toggle('done', flagged);
+      };
       chipsBox.addEventListener('click', async e => {
-        // ── flag 图标：chip 行内右侧，点开选择弹窗 ──
-        const ic = e.target.closest('.bmc-chip-flag-ic');
-        if (ic) {
-          e.stopPropagation();
-          const chipEl = ic.closest('.bmc-chip');
-          openFlagDialog(chipEl?.dataset.w, chipEl);
-          return;
-        }
         // ── chip 主体：展开 details（单展开互斥）──
         const chip = e.target.closest('.bmc-chip');
         if (!chip || !chip.dataset.st) return;  // 未查询完/无状态不展开

@@ -792,19 +792,18 @@
   padding-top: 6px; border-top: 1px dashed #cbd5e1;
 }
 .bmc-chip{
-  font-size: 12px; padding: 3px 24px 3px 10px; border-radius: 10px;
+  font-size: 12px; padding: 3px 10px; border-radius: 10px;
   background: #f1f5f9; color: #334155; cursor: pointer; user-select: none;
   border: 1px solid transparent;
   display: inline-flex; align-items: center;
-  position: relative;
 }
 .bmc-chip-w{ }
+/* attention box 内的 flag（行内常驻）；chips 用悬浮层 bmc-flag-float */
 .bmc-chip-flag-ic{
-  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
-  font-size: 11px; opacity: 0.55; padding: 0 1px; border-radius: 6px;
-  cursor: pointer; line-height: 1;
+  font-size: 11px; opacity: 0.55; padding: 0 2px; border-radius: 6px;
+  cursor: pointer; line-height: 1; margin-left: auto;
 }
-.bmc-chip-flag-ic:hover{ opacity: 1; transform: translateY(-50%) scale(1.2); }
+.bmc-chip-flag-ic:hover{ opacity: 1; }
 .bmc-chip-flag-ic.done{ opacity: 0.9; color: #d97706; }
 /* attention box 内的 flag：常驻渲染，靠右 */
 .bmc-item-main{ position: relative; }
@@ -864,3 +863,16 @@
   font: 12px system-ui; padding: 6px 12px; border-radius: 7px;
   border: 1px solid #cbd5e1; background: #fff; color: #475569; cursor: pointer;
 }
+
+/* chips 悬浮 flag 层：fixed 定位，hover 的 chip 右上角外飘 */
+.bmc-flag-float{
+  position: fixed; z-index: 99999;
+  transform: translateY(-50%);
+  font-size: 12px; line-height: 1;
+  padding: 5px; border-radius: 8px;
+  background: #fff; border: 1px solid #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15,23,42,.18);
+  color: #64748b; cursor: pointer; user-select: none;
+}
+.bmc-flag-float:hover{ color: #0f172a; transform: translateY(-50%) scale(1.1); }
+.bmc-flag-float.done{ color: #d97706; }
