@@ -1,9 +1,9 @@
 {
  "meta": {
-  "version": 2,
-  "updated": "2026-10-07",
-  "source": "Anna rule_book.py 同源外包（2026-10-01）；conf 档位：high=结构性错误无合法场景/深标，medium=上下文相关/中标，low=宽网提醒/浅标",
-  "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict."
+  "version": 3,
+  "updated": "2026-10-08",
+  "source": "rules.json + Rule Book pack merged (single source of truth, 用户裁决 2026-10-08)",
+  "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict. noflag: true entries are exception ranges suppressing overlapping findings from other rule IDs (Rule Book semantics)."
  },
  "rules": [
   {
@@ -201,6 +201,263 @@
    "register": "formal",
    "source": "Anna rule_book / EJ-01 (inherited manual rule; inspect context)",
    "exceptions": []
+  },
+  {
+   "id": "KS-01",
+   "conf": "high",
+   "re": "\\blebih\\s+[^.,;\\n]{0,40}?\\bdari\\b(?!\\s+(segi|sudut|aspek|perspektif)\\b)",
+   "note": "lebih … dari → lebih … daripada (perbandingan = KABOS)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-01",
+   "conf": "low",
+   "re": "\\bdari\\s+(segi|sudut|aspek|perspektif)\\b",
+   "note": "dari segi/sudut/aspek/perspektif adalah kekecualian tetap (jangan tukar)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "noflag": true
+  },
+  {
+   "id": "KS-02",
+   "conf": "medium",
+   "re": "\\bantara\\s+[^.,;\\n]{0,60}?\\s+dan\\s",
+   "note": "antara X dan Y — dua item biasanya dengan; kira item dahulu",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-02",
+   "conf": "high",
+   "re": "\\bantara\\s+\\w+(\\s+\\w+){0,4}\\s+dengan\\b",
+   "note": "antara … dengan (dua item)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-03",
+   "conf": "high",
+   "re": "\\blebih\\s+[^.,;\\n]{0,40}?\\bberbanding(\\s+dengan)?\\b",
+   "note": "lebih … berbanding (dengan) → lebih … daripada",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-03",
+   "conf": "medium",
+   "re": "\\bberbanding\\b(?!\\s+dengan\\b)(?!\\s+daripada\\b)",
+   "note": "berbanding tanpa dengan — tidak lengkap (tiada lebih/kurang)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-04",
+   "conf": "medium",
+   "re": "\\b(habis|faedah|ruang|peluang|habis guna)\\s+kepada\\b",
+   "note": "habis/faedah/ruang + kepada → bagi (beneficiary, bukan penerima)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-05",
+   "conf": "high",
+   "re": "\\bpada\\s+(jangka\\s+masa|tempoh|masa\\s+panjang)\\b",
+   "note": "pada + jangka masa → dalam (tempoh)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-05",
+   "conf": "high",
+   "re": "\\bdalam\\s+(bulan|tahun|minggu|hari)\\s+[A-Z\\d]",
+   "note": "dalam + titik masa spesifik → pada (bulan/tahun/tarikh)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KS-05",
+   "conf": "high",
+   "re": "\\bdi\\s+(saat|masa|ketika|waktu)\\s",
+   "note": "di + saat/masa → pada (masa, bukan tempat)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KP-01",
+   "conf": "medium",
+   "re": "\\bAdalah\\s+(dimaklumkan|diserahkan|dinyatakan|dijelaskan|diharapkan)\\b",
+   "note": "adalah + frasa kerja (Adalah dimaklumkan/diserahkan…) — buang pemeri",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KP-01",
+   "conf": "high",
+   "re": "\\b(adalah|ialah)\\s+merupakan\\b",
+   "note": "adalah merupakan — kembar kata pemeri (lihat KL-01)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "PI-01",
+   "conf": "high",
+   "re": "\\bmensetujui\\b",
+   "note": "mensetujui → menyetujui / bersetuju dengan (realisasi meN- salah)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "PI-02",
+   "conf": "medium",
+   "re": "\\bmemberikan\\s+(pelajar|guru|murid|orang|kanak-kanak|peserta|pengguna|ibu|bapa|rakan)\\b",
+   "note": "memberikan + objek hidup (pelajar/guru/orang…) → memberi",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "SA-01",
+   "conf": "medium",
+   "re": "\\b(Setelah|Selepas|Semasa|Ketika)\\s+[^.\\n]{0,60}?,\\s+[^.\\n]{0,30}\\s+\\bdipasang|dibuat|diberi|digunakan\\b",
+   "note": "Setelah/Selepas/semasa/ketika … + pasif: subjek klausa utama mesti pelaku",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "SA-02",
+   "conf": "medium",
+   "re": "\\b(bergotong-royong|menyanyi|bermain)[^.\\n]{0,20},\\s+(?!ber|men|mem|me|di)[a-z]+\\s+[a-z]+\\s+dan\\s+(ber|men|mem|me)",
+   "note": "selaras frasa: kata nama terus dalam siri kata kerja (bergotong-royong, X, menyanyi)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KL-01",
+   "conf": "high",
+   "re": "\\b(walau bagaimanapun|tetapi|namun)[^.\\n]{0,40}\\b(tetapi|namun|walau bagaimanapun)\\b",
+   "note": "kembar kata hubung: tetapi…namun / walau bagaimanapun…tetapi",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KL-01",
+   "conf": "high",
+   "re": "\\b(ialah\\s+ialah|adalah\\s+adalah)\\b",
+   "note": "ialah ialah / adalah adalah (ganda botoh)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "KL-02",
+   "conf": "high",
+   "re": "\\b(sebahagian|beberapa|sesetengah|semua|para)\\s+[^.,\\n]{0,20}?([a-z]+)-\\2\\b",
+   "note": "penanda jamak + kata ganda nama: Sebahagian/beberapa/para … X-X",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-01",
+   "conf": "high",
+   "re": "\\bkerana\\s+fakta\\s+bahawa\\b",
+   "note": "kerana fakta bahawa → kerana (kalque 'due to the fact that')",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-01",
+   "conf": "high",
+   "re": "\\badalah\\s+kerana\\b",
+   "note": "adalah kerana → ialah kerana / kerana",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-02",
+   "conf": "medium",
+   "re": "\\btali\\s+pikat\\b",
+   "note": "tali pikat → tali anjing/cawak (pikat = memikat burung) [LR-02]",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-02",
+   "conf": "medium",
+   "re": "\\bbunyi\\s+amaran\\b",
+   "note": "bunyi amaran (nada peranti) → bunyi isyarat [LR-04]",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-02",
+   "conf": "medium",
+   "re": "\\b(nasihat|komen|pendapat|audi)\\s+yang\\s+tidak\\s+diundang\\b",
+   "note": "nasihat tidak diundang → tidak diminta [LR-05]",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-03",
+   "conf": "high",
+   "re": "\\b[yY]ang\\s+mana\\b(?!\\s+(satu|antara|lebih))",
+   "note": "yang mana sebagai konjungsi relatif → yang (kalque 'which')",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-03",
+   "conf": "high",
+   "re": "\\b[dD]i\\s+mana\\b(?!\\s+(berada|lokasi|kedudukan|tempat))",
+   "note": "di mana sebagai konjungsi (bukan tempat) → susun semula",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-04",
+   "conf": "high",
+   "re": "\\bmenggapai\\s+untung\\b",
+   "note": "menggapai untung → meraih/memperoleh untung",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-04",
+   "conf": "high",
+   "re": "\\bterima\\s+kasih\\s+di\\s+atas\\b",
+   "note": "terima kasih di atas → terima kasih atas (di atas = spatial)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "IS-04",
+   "conf": "high",
+   "re": "\\b(menyambungkan|menghubungkan)\\s+[^.\\n]{0,30}\\s+kepada\\s+(port|peranti|kabel|bank|router|wifi)\\b",
+   "note": "menyambungkan X kepada Y (bukan hidup) → dengan [LR-06]",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "EJ-01",
+   "conf": "high",
+   "re": "\\bfrekuensy\\b",
+   "note": "frekuensy → frekuensi",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "EJ-01",
+   "conf": "high",
+   "re": "\\bmembantuh\\b",
+   "note": "membantuh → membantu",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "LR-03",
+   "conf": "high",
+   "re": "\\b[Jj]angan\\s+lepas\\s+(anjing|kucing|burung|ikan|kanak)\\b",
+   "note": "lepas + objek langsung → lepaskan (PI-01)",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+  },
+  {
+   "id": "NF-2",
+   "conf": "low",
+   "re": "\\bantara\\s+[^.\\n]{0,25},[^.\\n]{0,25},[^.\\n]{0,25}\\s+dan\\b",
+   "note": "antara + 3+ item + dan adalah betul",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "noflag": true
+  },
+  {
+   "id": "NF-4",
+   "conf": "low",
+   "re": "\\b(guna|pakai|cari|bili|tanya)\\b",
+   "note": "gugur meN- pada kata kerja aktif (guna/pakai/cari) — jangan tanda",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "noflag": true
+  },
+  {
+   "id": "LR-01",
+   "conf": "low",
+   "re": "(?s)\\bsatu\\s+(slogan|cadangan|idea)\\b",
+   "note": "minta satu, beri beberapa opsyen — jangan tanda",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "noflag": true
+  },
+  {
+   "id": "LR-07",
+   "conf": "low",
+   "re": "\\b(dengan)\\s+(sensor|kamera|kopi|lauk|sambal)\\b",
+   "note": "dengan = beserta (kamera dengan sensor) — jangan tanda",
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "noflag": true
   }
  ],
  "ms_id_suffix_map": [

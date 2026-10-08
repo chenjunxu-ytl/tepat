@@ -1,476 +1,1317 @@
 {
-  "_meta": {
-    "purpose": "Indonesian-only word blacklist: words standard/colloquial in Bahasa Indonesia but NOT in DBP-standard Bahasa Melayu. Removing them downgrades them to PRPM lookup (PRPM returns no entry -> correctly flagged). NEVER include ms/id shared words.",
-    "caution": "Indonesian candidates are investigation signals, not proof of an error. Local dictionary-file absence and corpus absence do not prove language exclusivity. Dictionary entries require sense/register inspection. Original research retained for provenance; classification corrections are recorded separately.",
-    "verification_method": "DBP file-exists check on corpus/dbp/dbp/*.json + hansard.jsonl frequency scan + KBBI/web sources; see research/indo-blacklist-research-20261002.md",
-    "maintained_by": "human",
-    "date": "2026-10-02",
-    "counts": {
-      "indo_only_words": 293,
-      "uncertain_words": 56,
-      "register_words": 9,
-      "context_words": 5
-    },
-    "classification_revision": {
-      "date": "2026-10-02",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "changes": "Move nine shared SMS abbreviations into register_words; move five ambiguous/shared chat or unit forms into context_words. Remaining Indonesian labels retain original research status and are not freshly verified."
-    },
-    "suggestions_note": "Candidates from the original research word-pair tables. Suggestions are validated against local DBP attestation at runtime and are never applied automatically.",
-    "generated_source_sha256": {
-      "indo_blacklist.md": "f3d6c973051b5f6af66acb9ff53a641f0c93586c601be6b0b42efa8a5550e99b",
-      "indo_blacklist.json": "ba0853e966308c14c88ca094346df180e67e8efa1e88dbddd0a850f78cd56ec0"
-    }
+ "_meta": {
+  "purpose": "Indonesian-only word blacklist: words standard/colloquial in Bahasa Indonesia but NOT in DBP-standard Bahasa Melayu. Removing them downgrades them to PRPM lookup (PRPM returns no entry -> correctly flagged). NEVER include ms/id shared words.",
+  "caution": "Indonesian candidates are investigation signals, not proof of an error. Local dictionary-file absence and corpus absence do not prove language exclusivity. Dictionary entries require sense/register inspection. Original research retained for provenance; classification corrections are recorded separately.",
+  "verification_method": "DBP file-exists check on corpus/dbp/dbp/*.json + hansard.jsonl frequency scan + KBBI/web sources; see research/indo-blacklist-research-20261002.md",
+  "maintained_by": "human",
+  "date": "2026-10-02",
+  "counts": {
+   "indo_only_words": 293,
+   "uncertain_words": 56,
+   "register_words": 9,
+   "context_words": 5
   },
-  "indo_only_words": [
-    "abis",
-    "agustus",
-    "aing",
-    "aj",
-    "aja",
-    "ajah",
-    "aktualisasi",
-    "ama",
-    "ambilin",
-    "anget",
-    "anjay",
-    "anjg",
-    "anuan",
-    "apain",
-    "apaname",
-    "aq",
-    "argumentasi",
-    "arti",
-    "ato",
-    "atuh",
-    "atw",
-    "autentisitas",
-    "baek",
-    "bahenol",
-    "bakil",
-    "bakso",
-    "bandara",
-    "bangke",
-    "bantuin",
-    "banyakin",
-    "baper",
-    "baterai",
-    "bawain",
-    "beb",
-    "becanda",
-    "begituan",
-    "bego",
-    "bemo",
-    "bener",
-    "bener2",
-    "beneran",
-    "bensin",
-    "bgmn",
-    "bgst",
-    "bilangin",
-    "bisnis",
-    "bngst",
-    "bodo",
-    "bokap",
-    "bokep",
-    "boker",
-    "boong",
-    "brengsek",
-    "bruer",
-    "bsa",
-    "bsk",
-    "cabe",
-    "camilan",
-    "cans",
-    "caper",
-    "cariin",
-    "cekidot",
-    "cemilan",
-    "cenah",
-    "cepet",
-    "cih",
-    "cintrong",
-    "cmn",
-    "coba",
-    "cok",
-    "colokan",
-    "cowo",
-    "cued",
-    "curhat",
-    "cuy",
-    "cuyy",
-    "dagadu",
-    "daster",
-    "dateng",
-    "deh",
-    "dengerin",
-    "desember",
-    "dih",
-    "dipublikasikan",
-    "dokter",
-    "dong",
-    "doski",
-    "duh",
-    "dulur",
-    "elo",
-    "elu",
-    "ember",
-    "euy",
-    "fleksibilitas",
-    "gabut",
-    "gaes",
-    "gais",
-    "gaje",
-    "gak",
-    "gakpapa",
-    "galo",
-    "gans",
-    "gapapa",
-    "gblk",
-    "gebetan",
-    "gegara",
-    "gercep",
-    "gile",
-    "gimans",
-    "girboks",
-    "gitu-gitu",
-    "gituan",
-    "gk",
-    "gmn",
-    "goblog",
-    "gokil",
-    "gratisan",
-    "gt",
-    "gth",
-    "gue",
-    "gule",
-    "gw",
-    "gwa",
-    "hadeh",
-    "haduh",
-    "halu",
-    "heeh",
-    "heueuh",
-    "hewan",
-    "hrs",
-    "identitas",
-    "ilang",
-    "intensitas",
-    "istri",
-    "itung",
-    "jajanan",
-    "jan",
-    "jancuk",
-    "jayus",
-    "jembatan",
-    "jijay",
-    "jokul",
-    "jomblo",
-    "jomlo",
-    "jualin",
-    "kabar",
-    "kaco",
-    "kaga",
-    "kasian",
-    "kawin",
-    "kayak-kayak",
-    "kayaknya",
-    "kebangun",
-    "kebo",
-    "kece",
-    "kemaren",
-    "kemarin",
-    "kepo",
-    "klo",
-    "klu",
-    "klw",
-    "knalpot",
-    "kompleksitas",
-    "komunitas",
-    "kreativitas",
-    "kredibilitas",
-    "kuantitas",
-    "kuwi",
-    "kuy",
-    "ky",
-    "kyk",
-    "liatin",
-    "loe",
-    "lonceng",
-    "lu",
-    "maap",
-    "macem",
-    "macem-macem",
-    "mager",
-    "mah",
-    "makasi",
-    "makasih",
-    "mantul",
-    "maturitas",
-    "mayoritas",
-    "mempublikasikan",
-    "mencoba",
-    "mengabari",
-    "mengabarkan",
-    "menginfokan",
-    "menit",
-    "menyimak",
-    "mie",
-    "mikir",
-    "mikirin",
-    "minoritas",
-    "mksh",
-    "modernisasi",
-    "msti",
-    "mukena",
-    "musik",
-    "naek",
-    "nanyain",
-    "nasionalitas",
-    "ndan",
-    "ngab",
-    "ngabuburit",
-    "ngakak",
-    "ngambilin",
-    "ngapain",
-    "ngasih",
-    "ngebut",
-    "ngeliat",
-    "ngeluh",
-    "ngerepotin",
-    "ngerti",
-    "ngeteh",
-    "nggak",
-    "nggaknya",
-    "nggerti",
-    "ngobrolin",
-    "nih",
-    "ntar",
-    "nulis",
-    "nyampah",
-    "nyampe",
-    "nyari",
-    "nye",
-    "nyeletuk",
-    "nyeritain",
-    "nyium",
-    "nyokap",
-    "nyolok",
-    "nyuci",
-    "ojek",
-    "optimasi",
-    "orangtua",
-    "otentisitas",
-    "pake",
-    "persneling",
-    "personalitas",
-    "plafon",
-    "plis",
-    "pluralitas",
-    "popularitas",
-    "produktivitas",
-    "publisitas",
-    "pukis",
-    "puter",
-    "qw",
-    "realistis",
-    "rusak",
-    "sabaran",
-    "saklar",
-    "sampe",
-    "sampeyan",
-    "sans",
-    "santuy",
-    "sebel",
-    "segituan",
-    "sehat",
-    "seksualitas",
-    "semacem",
-    "sereh",
-    "sih",
-    "skul",
-    "slebor",
-    "sokin",
-    "solidaritas",
-    "sopir",
-    "stabilitas",
-    "struk",
-    "suer",
-    "surabi",
-    "sya",
-    "tajir",
-    "taon",
-    "teknis",
-    "tlpn",
-    "tokai",
-    "totalitas",
-    "trims",
-    "tuh",
-    "visibilitas",
-    "wastafel",
-    "wisuda",
-    "wkwk",
-    "wkwkwk",
-    "yaampun",
-    "yaelah",
-    "yah",
-    "yaitu",
-    "yaudah"
-  ],
-  "uncertain_words": [
-    "adaptif",
-    "aktivitas",
-    "akun",
-    "apapun",
-    "bolu",
-    "cuan",
-    "dimana",
-    "dimanapun",
-    "disamping",
-    "elaborasi",
-    "es",
-    "eskrim",
-    "eskrin",
-    "evaluasi",
-    "ga",
-    "gimanapun",
-    "gratis",
-    "hoaks",
-    "horas",
-    "ibukota",
-    "ijin",
-    "jaman",
-    "juli",
-    "juni",
-    "kapanpun",
-    "kapasitas",
-    "kau",
-    "kemana",
-    "klarifikasi",
-    "konfirmasi",
-    "konten",
-    "kot",
-    "kualitas",
-    "kue",
-    "kwetiau",
-    "lom",
-    "masehi",
-    "mau",
-    "napas",
-    "ngangkat",
-    "ngga",
-    "obat",
-    "oke",
-    "om",
-    "pikir",
-    "pikiran",
-    "pria",
-    "prioritas",
-    "rujak",
-    "sampo",
-    "siapapun",
-    "sob",
-    "tau",
-    "telepon",
-    "terimakasih",
-    "uang"
-  ],
-  "register_words": {
-    "dgn": {
-      "expansion": "dengan",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "dr": {
-      "expansion": "dari",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "jgn": {
-      "expansion": "jangan",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "utk": {
-      "expansion": "untuk",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "yg": {
-      "expansion": "yang",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "sy": {
-      "expansion": "saya",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "pd": {
-      "expansion": "pada",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "thn": {
-      "expansion": "tahun",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    },
-    "krn": {
-      "expansion": "kerana",
-      "kind": "sms_abbreviation",
-      "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
-      "scope": "formal_prose"
-    }
+  "classification_revision": {
+   "date": "2026-10-02",
+   "source": "https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf",
+   "changes": "Move nine shared SMS abbreviations into register_words; move five ambiguous/shared chat or unit forms into context_words. Remaining Indonesian labels retain original research status and are not freshly verified."
   },
-  "context_words": {
-    "cm": {
-      "note": "May be a measurement unit; review context.",
-      "kind": "context_required"
-    },
-    "hehe": {
-      "note": "Laughter/chat expression; language origin not established.",
-      "kind": "context_required"
-    },
-    "hihi": {
-      "note": "Laughter/chat expression; language origin not established.",
-      "kind": "context_required"
-    },
-    "huhu": {
-      "note": "Chat expression; language origin not established.",
-      "kind": "context_required"
-    },
-    "thx": {
-      "note": "English chat abbreviation; language origin not Indonesian-specific.",
-      "kind": "context_required"
-    }
-  },
-  "suggestions": {
-    "agustus": "Ogos",
-    "arti": "erti",
-    "bisnis": "bisnes",
-    "coba": "cuba",
-    "desember": "Disember",
-    "dokter": "doktor",
-    "hewan": "haiwan",
-    "istri": "isteri",
-    "jembatan": "jambatan",
-    "kabar": "khabar",
-    "kawin": "kahwin",
-    "lonceng": "loceng",
-    "mencoba": "mencuba",
-    "menit": "minit",
-    "musik": "muzik",
-    "rusak": "rosak",
-    "sehat": "sihat",
-    "yaitu": "iaitu"
+  "suggestions_note": "Candidates from the original research word-pair tables. Suggestions are validated against local DBP attestation at runtime and are never applied automatically.",
+  "note": "Three lists: indo_only = Indonesian-only words; casual = informal Malay needing the standard form in formal writing. ms = DBP-standard equivalent, empty = no single equivalent. ms mappings are maintained in the repo file (research 2026-10-08); puzzle source remains the word-set truth.",
+  "generated_source_sha256": {
+   "indo_blacklist.md": "f3d6c973051b5f6af66acb9ff53a641f0c93586c601be6b0b42efa8a5550e99b",
+   "indo_blacklist.json": "ba0853e966308c14c88ca094346df180e67e8efa1e88dbddd0a850f78cd56ec0"
   }
+ },
+ "indo_only": {
+  "abis": {
+   "ms": ""
+  },
+  "agustus": {
+   "ms": "Ogos"
+  },
+  "aing": {
+   "ms": ""
+  },
+  "aj": {
+   "ms": ""
+  },
+  "aja": {
+   "ms": ""
+  },
+  "ajah": {
+   "ms": ""
+  },
+  "aktualisasi": {
+   "ms": ""
+  },
+  "ama": {
+   "ms": ""
+  },
+  "ambilin": {
+   "ms": ""
+  },
+  "anget": {
+   "ms": ""
+  },
+  "anjay": {
+   "ms": ""
+  },
+  "anjg": {
+   "ms": ""
+  },
+  "anuan": {
+   "ms": ""
+  },
+  "apain": {
+   "ms": ""
+  },
+  "apaname": {
+   "ms": ""
+  },
+  "aq": {
+   "ms": ""
+  },
+  "argumentasi": {
+   "ms": ""
+  },
+  "arti": {
+   "ms": "erti"
+  },
+  "ato": {
+   "ms": ""
+  },
+  "atuh": {
+   "ms": ""
+  },
+  "atw": {
+   "ms": ""
+  },
+  "autentisitas": {
+   "ms": ""
+  },
+  "baek": {
+   "ms": ""
+  },
+  "bahenol": {
+   "ms": ""
+  },
+  "bakil": {
+   "ms": ""
+  },
+  "bakso": {
+   "ms": ""
+  },
+  "bandara": {
+   "ms": ""
+  },
+  "bangke": {
+   "ms": ""
+  },
+  "bantuin": {
+   "ms": ""
+  },
+  "banyakin": {
+   "ms": ""
+  },
+  "baper": {
+   "ms": ""
+  },
+  "baterai": {
+   "ms": ""
+  },
+  "bawain": {
+   "ms": ""
+  },
+  "beb": {
+   "ms": ""
+  },
+  "becanda": {
+   "ms": ""
+  },
+  "begituan": {
+   "ms": ""
+  },
+  "bego": {
+   "ms": ""
+  },
+  "bemo": {
+   "ms": ""
+  },
+  "bener": {
+   "ms": ""
+  },
+  "bener2": {
+   "ms": ""
+  },
+  "beneran": {
+   "ms": ""
+  },
+  "bensin": {
+   "ms": ""
+  },
+  "bgmn": {
+   "ms": ""
+  },
+  "bgst": {
+   "ms": ""
+  },
+  "bilangin": {
+   "ms": ""
+  },
+  "bisnis": {
+   "ms": "bisnes"
+  },
+  "bngst": {
+   "ms": ""
+  },
+  "bodo": {
+   "ms": ""
+  },
+  "bokap": {
+   "ms": ""
+  },
+  "bokep": {
+   "ms": ""
+  },
+  "boker": {
+   "ms": ""
+  },
+  "boong": {
+   "ms": ""
+  },
+  "brengsek": {
+   "ms": ""
+  },
+  "bruer": {
+   "ms": ""
+  },
+  "bsa": {
+   "ms": ""
+  },
+  "bsk": {
+   "ms": "esok"
+  },
+  "cabe": {
+   "ms": ""
+  },
+  "camilan": {
+   "ms": ""
+  },
+  "cans": {
+   "ms": ""
+  },
+  "caper": {
+   "ms": ""
+  },
+  "cariin": {
+   "ms": ""
+  },
+  "cekidot": {
+   "ms": ""
+  },
+  "cemilan": {
+   "ms": ""
+  },
+  "cenah": {
+   "ms": ""
+  },
+  "cepet": {
+   "ms": ""
+  },
+  "cih": {
+   "ms": ""
+  },
+  "cintrong": {
+   "ms": ""
+  },
+  "cmn": {
+   "ms": ""
+  },
+  "coba": {
+   "ms": "cuba"
+  },
+  "cok": {
+   "ms": ""
+  },
+  "colokan": {
+   "ms": ""
+  },
+  "cowo": {
+   "ms": ""
+  },
+  "cued": {
+   "ms": ""
+  },
+  "curhat": {
+   "ms": ""
+  },
+  "cuy": {
+   "ms": ""
+  },
+  "cuyy": {
+   "ms": ""
+  },
+  "dagadu": {
+   "ms": ""
+  },
+  "daster": {
+   "ms": ""
+  },
+  "dateng": {
+   "ms": ""
+  },
+  "deh": {
+   "ms": ""
+  },
+  "dengerin": {
+   "ms": ""
+  },
+  "desember": {
+   "ms": "Disember"
+  },
+  "dih": {
+   "ms": ""
+  },
+  "dipublikasikan": {
+   "ms": ""
+  },
+  "dokter": {
+   "ms": "doktor"
+  },
+  "dong": {
+   "ms": ""
+  },
+  "doski": {
+   "ms": ""
+  },
+  "duh": {
+   "ms": ""
+  },
+  "dulur": {
+   "ms": ""
+  },
+  "elo": {
+   "ms": ""
+  },
+  "elu": {
+   "ms": ""
+  },
+  "ember": {
+   "ms": ""
+  },
+  "euy": {
+   "ms": ""
+  },
+  "fleksibilitas": {
+   "ms": ""
+  },
+  "gabut": {
+   "ms": ""
+  },
+  "gaes": {
+   "ms": ""
+  },
+  "gais": {
+   "ms": ""
+  },
+  "gaje": {
+   "ms": ""
+  },
+  "gak": {
+   "ms": "juga"
+  },
+  "gakpapa": {
+   "ms": ""
+  },
+  "galo": {
+   "ms": ""
+  },
+  "gans": {
+   "ms": ""
+  },
+  "gapapa": {
+   "ms": ""
+  },
+  "gblk": {
+   "ms": ""
+  },
+  "gebetan": {
+   "ms": ""
+  },
+  "gegara": {
+   "ms": ""
+  },
+  "gercep": {
+   "ms": ""
+  },
+  "gile": {
+   "ms": ""
+  },
+  "gimans": {
+   "ms": ""
+  },
+  "girboks": {
+   "ms": ""
+  },
+  "gitu-gitu": {
+   "ms": ""
+  },
+  "gituan": {
+   "ms": ""
+  },
+  "gk": {
+   "ms": ""
+  },
+  "gmn": {
+   "ms": ""
+  },
+  "goblog": {
+   "ms": ""
+  },
+  "gokil": {
+   "ms": ""
+  },
+  "gratisan": {
+   "ms": ""
+  },
+  "gt": {
+   "ms": ""
+  },
+  "gth": {
+   "ms": ""
+  },
+  "gue": {
+   "ms": ""
+  },
+  "gule": {
+   "ms": ""
+  },
+  "gw": {
+   "ms": ""
+  },
+  "gwa": {
+   "ms": ""
+  },
+  "hadeh": {
+   "ms": ""
+  },
+  "haduh": {
+   "ms": ""
+  },
+  "halu": {
+   "ms": ""
+  },
+  "heeh": {
+   "ms": ""
+  },
+  "heueuh": {
+   "ms": ""
+  },
+  "hewan": {
+   "ms": "haiwan"
+  },
+  "hrs": {
+   "ms": ""
+  },
+  "identitas": {
+   "ms": ""
+  },
+  "ilang": {
+   "ms": ""
+  },
+  "intensitas": {
+   "ms": ""
+  },
+  "istri": {
+   "ms": "isteri"
+  },
+  "itung": {
+   "ms": ""
+  },
+  "jajanan": {
+   "ms": ""
+  },
+  "jan": {
+   "ms": ""
+  },
+  "jancuk": {
+   "ms": ""
+  },
+  "jayus": {
+   "ms": ""
+  },
+  "jembatan": {
+   "ms": "jambatan"
+  },
+  "jijay": {
+   "ms": ""
+  },
+  "jokul": {
+   "ms": ""
+  },
+  "jomblo": {
+   "ms": ""
+  },
+  "jomlo": {
+   "ms": ""
+  },
+  "jualin": {
+   "ms": ""
+  },
+  "kabar": {
+   "ms": "khabar"
+  },
+  "kaco": {
+   "ms": ""
+  },
+  "kaga": {
+   "ms": ""
+  },
+  "kasian": {
+   "ms": ""
+  },
+  "kawin": {
+   "ms": "kahwin"
+  },
+  "kayak-kayak": {
+   "ms": ""
+  },
+  "kayaknya": {
+   "ms": ""
+  },
+  "kebangun": {
+   "ms": ""
+  },
+  "kebo": {
+   "ms": ""
+  },
+  "kece": {
+   "ms": ""
+  },
+  "kemaren": {
+   "ms": ""
+  },
+  "kemarin": {
+   "ms": ""
+  },
+  "kepo": {
+   "ms": ""
+  },
+  "klo": {
+   "ms": ""
+  },
+  "klu": {
+   "ms": ""
+  },
+  "klw": {
+   "ms": ""
+  },
+  "knalpot": {
+   "ms": ""
+  },
+  "kompleksitas": {
+   "ms": ""
+  },
+  "komunitas": {
+   "ms": ""
+  },
+  "kreativitas": {
+   "ms": ""
+  },
+  "kredibilitas": {
+   "ms": ""
+  },
+  "kuantitas": {
+   "ms": ""
+  },
+  "kuwi": {
+   "ms": ""
+  },
+  "kuy": {
+   "ms": ""
+  },
+  "ky": {
+   "ms": ""
+  },
+  "kyk": {
+   "ms": ""
+  },
+  "liatin": {
+   "ms": ""
+  },
+  "loe": {
+   "ms": ""
+  },
+  "lonceng": {
+   "ms": "loceng"
+  },
+  "lu": {
+   "ms": ""
+  },
+  "maap": {
+   "ms": ""
+  },
+  "macem": {
+   "ms": ""
+  },
+  "macem-macem": {
+   "ms": ""
+  },
+  "mager": {
+   "ms": ""
+  },
+  "mah": {
+   "ms": ""
+  },
+  "makasi": {
+   "ms": ""
+  },
+  "makasih": {
+   "ms": ""
+  },
+  "mantul": {
+   "ms": ""
+  },
+  "maturitas": {
+   "ms": ""
+  },
+  "mayoritas": {
+   "ms": ""
+  },
+  "mempublikasikan": {
+   "ms": ""
+  },
+  "mencoba": {
+   "ms": "mencuba"
+  },
+  "mengabari": {
+   "ms": ""
+  },
+  "mengabarkan": {
+   "ms": ""
+  },
+  "menginfokan": {
+   "ms": ""
+  },
+  "menit": {
+   "ms": "minit"
+  },
+  "menyimak": {
+   "ms": ""
+  },
+  "mie": {
+   "ms": ""
+  },
+  "mikir": {
+   "ms": ""
+  },
+  "mikirin": {
+   "ms": ""
+  },
+  "minoritas": {
+   "ms": ""
+  },
+  "mksh": {
+   "ms": ""
+  },
+  "modernisasi": {
+   "ms": ""
+  },
+  "msti": {
+   "ms": ""
+  },
+  "mukena": {
+   "ms": ""
+  },
+  "musik": {
+   "ms": "muzik"
+  },
+  "naek": {
+   "ms": ""
+  },
+  "nanyain": {
+   "ms": ""
+  },
+  "nasionalitas": {
+   "ms": ""
+  },
+  "ndan": {
+   "ms": ""
+  },
+  "ngab": {
+   "ms": ""
+  },
+  "ngabuburit": {
+   "ms": ""
+  },
+  "ngakak": {
+   "ms": ""
+  },
+  "ngambilin": {
+   "ms": ""
+  },
+  "ngapain": {
+   "ms": ""
+  },
+  "ngasih": {
+   "ms": ""
+  },
+  "ngebut": {
+   "ms": ""
+  },
+  "ngeliat": {
+   "ms": ""
+  },
+  "ngeluh": {
+   "ms": ""
+  },
+  "ngerepotin": {
+   "ms": ""
+  },
+  "ngerti": {
+   "ms": ""
+  },
+  "ngeteh": {
+   "ms": ""
+  },
+  "nggak": {
+   "ms": ""
+  },
+  "nggaknya": {
+   "ms": ""
+  },
+  "nggerti": {
+   "ms": ""
+  },
+  "ngobrolin": {
+   "ms": ""
+  },
+  "nih": {
+   "ms": ""
+  },
+  "ntar": {
+   "ms": ""
+  },
+  "nulis": {
+   "ms": ""
+  },
+  "nyampah": {
+   "ms": ""
+  },
+  "nyampe": {
+   "ms": ""
+  },
+  "nyari": {
+   "ms": ""
+  },
+  "nye": {
+   "ms": ""
+  },
+  "nyeletuk": {
+   "ms": ""
+  },
+  "nyeritain": {
+   "ms": ""
+  },
+  "nyium": {
+   "ms": ""
+  },
+  "nyokap": {
+   "ms": ""
+  },
+  "nyolok": {
+   "ms": ""
+  },
+  "nyuci": {
+   "ms": ""
+  },
+  "ojek": {
+   "ms": ""
+  },
+  "optimasi": {
+   "ms": ""
+  },
+  "orangtua": {
+   "ms": ""
+  },
+  "otentisitas": {
+   "ms": ""
+  },
+  "pake": {
+   "ms": ""
+  },
+  "persneling": {
+   "ms": ""
+  },
+  "personalitas": {
+   "ms": ""
+  },
+  "plafon": {
+   "ms": ""
+  },
+  "plis": {
+   "ms": ""
+  },
+  "pluralitas": {
+   "ms": ""
+  },
+  "popularitas": {
+   "ms": ""
+  },
+  "produktivitas": {
+   "ms": ""
+  },
+  "publisitas": {
+   "ms": ""
+  },
+  "pukis": {
+   "ms": ""
+  },
+  "puter": {
+   "ms": ""
+  },
+  "qw": {
+   "ms": ""
+  },
+  "realistis": {
+   "ms": ""
+  },
+  "rusak": {
+   "ms": "rosak"
+  },
+  "sabaran": {
+   "ms": ""
+  },
+  "saklar": {
+   "ms": ""
+  },
+  "sampe": {
+   "ms": ""
+  },
+  "sampeyan": {
+   "ms": ""
+  },
+  "sans": {
+   "ms": ""
+  },
+  "santuy": {
+   "ms": ""
+  },
+  "sebel": {
+   "ms": ""
+  },
+  "segituan": {
+   "ms": ""
+  },
+  "sehat": {
+   "ms": "sihat"
+  },
+  "seksualitas": {
+   "ms": ""
+  },
+  "semacem": {
+   "ms": ""
+  },
+  "sereh": {
+   "ms": ""
+  },
+  "sih": {
+   "ms": ""
+  },
+  "skul": {
+   "ms": ""
+  },
+  "slebor": {
+   "ms": ""
+  },
+  "sokin": {
+   "ms": ""
+  },
+  "solidaritas": {
+   "ms": ""
+  },
+  "sopir": {
+   "ms": ""
+  },
+  "stabilitas": {
+   "ms": ""
+  },
+  "struk": {
+   "ms": ""
+  },
+  "suer": {
+   "ms": ""
+  },
+  "surabi": {
+   "ms": ""
+  },
+  "sya": {
+   "ms": ""
+  },
+  "tajir": {
+   "ms": ""
+  },
+  "taon": {
+   "ms": ""
+  },
+  "teknis": {
+   "ms": ""
+  },
+  "tlpn": {
+   "ms": ""
+  },
+  "tokai": {
+   "ms": ""
+  },
+  "totalitas": {
+   "ms": ""
+  },
+  "trims": {
+   "ms": ""
+  },
+  "tuh": {
+   "ms": ""
+  },
+  "visibilitas": {
+   "ms": ""
+  },
+  "wastafel": {
+   "ms": ""
+  },
+  "wisuda": {
+   "ms": ""
+  },
+  "wkwk": {
+   "ms": ""
+  },
+  "wkwkwk": {
+   "ms": ""
+  },
+  "yaampun": {
+   "ms": ""
+  },
+  "yaelah": {
+   "ms": ""
+  },
+  "yah": {
+   "ms": ""
+  },
+  "yaitu": {
+   "ms": "iaitu"
+  },
+  "yaudah": {
+   "ms": ""
+  }
+ },
+ "casual": {
+  "adaptif": {
+   "ms": ""
+  },
+  "ak": {
+   "ms": "saya"
+  },
+  "aktivitas": {
+   "ms": "aktiviti"
+  },
+  "aku": {
+   "ms": "saya"
+  },
+  "akun": {
+   "ms": "akaun"
+  },
+  "ambik": {
+   "ms": "ambil"
+  },
+  "apapun": {
+   "ms": "apa sahaja"
+  },
+  "ape": {
+   "ms": "apa"
+  },
+  "ape2": {
+   "ms": "apa-apa"
+  },
+  "awk": {
+   "ms": "awak"
+  },
+  "biase": {
+   "ms": "biasa"
+  },
+  "blh": {
+   "ms": "boleh"
+  },
+  "blk": {
+   "ms": "balik"
+  },
+  "blm": {
+   "ms": "belum"
+  },
+  "bolu": {
+   "ms": "kek"
+  },
+  "byk": {
+   "ms": "banyak"
+  },
+  "cam": {
+   "ms": "macam"
+  },
+  "camne": {
+   "ms": "bagaimana"
+  },
+  "ckp": {
+   "ms": "cakap"
+  },
+  "cm": {
+   "ms": ""
+  },
+  "cuan": {
+   "ms": "keuntungan"
+  },
+  "dah": {
+   "ms": "sudah"
+  },
+  "den": {
+   "ms": "saya"
+  },
+  "dgn": {
+   "ms": "dengan"
+  },
+  "die": {
+   "ms": "dia"
+  },
+  "dimana": {
+   "ms": "di mana"
+  },
+  "dimanapun": {
+   "ms": "di mana sahaja"
+  },
+  "disamping": {
+   "ms": "di samping"
+  },
+  "dkt": {
+   "ms": "dekat"
+  },
+  "dr": {
+   "ms": "dari"
+  },
+  "drpd": {
+   "ms": "daripada"
+  },
+  "dtg": {
+   "ms": "datang"
+  },
+  "elaborasi": {
+   "ms": "huraian"
+  },
+  "es": {
+   "ms": "ais"
+  },
+  "eskrim": {
+   "ms": "aiskrim"
+  },
+  "eskrin": {
+   "ms": "aiskrim"
+  },
+  "evaluasi": {
+   "ms": "penilaian"
+  },
+  "ga": {
+   "ms": "tidak"
+  },
+  "gi": {
+   "ms": "pergi"
+  },
+  "gimanapun": {
+   "ms": "bagaimanapun"
+  },
+  "gratis": {
+   "ms": "percuma"
+  },
+  "hehe": {
+   "ms": ""
+  },
+  "hihi": {
+   "ms": ""
+  },
+  "hoaks": {
+   "ms": "berita palsu"
+  },
+  "horas": {
+   "ms": ""
+  },
+  "huhu": {
+   "ms": ""
+  },
+  "ibukota": {
+   "ms": "ibu kota"
+  },
+  "ijin": {
+   "ms": "izin"
+  },
+  "jaman": {
+   "ms": "zaman"
+  },
+  "jd": {
+   "ms": "jadi"
+  },
+  "je": {
+   "ms": "sahaja"
+  },
+  "jgn": {
+   "ms": "jangan"
+  },
+  "juli": {
+   "ms": "Julai"
+  },
+  "juni": {
+   "ms": "Jun"
+  },
+  "kapanpun": {
+   "ms": "bila-bila"
+  },
+  "kapasitas": {
+   "ms": "kapasiti"
+  },
+  "kat": {
+   "ms": "di"
+  },
+  "kau": {
+   "ms": "awak"
+  },
+  "kemana": {
+   "ms": "ke mana"
+  },
+  "kene": {
+   "ms": "kena"
+  },
+  "klarifikasi": {
+   "ms": "penjelasan"
+  },
+  "knp": {
+   "ms": "kenapa"
+  },
+  "ko": {
+   "ms": "awak"
+  },
+  "konfirmasi": {
+   "ms": "pengesahan"
+  },
+  "konten": {
+   "ms": "kandungan"
+  },
+  "korang": {
+   "ms": "kamu semua"
+  },
+  "kot": {
+   "ms": "mungkin"
+  },
+  "kpd": {
+   "ms": "kepada"
+  },
+  "krn": {
+   "ms": "kerana"
+  },
+  "kualitas": {
+   "ms": "kualiti"
+  },
+  "kue": {
+   "ms": "kuih"
+  },
+  "kwetiau": {
+   "ms": "kuetiau"
+  },
+  "lg": {
+   "ms": "lagi"
+  },
+  "lom": {
+   "ms": "belum"
+  },
+  "macam2": {
+   "ms": "macam-macam"
+  },
+  "masehi": {
+   "ms": "Masihi"
+  },
+  "mau": {
+   "ms": "mahu"
+  },
+  "mcm": {
+   "ms": "macam"
+  },
+  "mlm": {
+   "ms": "malam"
+  },
+  "mmg": {
+   "ms": "memang"
+  },
+  "nak": {
+   "ms": "hendak"
+  },
+  "napas": {
+   "ms": "nafas"
+  },
+  "ngan": {
+   "ms": "dengan"
+  },
+  "ngangkat": {
+   "ms": "mengangkat"
+  },
+  "ngga": {
+   "ms": "tidak"
+  },
+  "ni": {
+   "ms": "ini"
+  },
+  "nk": {
+   "ms": "hendak"
+  },
+  "nnt": {
+   "ms": "nanti"
+  },
+  "obat": {
+   "ms": "ubat"
+  },
+  "oke": {
+   "ms": "okey"
+  },
+  "om": {
+   "ms": "pakcik"
+  },
+  "org": {
+   "ms": "orang"
+  },
+  "pastu": {
+   "ms": "selepas itu"
+  },
+  "pd": {
+   "ms": "pada"
+  },
+  "pikir": {
+   "ms": "fikir"
+  },
+  "pikiran": {
+   "ms": "fikiran"
+  },
+  "pria": {
+   "ms": "lelaki"
+  },
+  "prioritas": {
+   "ms": "keutamaan"
+  },
+  "rujak": {
+   "ms": "rojak"
+  },
+  "sama2": {
+   "ms": "sama-sama"
+  },
+  "sampo": {
+   "ms": "syampu"
+  },
+  "sape": {
+   "ms": "siapa"
+  },
+  "sbb": {
+   "ms": "sebab"
+  },
+  "sdh": {
+   "ms": "sudah"
+  },
+  "sgt": {
+   "ms": "sangat"
+  },
+  "siapapun": {
+   "ms": "sesiapa"
+  },
+  "sikit": {
+   "ms": "sedikit"
+  },
+  "skrg": {
+   "ms": "sekarang"
+  },
+  "sob": {
+   "ms": "kawan"
+  },
+  "sume": {
+   "ms": "semua"
+  },
+  "sy": {
+   "ms": "saya"
+  },
+  "syg": {
+   "ms": "sayang"
+  },
+  "tak": {
+   "ms": "tidak"
+  },
+  "takde": {
+   "ms": "tidak ada"
+  },
+  "takpe": {
+   "ms": "tidak apa"
+  },
+  "tau": {
+   "ms": "tahu"
+  },
+  "td": {
+   "ms": "tadi"
+  },
+  "tdk": {
+   "ms": "tidak"
+  },
+  "telepon": {
+   "ms": "telefon"
+  },
+  "terimakasih": {
+   "ms": "terima kasih"
+  },
+  "tgk": {
+   "ms": "tengok"
+  },
+  "thn": {
+   "ms": "tahun"
+  },
+  "thx": {
+   "ms": "terima kasih"
+  },
+  "tlg": {
+   "ms": "tolong"
+  },
+  "tp": {
+   "ms": "tapi"
+  },
+  "tq": {
+   "ms": "terima kasih"
+  },
+  "ttg": {
+   "ms": "tentang"
+  },
+  "tu": {
+   "ms": "itu"
+  },
+  "uang": {
+   "ms": "wang"
+  },
+  "utk": {
+   "ms": "untuk"
+  },
+  "x": {
+   "ms": "tidak"
+  },
+  "xde": {
+   "ms": "tidak ada"
+  },
+  "xnak": {
+   "ms": "tidak mahu"
+  },
+  "xpe": {
+   "ms": "tidak apa"
+  },
+  "xtau": {
+   "ms": "tidak tahu"
+  },
+  "yg": {
+   "ms": "yang"
+  }
+ }
 }

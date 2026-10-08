@@ -42,7 +42,8 @@ class CheckerTests(unittest.TestCase):
 
     def test_shared_abbreviations_formal_only_and_titles(self):
         r=self.checker.scan('Dr. Ali datang dgn buku yg bagus.')
-        self.assertEqual({h['word'] for h in r['indo_hits'] if h['kind']=='sms_abbreviation'},{'dgn','yg'})
+        self.assertEqual({h['word'] for h in r['indo_hits'] if h['kind']=='casual'},{'dgn','yg'})
+        self.assertEqual({h['word'] for h in r['indo_hits'] if h['category']=='register'},{'dgn','yg'})
         self.assertFalse(any(h['word']=='dr' for h in r['indo_hits']))
         r=self.checker.scan('dgn buku yg bagus.',register='informal')
         self.assertFalse(r['indo_hits'])
@@ -50,7 +51,10 @@ class CheckerTests(unittest.TestCase):
     def test_digit_slang_and_uncertain_is_not_an_error(self):
         r=self.checker.scan('bener2 bagus. kualitas baik.')
         self.assertTrue(any(h['word']=='bener2' for h in r['indo_hits']))
-        self.assertTrue(any(h['word']=='kualitas' and h['level']=='info' for h in r['indo_hits']))
+        # kualitas 是 casual 且有 mapping（kualiti）→ formal 下 warning + 建议换写
+        hit=next(h for h in r['indo_hits'] if h['word']=='kualitas')
+        self.assertEqual(hit['kind'],'casual')
+        self.assertEqual(hit['suggestion'],'kualiti')
 
     def test_rule_runs_on_attested_words_and_separate_clauses(self):
         r=self.checker.scan('Ali ialah adalah doktor.')

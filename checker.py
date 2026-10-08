@@ -51,11 +51,29 @@ class Checker:
         self.infix_words = data.get('infix_words',{})
         self.suffix_map = data.get('ms_id_suffix_map',[])
         self.indo = json.loads(self.indo_path.read_text(encoding='utf-8'))
-        self.indo_words = set(self.indo['indo_only_words'])
-        self.uncertain = set(self.indo['uncertain_words'])
-        self.register = self.indo.get('register_words',{})
-        self.context_words = self.indo.get('context_words',{})
-        self.pairs = self.indo.get('suggestions',{})
+        # 词表三分类（用户裁决 2026-10-08）：indo_only / casual，各为
+        # {词: {"ms": 标准马来文}}。旧结构（五 key 平铺）向后兼容读取——
+        # 老 exe 会从 GitHub 拉到新文件，不能让它们崩。
+        if 'indo_only' in self.indo and 'casual' in self.indo:
+            self.indo_map = {w: v.get('ms', '') if isinstance(v, dict) else str(v)
+                             for w, v in self.indo['indo_only'].items()}
+            self.casual_map = {w: v.get('ms', '') if isinstance(v, dict) else str(v)
+                               for w, v in self.indo['casual'].items()}
+        else:
+            legacy_sug = self.indo.get('suggestions', {})
+            self.indo_map = {w: legacy_sug.get(w, '')
+                             for w in self.indo.get('indo_only_words', [])}
+            self.casual_map = {}
+            for w in self.indo.get('uncertain_words', []):
+                self.casual_map[w] = ''
+            for w, v in self.indo.get('register_words', {}).items():
+                self.casual_map[w] = v.get('expansion', '') if isinstance(v, dict) else ''
+            for w in self.indo.get('context_words', {}):
+                self.casual_map.setdefault(w, '')
+        # 兼容别名：scan 旧分支用这些名字
+        self.indo_words = set(self.indo_map)
+        self.register = {w: {'expansion': ms} for w, ms in self.casual_map.items()}
+        self.pairs = self.indo_map
 
     # TD 词素音位还原表（研究验证 2026-10-07）：(表面前缀, rest 首字母) → 词根还原段。
     # 规则属于具体前缀：men+t→tulis（还原 t）、meng+V→ambil/karang（k 可选还原）、
@@ -286,19 +304,46 @@ class Checker:
             issues.append(item)
             return item
         # Rules always run, regardless of corpus/dictionary membership.
+        # noflag（Rule Book 语义，用户裁决 2026-10-08）：noflag:true 的条目是
+        # 例外区间——与它重叠的"其他条目"的 finding 被抑制（按 entry 区分，
+        # 不是按规则 ID；同一粗规则与其精化例外天然同 ID）。
+        noflag_spans=[]
         for rule,rx,exceptions in self.rules:
             if rule.get('register','any') not in {'any',register}:
+                continue
+            for start,end,sentence in sentences(text):
+                if rule.get('noflag'):
+                    for m in rx.finditer(sentence):
+                        noflag_spans.append((id(rule),start+m.start(),start+m.end()))
+        for rule,rx,exceptions in self.rules:
+            if rule.get('register','any') not in {'any',register} or rule.get('noflag'):
                 continue
             for start,end,sentence in sentences(text):
                 exclusions=[m.span() for ex in exceptions for m in ex.finditer(sentence)]
                 for m in rx.finditer(sentence):
                     if any(a<=m.start() and m.end()<=b for a,b in exclusions):
                         continue
+                    s,e=start+m.start(),start+m.end()
+                    if any(rid is not id(rule) and s<x_e and x_s<e
+                           for rid,x_s,x_e in noflag_spans):
+                        continue
                     conf=rule.get('conf','medium')
                     item=add(rule.get('category','grammar'),{'high':'error','medium':'warning','low':'info'}[conf],
-                             start+m.start(),start+m.end(),rule['note'],rule.get('entry_id',rule['id']),
+                             s,e,rule['note'],rule.get('entry_id',rule['id']),
                              evidence=[{'source':'manual_rule','rule':rule['id'],'basis':rule.get('source','Existing manually maintained rule')}],confidence=conf,highlight=conf!='low')
                     rule_hits.append({**item,'rule':rule['id'],'conf':conf})
+        # 同 ID 去重（Rule Book 并入后）：粗规则（origin 形如 KS-01-02）与精化版
+        # （origin 就是规则 ID）命中重叠区间时，只留精化版。add() 已把粗规则条目
+        # 塞进 issues——这里同步从 issues 里摘掉被精化版覆盖的粗条目。
+        coarse_pat=re.compile(r'^[A-Z]{2}-\d+-\d+$')
+        refined=[h for h in rule_hits if not coarse_pat.match(str(h.get('origin','')))]
+        dropped=[c for c in rule_hits if coarse_pat.match(str(c.get('origin','')))
+                 and any(r['rule']==c['rule'] and r['start']<c['end'] and c['start']<r['end']
+                         for r in refined)]
+        rule_hits=[h for h in rule_hits if h not in dropped]
+        dropped_keys={(d['origin'],d['start'],d['end']) for d in dropped}
+        issues[:]=[i for i in issues
+                   if (i['origin'],i['start'],i['end']) not in dropped_keys]
         all_sentences=list(sentences(text))
         for si,(start,end,sentence) in enumerate(all_sentences):
             stokens=tokens(sentence,start)
@@ -310,28 +355,29 @@ class Checker:
                 title=t.raw=='Dr' and text[t.end:t.end+1]=='.'
                 acronym=t.raw.isupper() and len(t.raw)>1
                 named=t.raw[:1].isupper() and t.start!=start
-                suggestion=self.pairs.get(t.word,'')
-                if suggestion and normalize(suggestion) not in self.store.lexicon:
-                    suggestion=''
-                if t.word in self.register and not title and not acronym and not named:
-                    if register=='formal':
-                        entry=self.register[t.word]
-                        item=add('register','warning',t.start,t.end,'Singkatan SMS: pertimbangkan bentuk penuh dalam penulisan formal.',
-                                 'sms:'+t.word,suggestion=entry['expansion'],evidence=[entry])
-                        indo_hits.append({**item,'word':t.word,'kind':'sms_abbreviation'})
-                    continue
-                if not title and not acronym and t.word in self.indo_words:
+                if not title and not acronym and t.word in self.indo_map:
+                    # 印尼语独有词：terminology 通道报（mapping 有则作为建议）
+                    suggestion=self.indo_map.get(t.word,'')
+                    if suggestion and normalize(suggestion) not in self.store.lexicon:
+                        suggestion=''
                     item=add('terminology','info' if named else 'warning',t.start,t.end,
                              'Bentuk calon bahasa Indonesia; semak makna, petikan dan laras sebelum menggantikannya.',
                              'indo:'+t.word,suggestion=suggestion,
                              evidence=[{'source':'indo_word_candidates','verification':'original_research_candidate','lexical':ev}],confidence='low' if named else 'medium')
                     indo_hits.append({**item,'word':t.word,'kind':'indonesian_candidate'})
                     continue
-                if not title and not acronym and t.word in self.uncertain | self.context_words.keys():
-                    if register=='formal' and not named:
-                        item=add('terminology','info',t.start,t.end,'Penggunaan ini memerlukan konteks; asal bahasa atau kesesuaiannya belum dipastikan.',
-                                 'context:'+t.word,evidence=[{'source':'indo_word_candidates','verification':'uncertain'}],confidence='low')
-                        indo_hits.append({**item,'word':t.word,'kind':'context_required'})
+                if not title and not acronym and not named and t.word in self.casual_map:
+                    # casual（用户裁决 2026-10-08：register/uncertain/context 三分支
+                    # 合一）：口语/非正式词，formal 体裁下提醒换成标准形（ms mapping）。
+                    if register=='formal':
+                        ms=self.casual_map.get(t.word,'')
+                        note=('Bentuk tidak formal; pertimbangkan bentuk standard dalam penulisan formal.'
+                              if ms else
+                              'Penggunaan ini memerlukan konteks; asal bahasa atau kesesuaiannya belum dipastikan.')
+                        item=add('register','warning' if ms else 'info',t.start,t.end,note,
+                                 'casual:'+t.word,suggestion=ms,
+                                 evidence=[{'source':'casual_words','ms':ms}],confidence='low')
+                        indo_hits.append({**item,'word':t.word,'kind':'casual'})
                     continue
                 if ev['state']!='unknown' or t.word in FUNCTION_WORDS or len(t.word)<3 or title or acronym:
                     continue

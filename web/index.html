@@ -4,9 +4,12 @@
 *{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:#263243;font:15px/1.6 system-ui,sans-serif;display:flex;min-height:100vh}
 aside{width:210px;background:#1f2d3a;color:#c8d3dd;padding:18px 0;flex-shrink:0}
 aside h1{font-size:19px;margin:0 18px 14px;color:white}
-aside button{display:block;width:100%;text-align:left;background:none;border:none;color:#c8d3dd;padding:10px 18px;font:inherit;cursor:pointer;border-left:3px solid transparent}
+aside button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:#c8d3dd;padding:10px 18px;font:inherit;cursor:pointer;border-left:3px solid transparent}
+aside button::before{content:'';width:8px;height:8px;border-radius:50%;background:#5b7288;flex-shrink:0;transition:background .18s}
 aside button:hover{background:#2b3d4d}
+aside button:hover::before{background:#8fb3a5}
 aside button.active{background:#2b3d4d;color:white;border-left-color:#4fa08a}
+aside button.active::before{background:#4fa08a}
 aside .side-status{margin:14px 18px 0;font-size:11px;color:#8fa0af;line-height:1.5}
 main{flex:1;max-width:980px;margin:0 auto;padding:28px 26px;width:100%}
 h2{font-size:21px;margin:0 0 6px}.sub{color:#5d6977;font-size:13px;margin:0 0 14px}
@@ -38,6 +41,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 }
 .wf-pill:hover{border-color:#256b58;color:#256b58;transform:translateY(-1px)}
 .wf-pill-active{background:#256b58;color:#fff;border-color:#256b58;transform:none}
+.wf-pill-active:hover{color:#fff}
 .wf-closed-toggle{
   font:600 12px system-ui;padding:5px 13px;border-radius:14px;cursor:pointer;
   border:1px solid #d7dee6;background:#fff;color:#526273;user-select:none;
@@ -50,16 +54,30 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
   transition:transform .35s ease;
 }
 .wf-reload:hover{transform:rotate(180deg);color:#256b58}
+aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#67788a;margin:16px 18px 4px}
+.wl-pills{display:flex;gap:6px;flex-wrap:wrap}
+.wl-chips{display:flex;flex-wrap:wrap;gap:5px;max-height:340px;overflow:auto;padding:4px 0}
+.wl-chip{font:12.5px system-ui;padding:3px 10px;border-radius:12px;background:#f0f3f6;border:1px solid #dde4ea;color:#3c4a58}
+.wl-chip b{color:#256b58}
+.wl-chip .wl-arrow{color:#8a94a0;margin:0 2px}
+.wl-chip-nomap{opacity:.55}
+.wl-kv{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #eef2f5;font-size:13px}
+.wl-kv b{min-width:110px}
+.wl-kv span{color:#5d6977}
 </style></head><body>
 <aside>
  <h1>Tepat</h1>
- <button class="nav active" data-tab="check">🔍 Check</button>
- <button class="nav" data-tab="rulebook">📘 Rule Book</button>
- <button class="nav" data-tab="serverrules">⚙️ Server Rules</button>
- <button class="nav" id="nav-proposals" data-tab="proposals" style="display:none">📥 Proposals</button>
- <button class="nav" id="nav-wordflags" data-tab="wordflags" style="display:none">⚑ Word flags</button>
- <button class="nav" id="nav-grammarflags" data-tab="grammarflags" style="display:none">⚑ Grammar flags</button>
- <button class="nav" data-tab="about">ℹ️ About</button>
+ <button class="nav active" data-tab="check">Check</button>
+ <div class="side-sec">Rules</div>
+ <button class="nav" data-tab="rulebook">Rule Book</button>
+ <button class="nav" data-tab="serverrules">Server Rules</button>
+ <button class="nav" data-tab="wordlists">Word Lists</button>
+ <div class="side-sec" id="sec-flags" style="display:none">Flags</div>
+ <button class="nav" id="nav-wordflags" data-tab="wordflags" style="display:none">Word flags</button>
+ <button class="nav" id="nav-grammarflags" data-tab="grammarflags" style="display:none">Grammar flags</button>
+ <div class="side-sec" id="sec-admin" style="display:none">Admin</div>
+ <button class="nav" id="nav-env" data-tab="env" style="display:none">Env</button>
+ <button class="nav" data-tab="about">About</button>
  <div class="side-status" id="status">Connecting…</div>
 </aside>
 <main>
@@ -75,8 +93,8 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 </section>
 
 <section class="tab" id="tab-rulebook">
- <h2>Rule Book pack</h2>
- <p class="sub">Runs inside the Chrome extension, fetched live from this service. Anyone can submit a proposal for review; accepting proposals happens on the admin machine. Rule IDs are assigned automatically (RB-001, RB-002, …).</p>
+ <h2>Rule Book</h2>
+ <p class="sub">Community rules, checked by the server on every scan (single rule source together with Server Rules). Anyone can submit a proposal for review; accepting happens on the admin machine. Rule IDs are assigned automatically (RB-001, RB-002, …).</p>
  <div class="card">
   <h3 style="margin:0 0 4px;font-size:16px">Propose a new rule</h3>
   <p class="sub" style="margin:0 0 10px">Give examples, the way the Rule Book does: phrases that <b>should be flagged</b> (Salah) and phrases that <b>must not be flagged</b> (Betul). The pattern is derived from your examples — no regex knowledge needed. The rule number is assigned for you.</p>
@@ -89,13 +107,31 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
  </div>
 </section>
 
-<section class="tab" id="tab-proposals">
- <h2>Pending proposals</h2>
- <p class="sub">Admin machine only. Accepting appends the rule to the Rule Book pack (backup kept); rejected ones are simply left to close on GitHub.</p>
+<section class="tab" id="tab-wordlists">
+ <h2>Word lists</h2>
+ <p class="sub">Word lists the server applies on every scan, and the admin decisions that override PRPM lookups. Source of truth: the GitHub repo — <b>↻ Fetch from GitHub</b> (Server Rules tab) refreshes these too.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 8px">
-   <button class="act" id="btn-admin-load">Reload</button><span id="admin-msg" class="msg"></span></div>
-  <div id="admin-list"></div>
+  <div class="wl-pills" id="wl-pills">
+   <button class="wf-pill wf-pill-active" data-wl="indo_only">Indonesian-only</button>
+   <button class="wf-pill" data-wl="casual">Casual Malay</button>
+   <button class="wf-pill" data-wl="overrides">Overrides</button>
+  </div>
+  <p class="sub" id="wl-desc" style="margin:10px 0 6px"></p>
+  <div id="wl-body"></div>
+ </div>
+</section>
+
+<section class="tab" id="tab-env">
+ <h2>Env</h2>
+ <p class="sub">Admin machine only. Edit the <code>.env</code> next to the server executable — saved to disk verbatim (a <code>.env.bak</code> of the previous version is kept). Changes apply on the next restart; nothing is hot-applied.</p>
+ <div class="card">
+  <div class="controls" style="margin:0 0 10px">
+   <button class="act" id="btn-env-reload">Reload</button>
+   <button class="act primary" id="btn-env-save">Save</button>
+   <span id="env-msg" class="msg"></span>
+  </div>
+  <p class="sub" id="env-path" style="margin:0 0 6px"></p>
+  <textarea id="env-content" spellcheck="false" placeholder="TEPAT_ADMIN_TOKEN=…" style="min-height:220px;font:12.5px/1.6 ui-monospace,Consolas,monospace"></textarea>
  </div>
 </section>
 
@@ -122,7 +158,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-grammarflags">
  <h2>Grammar flags (Rule Book)</h2>
- <p class="sub">Flags on Rule Book rule hits — wrong regex, missing context, over-triggering. Open = awaiting review; closed = handled (rule fixed in pack or rejected).</p>
+ <p class="sub">Flags on Rule Book rule hits — wrong regex, missing context, over-triggering. Open = awaiting review; closed = handled (rule fixed or rejected).</p>
  <div class="card">
   <div class="controls" style="margin:0 0 8px">
    <button class="act" id="btn-gf-load">Reload</button>
@@ -134,7 +170,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">Rules the local scan service applies (source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code> — admin machine only). <b>Levels</b> follow the Rule Book: <span class="lvl lvl-error">error</span> structural, no legal context · <span class="lvl lvl-warn">warn</span> context needed, review before acting · <span class="lvl lvl-note">note</span> broad reminder. Toggle a rule off to silence it locally; a GitHub sync restores the repo state. Active in full mode only.</p>
+ <p class="sub">Rules the local scan service applies (source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code> — admin machine only). <b>Levels</b> follow the Rule Book: <span class="lvl lvl-error">error</span> structural, no legal context · <span class="lvl lvl-warn">warn</span> context needed, review before acting · <span class="lvl lvl-note">note</span> broad reminder. Toggle a rule off to silence it locally; a GitHub sync restores the repo state.</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act primary" id="btn-sync">↻ Fetch from GitHub</button><span id="cfg-msg" class="msg"></span></div>
   <table id="cfg-rules"><thead><tr><th>Rule</th><th>What it flags</th><th>Example — flags / doesn't</th><th>Level</th><th>On</th></tr></thead><tbody></tbody></table>
@@ -147,7 +183,6 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
   <p><b>Tepat</b> answers one question: <i>does this word exist?</i> It highlights suspicious words for human investigation — it never judges correctness automatically.</p>
   <p>Red marks: structural rule hits. Amber: needs context. Blue: uncertain forms. Hover a highlight for notes; use the buttons in each result for local evidence, PRPM lookup or a web search.</p>
   <p>Absence from a dictionary or corpus does not establish a spelling error. An attested word does not certify grammar, meaning or factuality.</p>
-  <p id="about-mode"></p>
   <table><thead><tr><th>Corpus source</th><th>Candidate records</th><th>Unique sentences</th></tr></thead><tbody id="sources"></tbody></table>
  </div>
 </section>
@@ -164,26 +199,25 @@ for(const b of document.querySelectorAll('aside .nav')) b.onclick=()=>{
 
 // ── health / status ──
 fetch(API+'/api/health').then(r=>r.json()).then(h=>{
- $('#status').innerHTML=h.mode==='core'
-  ? '<b>Core mode</b><br>PRPM lookup only.<br>Add data/evidence.sqlite beside the exe for full checking.'
-  : `<b>Full mode</b><br>${h.words.toLocaleString()} DBP forms<br>${esc(h.review_run||'')}`;
- $('#about-mode').innerHTML=h.mode==='core'
-  ?'<div class="bmc-clean-box"><b>Core mode.</b> Only PRPM dictionary lookups are available. Corpus evidence (dictionary forms, usage examples, n-gram support), spelling/terminology/grammar checks and the corpus table below require <code>data/evidence.sqlite</code> beside the executable.</div>'
-  :'';
+ $('#status').innerHTML = h.grammar
+  ? `Grammar + PRPM · ${h.words.toLocaleString()} DBP forms`
+  : 'PRPM lookup only';
  const src=$('#sources');
- if(h.mode==='full'){
+ if(h.grammar){
   for(const [source,count] of Object.entries(h.source_counts||{})){const tr=document.createElement('tr');for(const v of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof v==='number'?v.toLocaleString():v;td.className=v===source?'bmc-tag':'';tr.appendChild(td);}src.appendChild(tr);}
  }else{
   src.closest('table').style.display='none';
  }
- // admin 机器（启动时 .env token hash match 内置 hash）：专属 Proposals + flags tabs
+ // admin 机器（启动时 .env token hash match 内置 hash）：专属 flags + admin sections
  if(h.admin){
-  $('#nav-proposals').style.display='';
+  $('#sec-flags').style.display='';
   $('#nav-wordflags').style.display='';
   $('#nav-grammarflags').style.display='';
-  loadAdminProposals();
+  $('#sec-admin').style.display='';
+  $('#nav-env').style.display='';
   loadFlagsView('wf');
   loadFlagsView('gf');
+  loadEnv();
  }
 }).catch(()=>{$('#status').textContent='Server unreachable.';});
 
@@ -212,7 +246,7 @@ async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
   const active=(r.rule_views||[]).filter(v=>v.enabled!==false).length;
-  $('#cfg-badge').textContent=r.loaded?`${active} of ${(r.rule_views||[]).length} rules on`:'grammar module not loaded — core mode (add data/evidence.sqlite for server-side rules)';
+  $('#cfg-badge').textContent=r.loaded?`${active} of ${(r.rule_views||[]).length} rules on`:'grammar module not loaded (add data/evidence.sqlite to enable server-side rules)';
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
   const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
   for(const v of r.rule_views||[]){
@@ -251,6 +285,69 @@ $('#btn-sync').onclick=async()=>{
 };
 loadConfig();
 
+// ── Word lists tab：/api/config 里的三分类词表（带 ms mapping）+ overrides ──
+const WL_DESC = {
+ indo_only:'Words standard/colloquial in Bahasa Indonesia but not DBP-standard Malay — flagged, with the standard Malay equivalent where one exists.',
+ casual:'Informal/casual Malay (chat abbreviations, spoken forms, unsettled words) — in formal writing, flagged with the standard form to use instead.',
+ overrides:'Admin decisions from word flags — checked before every PRPM lookup.',
+};
+const wlState = { data: null, which: 'indo_only' };
+async function loadWordLists(){
+ try{
+  const r=await fetch(API+'/api/config').then(x=>x.json());
+  wlState.data = r;
+  renderWordList();
+ }catch(e){ $('#wl-desc').textContent='unavailable: '+e.message; }
+}
+function renderWordList(){
+ const d = wlState.data; if (!d) return;
+ const which = wlState.which, wl = d.wordlists || {};
+ const body = $('#wl-body'); body.replaceChildren();
+ $('#wl-desc').textContent = WL_DESC[which] || '';
+ if (which === 'overrides') {
+  const rows = d.overrides || [];
+  if (!rows.length) { body.innerHTML = '<p class="sub" style="margin:0">No overrides yet — accept a word flag to create one.</p>'; return; }
+  const tbl = document.createElement('table');
+  tbl.innerHTML = '<thead><tr><th>Word</th><th>Status</th><th>Definition</th><th>Decided</th></tr></thead>';
+  for (const r of rows) {
+   const tr = document.createElement('tr');
+   tr.innerHTML = `<td><b>${esc(r.word)}</b></td>
+     <td><span class="lvl ${r.status==='hit'?'lvl-note':'lvl-error'}">${r.status==='hit'?'real word':'not a word'}</span></td>
+     <td style="font-size:12px">${esc(r.definition||'')}</td>
+     <td style="font-size:11px;color:#8a94a0">${r.decided_by||''}${r.source_issue?' · #'+esc(r.source_issue):''}</td>`;
+   tbl.appendChild(tr);
+  }
+  body.appendChild(tbl);
+  return;
+ }
+ const map = wl[which] || {};
+ const words = Object.keys(map);
+ if (!words.length) { body.innerHTML = '<p class="sub" style="margin:0">Empty.</p>'; return; }
+ // chips：word → ms（无 mapping 的只显示 word，灰一点）
+ const box = document.createElement('div'); box.className='wl-chips';
+ const withMap = words.filter(w => map[w]);
+ const noMap = words.filter(w => !map[w]);
+ for (const w of withMap.sort()) {
+  const c=document.createElement('span'); c.className='wl-chip';
+  c.innerHTML=`${esc(w)} <span class="wl-arrow">→</span> <b>${esc(map[w])}</b>`;
+  box.appendChild(c);
+ }
+ for (const w of noMap.sort()) {
+  const c=document.createElement('span'); c.className='wl-chip wl-chip-nomap'; c.textContent=w;
+  box.appendChild(c);
+ }
+ body.appendChild(box);
+ const n=document.createElement('p'); n.className='sub'; n.style.margin='8px 0 0';
+ n.textContent=`${words.length} words · ${withMap.length} with a standard equivalent · ${noMap.length} without`;
+ body.appendChild(n);
+}
+document.querySelectorAll('#wl-pills .wf-pill').forEach(pill=>pill.onclick=()=>{
+ document.querySelectorAll('#wl-pills .wf-pill').forEach(x=>x.classList.toggle('wf-pill-active',x===pill));
+ wlState.which = pill.dataset.wl;
+ renderWordList();
+});
+loadWordLists();
+
 // ── proposals（普通用户提交申请；admin 查看 + 批准）──
 $('#btn-prop-submit').onclick=async()=>{
  $('#prop-msg').textContent='Submitting…';
@@ -266,33 +363,24 @@ $('#btn-prop-submit').onclick=async()=>{
   $('#prop-triggers').value='';$('#prop-clears').value='';$('#prop-note').value='';
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
-async function loadAdminProposals(){
+// ── Env tab（admin 专属：读写磁盘 .env，重启后生效）──
+async function loadEnv(){
  try{
-  const r=await fetch(API+'/api/proposals').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  $('#admin-msg').innerHTML=`<span class="ok">✓ ${r.proposals.length} pending</span>`;
-  const list=$('#admin-list');list.replaceChildren();
-  for(const p of r.proposals){
-    const div=document.createElement('div');
-    div.style.cssText='border:1px solid #dbe1e7;border-radius:8px;padding:10px;margin:8px 0;font-size:13px';
-    const trig=(p.triggers||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
-    const clear=(p.clears||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
-    const selfTest=p.self_test&&p.self_test!=='pass'?`<div class="bad">⚠ ${esc(Array.isArray(p.self_test)?p.self_test.join('; '):p.self_test)}</div>`:'';
-    div.innerHTML=`<b>${esc(p.id)}</b> <span class="lvl ${(p.conf==='error'?'lvl-error':p.conf==='warn'?'lvl-warn':p.conf==='exception'?'lvl-error':'lvl-note')}">${esc(p.conf)}</span> ${p.regex_valid?'':'<span class="bad">(pattern invalid)</span>'}<br>${esc(p.note||'')}
-      <div style="margin-top:6px">${trig}${clear}</div>${selfTest}`;
-    const accept=document.createElement('button');accept.className='act';accept.textContent='Accept';
-    accept.onclick=async()=>{
-      accept.disabled=true;
-      try{const res=await request('/api/proposals/accept',{submitted_at:p.submitted_at});
-        accept.textContent='✓ '+res.accepted;div.style.opacity='.5';
-        setTimeout(loadAdminProposals,600);  // 列表自动刷新（已批准项消失）
-      }catch(e){accept.disabled=false;accept.textContent='✗ '+e.message;}
-    };
-    div.appendChild(accept);list.appendChild(div);
-  }
-  if(!r.proposals.length)list.innerHTML='<p class="sub" style="margin:0">No pending proposals.</p>';
- }catch(e){$('#admin-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+  const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
+  $('#env-content').value=r.content||'';
+  $('#env-path').textContent=r.exists?r.path:'(no .env yet — one will be created at '+r.path+')';
+  $('#env-msg').innerHTML='<span class="ok">✓ loaded</span>';
+ }catch(e){$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
-$('#btn-admin-load').onclick=loadAdminProposals;
+$('#btn-env-reload').onclick=loadEnv;
+$('#btn-env-save').onclick=async()=>{
+ $('#btn-env-save').disabled=true;$('#env-msg').textContent='Saving…';
+ try{
+  const r=await request('/api/env',{content:$('#env-content').value});
+  $('#env-msg').innerHTML=`<span class="ok">✓ saved (${r.bytes} B) — restart tepat to apply</span>`;
+ }catch(e){$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+ finally{$('#btn-env-save').disabled=false;}
+};
 
 // ── flags 审核台（word/prpm 与 grammar 两 tab 共用一个加载器）──
 async function loadFlagsView(which){
@@ -382,9 +470,10 @@ async function loadFlagsView(which){
   }
  }catch(e){msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
-// Word flags：pill 切换 / closed toggle / ⟳ reload
-document.querySelectorAll('.wf-pill').forEach(pill => pill.onclick=()=>{
-  document.querySelectorAll('.wf-pill').forEach(x => x.classList.toggle('wf-pill-active', x===pill));
+// Word flags：pill 切换 / closed toggle / ⟳ reload（仅限 wf 自己的 pills，
+// 不能用裸 .wf-pill——Word lists tab 的 pills 也是同 class）
+document.querySelectorAll('#tab-wordflags .wf-pill').forEach(pill => pill.onclick=()=>{
+  document.querySelectorAll('#tab-wordflags .wf-pill').forEach(x => x.classList.toggle('wf-pill-active', x===pill));
   loadFlagsView('wf');
 });
 $('#wf-show-closed').onclick=()=>{

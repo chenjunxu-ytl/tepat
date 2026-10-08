@@ -581,7 +581,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
                 const r = await fetch(`${API}/api/flag`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ word, kind, note, scope: 'prpm', page: location.href.slice(0, 300) })
+                  body: JSON.stringify({ word, kind, note, scope: 'prpm' })
                 }).then(x => x.json());
                 if (!r.ok) throw new Error(r.error || 'flag failed');
                 const s2 = (await safeStorageGet({ flaggedWords: {} })) || { flaggedWords: {} };
@@ -941,12 +941,12 @@ const safeStorageSet = (obj) => new Promise((res) => {
         type: panel.querySelector('#bmc-type').value,
         why: panel.querySelector('#bmc-why').value.trim(),
       };
-      chrome.storage.local.get({ log: [] }, (s) => {
-        const log = s.log.concat(entry);
-        chrome.storage.local.set({ log }, () => {
-          panel.querySelector('#bmc-msg').textContent = `✓ Saved (${log.length} entries in log)`;
-          setTimeout(removeUI, 1200);
-        });
+      safeStorageGet({ log: [] }).then(async (s) => {
+        if (!s) { panel.querySelector('#bmc-msg').textContent = '✗ extension reloaded — reopen this panel'; return; }
+        const log = (s.log || []).concat(entry);
+        await safeStorageSet({ log });
+        panel.querySelector('#bmc-msg').textContent = `✓ Saved (${log.length} entries in log)`;
+        setTimeout(removeUI, 1200);
       });
     };
   }
@@ -1069,52 +1069,9 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }, 50);
   }
 
-  // ── Rule Book 插件引擎 ──
-  // 规则包从 server /api/pack 拉取（extension/rules-pack.json，热更新：admin
-  // 保存后新扫描即用新规则，无需重载扩展）。缓存本页结果；拉不到就空跑。
-  let packCache = null;
-  async function ruleBookPacks() {
-    if (packCache) return packCache;
-    try {
-      const r = await fetch(`${API}/api/pack`).then(x => x.json());
-      if (r && r.pack && Array.isArray(r.pack.rules)) packCache = [r.pack];
-    } catch (e) { /* server 不在线时 Rule Book 直接空跑 */ }
-    return packCache || [];
-  }
-
-  function ruleBookScanSync(text, packs) {
-    const findings = [];
-    const exceptions = [];
-    for (const pack of packs) {
-      for (const rule of pack.rules || []) {
-        let rx;
-        try { rx = new RegExp(rule.re, 'gi' + (rule.re.includes('\\u') ? 'u' : '')); }
-        catch (e) { console.warn('[tepat] bad rule regex', rule.id, e); continue; }
-        let m;
-        while ((m = rx.exec(text)) !== null) {
-          if (m[0].length === 0) { rx.lastIndex++; continue; }
-          const hit = {
-            pack: pack.meta.id,
-            rule: rule.id,
-            conf: rule.conf,
-            note: rule.note,
-            span: m[0],
-            start: m.index,
-            end: m.index + m[0].length,
-          };
-          if (rule.conf === 'exception' || rule.noflag) exceptions.push(hit);
-          else findings.push(hit);
-        }
-      }
-    }
-    // exception 抑制：与 exception 区间重叠的 finding 降级为 suppressed
-    for (const f of findings) {
-      f.suppressed = exceptions.some(x => x.rule !== f.rule &&
-        f.start < x.end && x.start < f.end);
-    }
-    return { findings: findings.filter(f => !f.suppressed), suppressed: findings.filter(f => f.suppressed) };
-  }
-
+  // Rule Book 检查（用户裁决 2026-10-08）：计算全部下沉 server——插件不再
+  // 本地跑正则（旧 rules-pack 引擎已废），直接调 /api/scan 渲染结果。
+  // 规则命中带 origin（规则 ID），grammar flag 靠它定位规则。
   async function runRuleBook(text, shouldCreatePanel = true) {
     const cleanText = sanitizeText(text);
     if (shouldCreatePanel || !panel) {
@@ -1124,42 +1081,51 @@ const safeStorageSet = (obj) => new Promise((res) => {
       panel.querySelector('.bmc-title-text').textContent = 'Rule Book';
       panel.querySelector('.bmc-search-input').value = cleanText;
     }
-    const packs = await ruleBookPacks();
-    if (!packs.length) {
-      panelBody().innerHTML = '<div class="bmc-err-box"><div class="bmc-err-title">No rule packs (server unreachable?)</div></div>';
+    panelBody().innerHTML = cuteLoader('Menganalisis teks…');
+    let r;
+    try {
+      r = await fetch(`${API}/api/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanText })
+      }).then(x => x.json());
+      if (r.error) throw new Error(r.error);
+    } catch (e) {
+      panelBody().innerHTML = `
+        <div class="bmc-err-box">
+          <div class="bmc-err-title">Tepat.exe is not running</div>
+          <div class="bmc-err-desc">Make sure the Tepat app is running on this computer (localhost:${PORT}).</div>
+        </div>`;
       return;
     }
-    const r = ruleBookScanSync(cleanText, packs);
-    // error 与 warn 分开呈现（用户裁决 2026-10-02）：regex 判不了语境的规则
-    // 是"提醒不是判决"——warn 不占错误位，hover 看 tooltip 说明。
-    const errors = r.findings.filter(f => f.conf === 'error');
-    const warns = r.findings.filter(f => f.conf === 'warn');
-    const notes = r.findings.filter(f => f.conf === 'note');
+    // 只呈现规则命中（grammar 类别）；词级/证据通道由其他面板负责
+    const hits = (r.issues || []).filter(i => i.category === 'grammar');
+    const errors = hits.filter(f => f.level === 'error');
+    const warns = hits.filter(f => f.level === 'warning');
+    const notes = hits.filter(f => f.level === 'info');
     const itemHtml = (f, kind) => {
       const dot = { error: '🔴', warn: '🟠', note: '🟡' }[kind];
       const label = { error: 'error', warn: 'needs context — hover for nuance', note: 'reminder' }[kind];
+      const ruleId = (f.origin || '').split('-').slice(0, 2).join('-');
       const tip = TepatResults.escapeHtml(
         kind === 'warn'
-          ? `${f.rule}: ${f.note}\nRegex cannot judge context — this is a reminder, not a verdict. See Rule Book ${f.rule} before deciding.`
-          : `${f.rule}: ${f.note}`);
-      return `<div class="bmc-item bmc-item-${kind} bmc-tip" data-tip="${tip.replace(/"/g, '&quot;').replace(/\n/g, ' ')}" data-rule-flag="${TepatResults.escapeHtml(f.rule)}" data-rule-span="${TepatResults.escapeHtml(f.span)}">
+          ? `${ruleId}: ${f.note}\nRegex cannot judge context — this is a reminder, not a verdict. See Rule Book ${ruleId} before deciding.`
+          : `${ruleId}: ${f.note}`);
+      return `<div class="bmc-item bmc-item-${kind} bmc-tip" data-tip="${tip.replace(/"/g, '&quot;').replace(/\n/g, ' ')}" data-rule-flag="${TepatResults.escapeHtml(ruleId)}" data-rule-span="${TepatResults.escapeHtml(f.span)}">
            <div class="bmc-item-main">${dot} <b>${TepatResults.escapeHtml(f.span)}</b>
-             <span class="bmc-rule-id">[${f.rule}]</span><span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this rule hit">⚑</span></div>
+             <span class="bmc-rule-id">[${TepatResults.escapeHtml(ruleId)}]</span><span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this rule hit">⚑</span></div>
            <div class="bmc-info-note">${TepatResults.escapeHtml(f.note)} · ${label}</div>
          </div>`;
     };
     const section = (title, arr, kind) => arr.length
       ? `<div class="bmc-sec-title">${title} (${arr.length})</div>` + arr.map(f => itemHtml(f, kind)).join('')
       : '';
-    const suppressedNote = r.suppressed.length
-      ? `<div class="bmc-foot">${r.suppressed.length} padanan diabaikan (kekecualian NF/LR)</div>` : '';
     panelBody().innerHTML = (errors.length || warns.length || notes.length)
       ? section('Errors', errors, 'error')
         + section('Needs context', warns, 'warn')
         + section('Reminders', notes, 'note')
-        + suppressedNote
-        + `<div class="bmc-foot">${errors.length} errors · ${warns.length} need context · ${notes.length} reminders · ${packs.length} packs · local check (offline)</div>`
-      : `<div class="bmc-clean">✓ No findings according to the Rule Book. (${packs.map(p => p.meta.title).join('; ')})</div>`;
+        + `<div class="bmc-foot">${errors.length} errors · ${warns.length} need context · ${notes.length} reminders · checked by server</div>`
+      : `<div class="bmc-clean">✓ No findings according to the Rule Book.</div>`;
 
     // 规则命中的 flag（scope=grammar）：点 ⚑ 弹选择窗（同词级 flag 的三 kind）
     panelBody().querySelectorAll('[data-rule-flag] .bmc-att-flag').forEach(ic => {
@@ -1201,8 +1167,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            word: span, kind, note, scope: 'grammar', rule,
-            page: location.href.slice(0, 300)
+            word: span, kind, note, scope: 'grammar', rule
           })
         }).then(x => x.json());
         if (!r.ok) throw new Error(r.error || 'flag failed');

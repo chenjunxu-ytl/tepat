@@ -8,8 +8,7 @@ fetch(API + '/api/health')
     const el = $('#status');
     if (!el) return;
     el.className = 'status-badge status-ok';
-    const mode = h.mode === 'core' ? 'core' : `${(h.words || 0).toLocaleString()} forms`;
-    el.textContent = `✓ Running (${mode})`;
+    el.textContent = '✓ Running';
   })
   .catch(() => {
     const el = $('#status');

@@ -63,6 +63,13 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
+
+def _env_path() -> str:
+    """启动时读的那个 .env 的位置：源码目录 / exe 旁（admin 在 Env tab 编辑它）。"""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, "frozen", False)
+                        else os.path.dirname(sys.executable), ".env")
+
+
 CACHE_PATH = os.path.join(
     os.environ.get("APPDATA") or os.path.expanduser("~"),
     "tepat", "prpm_cache.sqlite") if os.name == "nt" else \
@@ -106,7 +113,7 @@ GH_PROPOSAL_REPO = os.environ.get("TEPAT_GH_REPO", "chenjunxu-ytl/tepat")
 # 本地 reload 改为 fetch GitHub main 分支最新内容，而不是读本地文件自嗨。
 GH_RULES_BRANCH = os.environ.get("TEPAT_GH_BRANCH", "main")
 GH_SYNC_FILES = ("rules.json", "indo_words.json", "blacklist.json",
-                 "extension/rules-pack.json", "word-overrides.json")
+                 "word-overrides.json")
 
 
 def _word_overrides_path() -> Path:
@@ -144,9 +151,10 @@ def _gh_fetch_file(repo_path: str) -> bytes:
 
 
 def _gh_sync_rules() -> dict:
-    """把 GitHub 上的 server rules + rule pack 拉下来覆盖本地。
-    返回每个文件的状态；校验失败的文件不落盘（rules.json 必须可解析，
-    rules-pack.json 必须过 pack 校验）。"""
+    """把 GitHub 上的规则文件拉下来覆盖本地（rules.json 是唯一规则源，
+    用户裁决 2026-10-08：Rule Book pack 已并入，双轨废除）。
+    返回每个文件的状态；校验失败的文件不落盘（JSON 必须可解析，
+    rules.json 每条正则必须可编译）。"""
     import tempfile
     results = {}
     for name in GH_SYNC_FILES:
@@ -163,11 +171,6 @@ def _gh_sync_rules() -> dict:
         try:
             if name.endswith(".json"):
                 parsed = json.loads(content)
-                if name == "extension/rules-pack.json":
-                    problems = _validate_pack(parsed)
-                    if problems:
-                        results[name] = {"ok": False, "error": "; ".join(problems)}
-                        continue
             else:
                 results[name] = {"ok": False, "error": "unexpected file type"}
                 continue
@@ -186,8 +189,7 @@ def _gh_sync_rules() -> dict:
                 results[name] = {"ok": False, "error": "; ".join(bad)}
                 continue
         local = (_word_overrides_path() if name == "word-overrides.json"
-                 else _config_path(name) if not name.startswith("extension/")
-                 else str(_pack_path()))  # rules-pack 也归 APPDATA
+                 else _config_path(name))
         Path(local).write_bytes(content)
         results[name] = {"ok": True, "bytes": len(content)}
     # 同步后立即热重载 checker（若已加载）
@@ -245,10 +247,10 @@ FLAG_KINDS = {
 
 
 def _gh_open_word_flag(word: str, scope: str, kind: str, status: str,
-                       definition: str, note: str, page_url: str,
+                       definition: str, note: str,
                        rule_id: str = "") -> str:
     """word/rule flag 开成 GitHub Issue。scope 区分 prpm（词）与 grammar（规则），
-    kind 三选一；title 三段式 [flag:scope:kind]。"""
+    kind 三选一；title 三段式 [flag:scope:kind]。不记录来源页面（隐私）。"""
     if kind not in FLAG_KINDS:
         raise RuntimeError(f"unknown flag kind: {kind}")
     if scope not in FLAG_SCOPES:
@@ -261,7 +263,6 @@ def _gh_open_word_flag(word: str, scope: str, kind: str, status: str,
             + f"**prpm_status:** {status}\n"
             f"**definition:** {(definition or '')[:500]}\n"
             f"**user_note:** {note or '-'}\n"
-            f"**page:** {page_url or '-'}\n"
             f"**flagged_at:** {int(time.time())}\n"
             + "\n\n_Auto-filed by Tepat extension._")
     return _gh_create_issue(title[:120], body,
@@ -439,26 +440,19 @@ def word_exists(w: str) -> bool:
     return bool(_checker and _checker.store.lexical(normalize(w))["state"] != "unknown")
 
 
-def _pack_path() -> Path:
-    """Rule Book pack 的运行时位置：%APPDATA%\\tepat\\rules-pack.json
-    （与全部规则文件同位）；源码目录 extension/ 下那份只作 seed。"""
-    _seed_to_appdata("rules-pack.json",
-                     os.path.join(_ROOT, "extension", "rules-pack.json"))
-    return Path(_appdata_dir()) / "rules-pack.json"
-
-
-def _load_pack() -> dict | None:
+def _load_rules_json() -> dict | None:
+    """rules.json 解析态（proposal 编号与 accept 落盘都走它）。"""
     try:
-        return json.loads(_pack_path().read_text(encoding="utf-8"))
+        return json.loads(Path(_config_path("rules.json")).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
 
 
-def _next_rule_no(pack: dict | None) -> int:
-    """auto-increment 规则号：现有 pack + pending proposals 里的 RB-NNNN 取最大 +1。
+def _next_rule_no(rules: dict | None) -> int:
+    """auto-increment 规则号：现有 rules + pending proposals 里的 RB-NNNN 取最大 +1。
     proposals 也必须算——否则两次提交（未批准时）会撞号。"""
     biggest = 0
-    for r in (pack or {}).get("rules", []):
+    for r in (rules or {}).get("rules", []):
         m = re.fullmatch(r"RB-(\d+)", str(r.get("id") or ""))
         if m:
             biggest = max(biggest, int(m.group(1)))
@@ -476,35 +470,6 @@ def _next_rule_no(pack: dict | None) -> int:
     except OSError:
         pass
     return biggest + 1
-
-
-def _validate_pack(pack) -> list[str]:
-    """rules-pack.json 落盘前的最小校验：扩展引擎要消费的结构必须完整。"""
-    problems = []
-    if not isinstance(pack, dict) or not isinstance(pack.get("meta"), dict):
-        return ["pack must be an object with a meta object"]
-    if not isinstance(pack.get("rules"), list):
-        return ["pack.rules must be an array"]
-    if not pack["rules"]:
-        problems.append("pack.rules is empty")
-    for idx, r in enumerate(pack["rules"]):
-        if not isinstance(r, dict):
-            problems.append(f"rule {idx}: object required")
-            continue
-        if not r.get("id"):
-            problems.append(f"rule {idx}: empty id")
-        if r.get("conf") not in ("error", "warn", "note", "exception"):
-            problems.append(f"rule {idx} ({r.get('id') or '?'}): conf must be "
-                            f"error/warn/note/exception, got {r.get('conf')!r}")
-        pattern = r.get("re")
-        if not pattern:
-            problems.append(f"rule {idx} ({r.get('id') or '?'}): missing re")
-        else:
-            try:
-                re.compile(pattern)  # 近似校验：JS 与 Python 正则大部分语法重合
-            except re.error as e:
-                problems.append(f"rule {idx} ({r.get('id') or '?'}): regex {str(pattern)[:40]!r}: {e}")
-    return problems
 
 
 def bigram_exists(a: str, b: str) -> bool:
@@ -862,13 +827,29 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/results.js":
             self._file(os.path.join(_ROOT, "extension", "results.js"), "text/javascript; charset=utf-8")
         elif self.path == "/api/health":
-            self._json(200, {"ok": _checker is not None, "engine": "evidence-v2", "words": len(_words),
-                             "mode": "full" if _checker is not None else "core",
+            self._json(200, {"ok": _checker is not None, "engine": "evidence-v2",
+                             "grammar": _checker is not None,
+                             "words": len(_words),
                              "review_run": _checker.store.metadata["review_run"] if _checker else None,
                              "source_counts": _checker.store.metadata["counts"] if _checker else {},
                              "config_warnings": _checker.config_warnings if _checker else [],
                              "admin": IS_ADMIN_MACHINE,
                              "tray": tray_icon is not None})
+        elif self.path == "/api/env":
+            # Env tab（admin 专属）：读磁盘上的 .env 原文。非 admin 一律 403——
+            # 里面有 admin token / PAT，普通用户机器上不存在也不该看。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            content = ""
+            exists = os.path.isfile(_env_path())
+            if exists:
+                try:
+                    content = Path(_env_path()).read_text(encoding="utf-8", errors="replace")
+                except OSError as e:
+                    self._json(500, {"error": f"read failed: {e}"})
+                    return
+            self._json(200, {"path": _env_path(), "exists": exists, "content": content})
         elif self.path == "/api/config":
             # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
             # + 解析态 + 逐条规则视图，web UI 的 Config 区消费。
@@ -904,33 +885,36 @@ class Handler(BaseHTTPRequestHandler):
                                        "source": r.get("source"),
                                        "examples": r.get("examples", {}),
                                        "valid": ok, "error": err})
-            # Rule Book 插件包（extension/rules-pack.json）：纯 JSON，无 JS 解析。
-            pack_meta, pack_views = None, []
-            pack = _load_pack()
-            if pack:
-                pack_meta = {**pack.get("meta", {}), "path": str(_pack_path()),
-                             "entries": len(pack.get("rules", []))}
-                for i, r in enumerate(pack.get("rules", [])):
-                    ok, err = True, None
-                    try:
-                        re.compile(r.get("re", ""))
-                    except re.error as e:
-                        ok, err = False, str(e)
-                    pack_views.append({"idx": i, "id": r.get("id"), "conf": r.get("conf"),
-                                       "re": r.get("re"), "note": r.get("note"),
-                                       "valid": ok, "error": err})
+            # 词表文件视图（用户裁决 2026-10-08）：三分类 indo_only / casual /
+            # overrides，词表条目带 ms mapping。新旧结构都读（旧 exe 拉新文件
+            # 的兼容性在 checker；这里是新前端的视图）。
+            wordlists = {"indo_only": {}, "casual": {}}
+            try:
+                indo = json.loads(Path(_config_path("indo_words.json")).read_text(
+                    encoding="utf-8")) if os.path.isfile(_config_path("indo_words.json")) else {}
+                if "indo_only" in indo and "casual" in indo:
+                    wordlists = {
+                        "indo_only": {w: (v.get("ms", "") if isinstance(v, dict) else str(v))
+                                      for w, v in indo["indo_only"].items()},
+                        "casual": {w: (v.get("ms", "") if isinstance(v, dict) else str(v))
+                                   for w, v in indo["casual"].items()},
+                    }
+                else:  # 旧结构（老文件/GitHub 上还没推新版的窗口期）
+                    wordlists = {
+                        "indo_only": {w: indo.get("suggestions", {}).get(w, "")
+                                      for w in indo.get("indo_only_words", [])},
+                        "casual": {**{w: "" for w in indo.get("uncertain_words", [])},
+                                   **{w: v.get("expansion", "") for w, v in indo.get("register_words", {}).items()},
+                                   **{w: "" for w in indo.get("context_words", {})}},
+                    }
+            except (OSError, json.JSONDecodeError, AttributeError):
+                pass
+            overrides = [{"word": w, **rec} for w, rec in
+                         sorted(_load_word_overrides().items())]
             self._json(200, {"files": entries, "rule_views": rule_views,
-                             "pack": pack_meta, "pack_views": pack_views,
+                             "wordlists": wordlists, "overrides": overrides,
                              "loaded": _checker is not None,
                              "config_warnings": _checker.config_warnings if _checker else []})
-        elif self.path == "/api/pack":
-            # Rule Book 插件包（extension/rules-pack.json）：GET 返回解析后的
-            # JSON + path。POST（见 do_POST）保存；扩展直接 fetch 此接口。
-            pack = _load_pack()
-            if pack is None:
-                self._json(404, {"error": "rules-pack.json not found or broken"})
-                return
-            self._json(200, {"path": str(_pack_path()), "pack": pack})
         elif self.path == "/api/word-overrides":
             # word-overrides.json 只读拉取（admin 下载 commit 进 repo 用）
             if not IS_ADMIN_MACHINE:
@@ -1126,34 +1110,6 @@ class Handler(BaseHTTPRequestHandler):
                         "repo": GH_PROPOSAL_REPO, "branch": GH_RULES_BRANCH,
                         "checker_reloaded": _checker is not None,
                         "rules": len(_checker.rules) if _checker else 0})
-        elif self.path == "/api/pack":
-            # 保存 Rule Book 插件包：admin 专属（普通用户请走 /api/proposals 申请）。
-            # 写前备份 rules-pack.json.bak；JSON 校验失败不落盘。
-            if not IS_ADMIN_MACHINE:
-                self._json(403, {"error": "admin token required to edit the Rule Book pack; "
-                                         "submit a proposal via /api/proposals instead"})
-                return
-            pack = req.get("pack")
-            if not isinstance(pack, dict):
-                self._json(400, {"error": "pack object required"})
-                return
-            problems = _validate_pack(pack)
-            if problems:
-                self._json(400, {"error": "pack validation failed", "problems": problems})
-                return
-            pack_path = _pack_path()
-            try:
-                if pack_path.exists():
-                    pack_path.with_suffix(".json.bak").write_bytes(pack_path.read_bytes())
-                pack_path.write_text(json.dumps(pack, ensure_ascii=False, indent=1) + "\n",
-                                     encoding="utf-8")
-            except OSError as e:
-                self._json(500, {"error": f"write failed: {e}"})
-                return
-            count = len(pack.get("rules", []))
-            _log(f"[pack] rules-pack.json updated ({count} rule entries)")
-            self._json(200, {"ok": True, "backup": True, "entries": count,
-                             "meta_id": pack.get("meta", {}).get("id", "?")})
         elif self.path == "/api/proposals":
             # 普通用户提交 Rule Book 申请：免 token。规则号服务端自动分配
             # （RB-NNNN auto-increment）。写入方案照 rule-book 的 Salah/Betul 形态：
@@ -1178,8 +1134,8 @@ class Handler(BaseHTTPRequestHandler):
             if conf not in ("error", "warn", "note", "exception"):
                 self._json(400, {"error": "conf must be error/warn/note/exception"})
                 return
-            pack = _load_pack()
-            rid = f"RB-{_next_rule_no(pack):03d}"
+            rules_data = _load_rules_json()
+            rid = f"RB-{_next_rule_no(rules_data):03d}"
             if not pattern and triggers:
                 # 从 trigger 短语推导正则：转义 + 词边界；多短语 OR 起来
                 parts = []
@@ -1240,7 +1196,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "kind must be underflag/mismeaning/overflag"})
                 return
             note = str(req.get("note") or "").strip()[:500]
-            page_url = str(req.get("page") or "").strip()[:300]
             # 状态/定义以 server 自己的查询结果为准（不信任前端传值）
             result = prpm_lookup(word)
             status = result.get("status", "unknown")
@@ -1249,7 +1204,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 gh_url = _gh_open_word_flag(word, scope, kind, status, definition,
                                             (f"{note} | root: {root}" if root else note),
-                                            page_url, rule_id=rule_id)
+                                            rule_id=rule_id)
             except RuntimeError as e:
                 self._json(502, {"error": f"GitHub issue failed: {e}"})
                 return
@@ -1329,7 +1284,9 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[unflag] {word} -> closed {issue_url}")
             self._json(200, {"ok": True, "word": word, "closed": issue_url})
         elif self.path == "/api/proposals/accept":
-            # admin 批准申请：把规则追加进 rules-pack.json 的 rules 数组尾部。
+            # admin 批准申请：把规则追加进 rules.json（唯一规则源，用户裁决
+            # 2026-10-08——Rule Book pack 双轨已废除）。conf 档位换算
+            # error/warn/note → high/medium/low，校验后落盘 + 热重载。
             if not IS_ADMIN_MACHINE:
                 self._json(403, {"error": "admin token required"})
                 return
@@ -1344,32 +1301,78 @@ class Handler(BaseHTTPRequestHandler):
             if target is None:
                 self._json(404, {"error": "proposal not found"})
                 return
-            pack = _load_pack()
-            if pack is None:
-                self._json(404, {"error": "rules-pack.json not found or broken"})
+            rules_data = _load_rules_json()
+            if rules_data is None:
+                self._json(404, {"error": "rules.json not found or broken"})
                 return
             rid = str(target["id"])
+            conf_map = {"error": "high", "warn": "medium",
+                        "note": "low", "exception": "low"}
             merged = {
-                "id": rid, "conf": str(target["conf"]),
-                "note": str(target.get("note") or ""), "re": str(target["re"])}
+                "id": rid, "conf": conf_map.get(str(target["conf"]), "medium"),
+                "note": str(target.get("note") or ""), "re": str(target["re"]),
+                "source": "Rule Book proposal (accepted via web UI)"}
             if target.get("triggers") or target.get("clears"):
                 merged["examples"] = {"trigger": target.get("triggers", []),
                                       "clear": target.get("clears", [])}
-            pack.setdefault("rules", []).append(merged)
-            problems = _validate_pack(pack)
-            if problems:
-                self._json(400, {"error": "merged pack failed validation", "problems": problems})
+            try:
+                re.compile(merged["re"])
+            except re.error as e:
+                self._json(400, {"error": f"proposal regex invalid: {e}"})
                 return
-            pack_path = _pack_path()
-            pack_path.with_suffix(".json.bak").write_bytes(pack_path.read_bytes())
-            pack_path.write_text(json.dumps(pack, ensure_ascii=False, indent=1) + "\n",
-                                 encoding="utf-8")
+            rules_data.setdefault("rules", []).append(merged)
+            rules_path = Path(_config_path("rules.json"))
+            rules_path.with_suffix(".json.bak").write_bytes(rules_path.read_bytes())
+            rules_path.write_text(json.dumps(rules_data, ensure_ascii=False, indent=1) + "\n",
+                                  encoding="utf-8")
             with proposals_path.open("w", encoding="utf-8") as f:  # 已处理：清空申请列表
                 for p in proposals:
                     if p is not target:
                         f.write(json.dumps(p, ensure_ascii=False) + "\n")
-            _log(f"[proposals] accepted {rid} -> rules-pack.json")
-            self._json(200, {"ok": True, "accepted": rid})
+            if _checker is not None:  # 热重载：accept 即生效
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[proposals] hot-reload after accept failed: {e!r}")
+            _log(f"[proposals] accepted {rid} -> rules.json ({len(rules_data['rules'])} rules)")
+            self._json(200, {"ok": True, "accepted": rid,
+                             "rules": len(rules_data["rules"])})
+        elif self.path == "/api/env":
+            # Env tab 保存（admin 专属）：整文件覆盖写回磁盘 .env。
+            # 只写磁盘——进程内环境变量/IS_ADMIN_MACHINE 不动（改 admin token
+            # 需要"旧 token 撤权"效果，热应用反而违背启动时判定的初衷）；
+            # 下次重启 _load_dotenv 生效。TEPAT_ADMIN_TOKEN 的 hash 比对也
+            # 因此保持"改了 token → 重启后才切换 admin 身份"的干净语义。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            content = str(req.get("content") or "")
+            if len(content) > 65536:
+                self._json(413, {"error": "env file too large (64KB limit)"})
+                return
+            # KEY=VALUE 行格式校验：非空行必须含 "="，防止手滑写成 JSON/shell。
+            bad = [ln for ln in content.splitlines()
+                   if ln.strip() and not ln.strip().startswith("#") and "=" not in ln]
+            if bad:
+                self._json(400, {"error": f"lines without '=': {bad[:3]}"})
+                return
+            path = _env_path()
+            # 写前备份同目录 .env.bak（一次滚动，够找回手误）。
+            # 注意用字符串拼接：Path('.env').with_suffix() 对 dotfile 会得到
+            # '.env.env.bak' 这种怪名。
+            try:
+                if os.path.isfile(path):
+                    Path(path + ".bak").write_bytes(Path(path).read_bytes())
+            except OSError as e:
+                _log(f"[env] backup failed (continuing): {e!r}")
+            try:
+                Path(path).write_text(content, encoding="utf-8")
+            except OSError as e:
+                self._json(500, {"error": f"write failed: {e}"})
+                return
+            _log(f"[env] .env overwritten via web UI ({len(content)} chars) — restart to apply")
+            self._json(200, {"ok": True, "path": path, "bytes": len(content.encode('utf-8')),
+                             "note": "restart tepat to apply changes"})
         else:
             self._json(404, {"error": "not found"})
 
