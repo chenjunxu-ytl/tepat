@@ -1258,9 +1258,9 @@ class Handler(BaseHTTPRequestHandler):
                              "github_issue": gh_url})
         elif self.path == "/api/flags/decide":
             # Word flag 审核决议（用户裁决 2026-10-08，admin 专属）：
-            #   accept: status(hit/miss) + definition 来源（issue 里的解释/
-            #           user_note/自写）→ 写 word-overrides.json + close issue
-            #           附决议评论；下次 sync 该文件进 repo，全端热生效
+            #   accept: status 由 flag kind 推导（underflag → 该词存在 hit；
+            #           overflag/mismeaning → 该词不算 miss）+ admin 编辑的
+            #           definition → 写 word-overrides.json + close issue 附评论
             #   reject: 只 close issue（附评论），不写 override
             if not IS_ADMIN_MACHINE:
                 self._json(403, {"error": "admin machine required"})
@@ -1268,6 +1268,7 @@ class Handler(BaseHTTPRequestHandler):
             decision = str(req.get("decision") or "").strip()
             word = str(req.get("word") or "").strip().lower()[:80]
             issue_url = str(req.get("issue") or "").strip()[:300]
+            kind = str(req.get("kind") or "").strip()
             if decision not in ("accept", "reject") or not word \
                     or not issue_url.startswith("https://github.com/"):
                 self._json(400, {"error": "decision (accept|reject), word and issue required"})
@@ -1275,24 +1276,26 @@ class Handler(BaseHTTPRequestHandler):
             entry = None
             push_url = None
             if decision == "accept":
-                status = str(req.get("status") or "hit").strip()
-                if status not in ("hit", "miss"):
-                    self._json(400, {"error": "status must be hit or miss"})
-                    return
+                # 词没有 over/under 属性——真相只有 is a word / not a word。
+                # reporter 的立场（kind）推导出词的最终状态。
+                status = "hit" if kind == "underflag" else "miss"
                 definition = str(req.get("definition") or "").strip()[:1000]
-                source = str(req.get("source") or "custom").strip()
                 if not definition:
-                    self._json(400, {"error": "definition required (pick a source or write one)"})
+                    self._json(400, {"error": "definition required"})
                     return
                 m = re.search(r"/issues/(\d+)", issue_url)
                 entry = {"status": status, "definition": definition,
-                         "source": source, "source_issue": int(m.group(1)) if m else 0,
+                         "flag_kind": kind or "unknown",
+                         "source_issue": int(m.group(1)) if m else 0,
                          "decided_at": int(time.time()), "decided_by": "admin"}
                 overrides = _load_word_overrides()
                 overrides[word] = entry
-                _word_overrides_path().write_text(
-                    json.dumps(overrides, ensure_ascii=False, indent=1) + "\n",
-                    encoding="utf-8")
+                content = json.dumps(overrides, ensure_ascii=False, indent=1) + "\n"
+                _word_overrides_path().write_text(content, encoding="utf-8")
+                # 自动 push 进 repo（用户裁决 2026-10-08）：user 只 pull。
+                push_url = _gh_push_file(
+                    "word-overrides.json", content,
+                    f"word-override: {word} -> {status} (#{entry['source_issue']})")
             # close issue（附决议评论）
             comment = (f"**Decision: {decision}**"
                        + (f"\n- status: `{entry['status']}`\n- definition: {entry['definition'][:300]}"
