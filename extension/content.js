@@ -519,23 +519,23 @@
       const floatIc = document.createElement('div');
       floatIc.className = 'bmc-flag-float';
       floatIc.textContent = '⚑';
-      floatIc.style.display = 'none';
       panel.appendChild(floatIc);
       let floatWord = null;
       const placeFloat = (chipEl) => {
         floatWord = chipEl.dataset.w;
         const r = chipEl.getBoundingClientRect();
-        floatIc.style.display = 'block';
+        floatIc.classList.add('show');  // 弹出动画（scale+fade，transform-origin 左侧）
         floatIc.classList.toggle('done', chipEl.classList.contains('bmc-chip-flagged'));
         // 紧贴 chip 右缘（-2px 重叠）：鼠标从 chip 滑到 icon 的路径物理连续，
         // 不存在中间缝隙；icon 的 padding 左半盖住交界带
         floatIc.style.left = `${r.right - 2}px`;
         floatIc.style.top = `${r.top + r.height / 2}px`;
       };
-      const hideFloat = () => { floatIc.style.display = 'none'; floatWord = null; };
+      const hideFloat = () => { floatIc.classList.remove('show'); floatWord = null; };
       // 鼠标是否正悬在 icon 热区（fixed 元素不在 chipsBox 内，事件不冒泡，
       // 必须坐标判断——否则移到 icon 的瞬间 chipsBox mouseleave 误杀自己）
       const overIcon = (e) => {
+        if (!floatIc.classList.contains('show')) return false;
         const r = floatIc.getBoundingClientRect();
         return e.clientX >= r.left - 2 && e.clientX <= r.right + 2
             && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2;
@@ -554,7 +554,7 @@
       // 滚动面板时重新贴位（fixed 坐标会脱节）
       panel.addEventListener('scroll', () => {
         const chipEl = floatWord && b.querySelector(`.bmc-chip[data-w="${CSS.escape(floatWord)}"]`);
-        if (chipEl && floatIc.style.display !== 'none') placeFloat(chipEl);
+        if (chipEl && floatIc.classList.contains('show')) placeFloat(chipEl);
       }, { passive: true });
       floatIc.addEventListener('click', e => {
         e.stopPropagation();
