@@ -61,6 +61,9 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 .wl-chip b{color:#256b58}
 .wl-chip .wl-arrow{color:#8a94a0;margin:0 2px}
 .wl-chip-nomap{opacity:.55}
+.wl-add{display:flex;align-items:center;gap:8px;margin:12px 0 0;flex-wrap:wrap}
+.wl-add input{font:13px system-ui;padding:6px 10px;border:1px solid #c4ced8;border-radius:7px;width:190px}
+.wl-add #wl-add-ms{width:230px}
 .wl-kv{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #eef2f5;font-size:13px}
 .wl-kv b{min-width:110px}
 .wl-kv span{color:#5d6977}
@@ -75,6 +78,7 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
  <div class="side-sec" id="sec-flags" style="display:none">Flags</div>
  <button class="nav" id="nav-wordflags" data-tab="wordflags" style="display:none">Word flags</button>
  <button class="nav" id="nav-grammarflags" data-tab="grammarflags" style="display:none">Grammar flags</button>
+ <button class="nav" id="nav-generalflags" data-tab="generalflags" style="display:none">General flags</button>
  <div class="side-sec" id="sec-admin" style="display:none">Admin</div>
  <button class="nav" id="nav-env" data-tab="env" style="display:none">Env</button>
  <button class="nav" data-tab="about">About</button>
@@ -115,6 +119,13 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    <button class="wf-pill wf-pill-active" data-wl="indo_only">Indonesian-only</button>
    <button class="wf-pill" data-wl="casual">Casual Malay</button>
    <button class="wf-pill" data-wl="overrides">Overrides</button>
+  </div>
+  <div class="wl-add" id="wl-add" style="display:none">
+   <input type="text" id="wl-add-word" placeholder="word" spellcheck="false">
+   <span class="wl-arrow">→</span>
+   <input type="text" id="wl-add-ms" placeholder="standard Malay (optional)" spellcheck="false">
+   <button class="act primary" id="wl-add-go">Add</button>
+   <span id="wl-add-msg" class="msg"></span>
   </div>
   <p class="sub" id="wl-desc" style="margin:10px 0 6px"></p>
   <div id="wl-body"></div>
@@ -168,9 +179,21 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
  </div>
 </section>
 
+<section class="tab" id="tab-generalflags">
+ <h2>General flags</h2>
+ <p class="sub">Page-level subjective reports from the extension popup flag — false alarms, missed problems, suggestions. Not tied to a specific word or rule; handle on GitHub.</p>
+ <div class="card">
+  <div class="controls" style="margin:0 0 8px">
+   <button class="act" id="btn-genf-load">Reload</button>
+   <label><input type="checkbox" id="genf-show-closed" checked> show closed</label>
+   <span id="genf-msg" class="msg"></span></div>
+  <div id="genf-list"></div>
+ </div>
+</section>
+
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">Rules the local scan service applies (source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code> — admin machine only). <b>Levels</b> follow the Rule Book: <span class="lvl lvl-error">error</span> structural, no legal context · <span class="lvl lvl-warn">warn</span> context needed, review before acting · <span class="lvl lvl-note">note</span> broad reminder. Toggle a rule off to silence it locally; a GitHub sync restores the repo state.</p>
+ <p class="sub">Rules the local scan service applies (source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code>). <b>Levels</b> follow the Rule Book: <span class="lvl lvl-error">error</span> structural, no legal context · <span class="lvl lvl-warn">warn</span> context needed, review before acting · <span class="lvl lvl-note">note</span> broad reminder. Toggle a rule off to silence it locally; a GitHub sync restores the repo state.</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act primary" id="btn-sync">↻ Fetch from GitHub</button><span id="cfg-msg" class="msg"></span></div>
   <table id="cfg-rules"><thead><tr><th>Rule</th><th>What it flags</th><th>Example — flags / doesn't</th><th>Level</th><th>On</th></tr></thead><tbody></tbody></table>
@@ -213,12 +236,16 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
   $('#sec-flags').style.display='';
   $('#nav-wordflags').style.display='';
   $('#nav-grammarflags').style.display='';
+  $('#nav-generalflags').style.display='';
   $('#sec-admin').style.display='';
   $('#nav-env').style.display='';
   loadFlagsView('wf');
   loadFlagsView('gf');
+  loadFlagsView('genf');
   loadEnv();
  }
+ wlState.admin=!!h.admin;  // Word Lists 添加行可见性
+ renderWordList();
 }).catch(()=>{$('#status').textContent='Server unreachable.';});
 
 async function request(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed.');return j;}
@@ -291,7 +318,7 @@ const WL_DESC = {
  casual:'Informal/casual Malay (chat abbreviations, spoken forms, unsettled words) — in formal writing, flagged with the standard form to use instead.',
  overrides:'Admin decisions from word flags — checked before every PRPM lookup.',
 };
-const wlState = { data: null, which: 'indo_only' };
+const wlState = { data: null, which: 'indo_only', admin: false };
 async function loadWordLists(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
@@ -304,6 +331,12 @@ function renderWordList(){
  const which = wlState.which, wl = d.wordlists || {};
  const body = $('#wl-body'); body.replaceChildren();
  $('#wl-desc').textContent = WL_DESC[which] || '';
+ // 添加行：admin 专属；只在两个词表 pill 下显示（Overrides 是裁决产物，不手加）
+ const addRow = $('#wl-add');
+ if (addRow) {
+  addRow.style.display = (wlState.admin && (which==='indo_only'||which==='casual')) ? 'flex' : 'none';
+  $('#wl-add-word').placeholder = which==='indo_only' ? 'Indonesian word' : 'casual word';
+ }
  if (which === 'overrides') {
   const rows = d.overrides || [];
   if (!rows.length) { body.innerHTML = '<p class="sub" style="margin:0">No overrides yet — accept a word flag to create one.</p>'; return; }
@@ -346,6 +379,21 @@ document.querySelectorAll('#wl-pills .wf-pill').forEach(pill=>pill.onclick=()=>{
  wlState.which = pill.dataset.wl;
  renderWordList();
 });
+// 添加词（admin）：word → standard Malay，POST /api/wordlists/add
+$('#wl-add-go').onclick=async()=>{
+ const word=$('#wl-add-word').value.trim(), ms=$('#wl-add-ms').value.trim();
+ if(!word){$('#wl-add-word').focus();return;}
+ $('#wl-add-go').disabled=true;$('#wl-add-msg').textContent='Adding…';
+ try{
+  const r=await request('/api/wordlists/add',{list:wlState.which,word,ms});
+  $('#wl-add-msg').innerHTML=`<span class="ok">✓ ${esc(r.word)} added${r.pushed?' · pushed to GitHub':' (local only)'}</span>`;
+  $('#wl-add-word').value='';$('#wl-add-ms').value='';
+  await loadWordLists();  // 重新拉配置，新词即现
+ }catch(e){$('#wl-add-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+ finally{$('#wl-add-go').disabled=false;}
+};
+$('#wl-add-word').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wl-add-go').click();});
+$('#wl-add-ms').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wl-add-go').click();});
 loadWordLists();
 
 // ── proposals（普通用户提交申请；admin 查看 + 批准）──
@@ -382,24 +430,31 @@ $('#btn-env-save').onclick=async()=>{
  finally{$('#btn-env-save').disabled=false;}
 };
 
-// ── flags 审核台（word/prpm 与 grammar 两 tab 共用一个加载器）──
+// ── flags 审核台（word / grammar / general 三 tab 共用一个加载器）──
 async function loadFlagsView(which){
- const scope = which === 'wf' ? 'prpm' : 'grammar';
+ // scope 严格匹配：general 只进自己的 tab；word/grammar tab 绝不渲染
+ // general（占位符 [flag:general:*] 已规范化，靠 scope 字段区分）
+ const scope = which === 'wf' ? 'prpm' : which === 'genf' ? 'general' : 'grammar';
  const msg = $(`#${which}-msg`), list = $(`#${which}-list`);
  msg.textContent='Loading…';
  try{
   const r = await fetch(API+'/api/flags/list').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  const kindFilter = which==='wf' ? (document.querySelector('.wf-pill-active')?.dataset.kind || '') : '';
+  // 注意作用域：只能读 wf 自己的 pill（Word lists tab 的 pill 也是 .wf-pill-active）
+  const kindFilter = which==='wf' ? (document.querySelector('#tab-wordflags .wf-pill-active')?.dataset.kind || '') : '';
   const all = (r.flags||[]).filter(f =>
     (f.scope === scope || (scope==='prpm' && f.scope==='legacy'))
     && (!kindFilter || f.kind === kindFilter));
-  const showClosed = which==='wf' ? $('#wf-show-closed').classList.contains('on') : $('#gf-show-closed').checked;
+  const showClosed = which==='wf' ? $('#wf-show-closed').classList.contains('on')
+                    : which==='genf' ? $('#genf-show-closed').checked
+                    : $('#gf-show-closed').checked;
   const open = all.filter(f => f.state==='open');
   const closed = all.filter(f => f.state==='closed');
   msg.innerHTML=`<span class="ok">✓ ${open.length} open · ${closed.length} closed</span>`;
   const kindLabel = { underflag: 'should be found', mismeaning: 'meaning wrong',
                       overflag: 'not a word', other: 'other' };
-  const kindBadge = k => `<span class="lvl ${k==='overflag'||k==='other'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc(kindLabel[k] || k || '?')}</span>`;
+  const kindLabelGeneral = { underflag: 'missed a problem', overflag: 'false alarm',
+                             mismeaning: 'off-target', other: 'other' };
+  const kindBadge = k => `<span class="lvl ${k==='overflag'||k==='other'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc((which==='genf'?kindLabelGeneral:kindLabel)[k] || k || '?')}</span>`;
   // 决策行（仅 word flags 的 open 条目）：status + definition 来源 + Accept/Reject
   const decideRow = f => {
     const id = `wf-d-${f.number}`;
@@ -442,6 +497,7 @@ async function loadFlagsView(which){
           <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
           <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}</span>
           <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
+          ${f.user_note && f.user_note !== '-' ? `<div style="font-size:12px;color:#526273;margin:5px 0 0">${esc(f.user_note.slice(0,300))}</div>` : ''}
         </div>`).join(''))
       : '<p class="sub" style="margin:0">No open flags.</p>')
     + (showClosed && closed.length
@@ -482,5 +538,7 @@ $('#wf-show-closed').onclick=()=>{
 };
 $('#btn-wf-load').onclick=()=>loadFlagsView('wf');
 $('#btn-gf-load').onclick=()=>loadFlagsView('gf');
+$('#btn-genf-load').onclick=()=>loadFlagsView('genf');
 $('#gf-show-closed').onchange=()=>loadFlagsView('gf');
+$('#genf-show-closed').onchange=()=>loadFlagsView('genf');
 </script></body></html>

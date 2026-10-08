@@ -14,25 +14,13 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
       id: 'bmc-prpm',
       parentId: 'bmc-root',
-      title: '📖 PRPM lookup (dictionary)',
+      title: 'Word Check',
       contexts: ['selection']
     });
     chrome.contextMenus.create({
       id: 'bmc-check',
       parentId: 'bmc-root',
-      title: '✓ Check text (evidence + rules)',
-      contexts: ['selection']
-    });
-    chrome.contextMenus.create({
-      id: 'bmc-rulebook',
-      parentId: 'bmc-root',
-      title: '📘 Rule Book (settled rules)',
-      contexts: ['selection']
-    });
-    chrome.contextMenus.create({
-      id: 'bmc-raise',
-      parentId: 'bmc-root',
-      title: '✗ Raise Error (log a mistake)',
+      title: 'Grammar Check',
       contexts: ['selection']
     });
   });
@@ -40,8 +28,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
-  const type = { 'bmc-prpm': 'context-prpm', 'bmc-check': 'context-check',
-                 'bmc-rulebook': 'context-rulebook', 'bmc-raise': 'context-raise' }[info.menuItemId];
+  const type = { 'bmc-prpm': 'context-prpm', 'bmc-check': 'context-check' }[info.menuItemId];
   if (!type) return;
   try {
     await chrome.tabs.sendMessage(tab.id, { type, text: info.selectionText || '' });

@@ -23,20 +23,26 @@
     border-bottom: 1px solid #f1f5f9;
   }
   .brand { display: flex; align-items: center; gap: 8px; }
+  /* server 状态就是 Tepat 左侧的点：绿 = 在跑，红 = 没跑（用户裁决 2026-10-08）*/
   .brand-dot {
     width: 9px; height: 9px; border-radius: 50%;
-    background: #3b82f6; box-shadow: 0 0 0 3px #dbeafe;
+    background: #ef4444; box-shadow: 0 0 0 3px #fee2e2;
+    transition: all .25s ease;
   }
+  .brand-dot.ok { background: #22c55e; box-shadow: 0 0 0 3px #dcfce7; }
   .title {
     margin: 0; font-size: 14.5px; font-weight: 700;
     color: #0f172a; letter-spacing: -0.2px;
   }
-  .status-badge {
-    font-size: 11px; font-weight: 600;
-    padding: 2.5px 7px; border-radius: 10px;
+  .head-actions { display: flex; align-items: center; gap: 4px; }
+  .head-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px;
+    border: none; background: transparent; cursor: pointer;
+    color: #64748b; transition: all .15s ease;
   }
-  .status-ok { background: #dcfce7; color: #15803d; }
-  .status-bad { background: #fee2e2; color: #b91c1c; }
+  .head-btn:hover { background: #f1f5f9; color: #0f172a; }
+  .head-btn svg { width: 15px; height: 15px; }
 
   .section-label {
     font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px;
@@ -44,97 +50,82 @@
     margin: 10px 0 6px;
   }
 
-  .menu-list {
-    display: flex; flex-direction: column; gap: 8px;
+  /* 三个 scan 动作同一个 box（用户裁决 2026-10-08）：Word/Grammar 互相独立
+     ——扫一个就清掉另一个的 highlight；Clear 只做清除。 */
+  .scan-box {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
   }
-
-  .menu-btn {
+  .scan-btn {
     display: flex; align-items: center; gap: 11px;
-    padding: 9px 12px; border-radius: 12px;
-    border: 1px solid #e2e8f0; background: #f8fafc;
+    width: 100%; padding: 10px 12px;
+    border: none; background: #fff;
     color: #1e293b; cursor: pointer; text-align: left;
-    width: 100%;
     font: inherit;
-    transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: background .15s ease;
   }
-  .menu-btn:hover {
-    background: #eff6ff; border-color: #bfdbfe;
-    transform: translateY(-1.5px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
-  }
-  .menu-btn:active { transform: scale(0.98); }
-
-  .menu-icon {
+  .scan-btn + .scan-btn { border-top: 1px solid #f1f5f9; }
+  .scan-btn:hover { background: #f8fafc; }
+  .scan-btn:active { background: #f1f5f9; }
+  .scan-ic {
     display: flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 9px;
-    font-size: 15px; flex-shrink: 0;
+    width: 26px; height: 26px; border-radius: 8px;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
   }
-  .icon-scan { background: #fee2e2; color: #dc2626; }
-  .icon-panel { background: #dbeafe; color: #2563eb; }
-  .icon-dash { background: #dcfce7; color: #16a34a; }
-  .icon-clear { background: #f1f5f9; color: #64748b; }
-
-  .menu-info { flex: 1; overflow: hidden; }
-  .menu-label { font-size: 13px; font-weight: 600; color: #0f172a; }
-  .menu-desc { font-size: 11px; color: #64748b; margin-top: 1.5px; }
-
-  .footer-hint {
-    padding-top: 10px; margin-top: 10px;
-    border-top: 1px solid #f1f5f9;
-    font-size: 11px; color: #94a3b8; line-height: 1.4;
-  }
+  .ic-word { background: #dbeafe; color: #2563eb; }
+  .ic-grammar { background: #fef3c7; color: #b45309; }
+  .ic-clear { background: #f1f5f9; color: #64748b; }
+  .scan-label { font-size: 13px; font-weight: 600; color: #0f172a; }
+  .scan-desc { font-size: 11px; color: #64748b; margin-top: 1px; }
 </style>
 </head>
 <body>
 
 <div class="head">
   <div class="brand">
-    <span class="brand-dot"></span>
+    <span class="brand-dot" id="dot"></span>
     <h3 class="title">Tepat</h3>
   </div>
-  <div id="status" class="status-badge status-bad">Connecting…</div>
+  <div class="head-actions">
+    <button id="opt-sync" class="head-btn" title="Fetch the latest rules & word lists from GitHub">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+    </button>
+    <button id="opt-open-panel" class="head-btn" title="Open the floating check panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <button id="opt-flag" class="head-btn" title="Report a subjective issue on this page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+    </button>
+    <button id="opt-open-dashboard" class="head-btn" title="Open the Tepat dashboard (server frontend)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
 </div>
 
 <div class="section-label">On this page</div>
-<div class="menu-list">
-  <button id="opt-scan-page" class="menu-btn" title="Scan the full page text and highlight suspicious words">
-    <div class="menu-icon icon-scan">🔍</div>
-    <div class="menu-info">
-      <div class="menu-label">Scan page</div>
-      <div class="menu-desc">Highlight suspicious words on this page</div>
+<div class="scan-box">
+  <button id="opt-scan-word" class="scan-btn" title="Highlight word-level signals (dictionary, word lists)">
+    <div class="scan-ic ic-word">W</div>
+    <div>
+      <div class="scan-label">Scan words</div>
+      <div class="scan-desc">Dictionary + word-list signals</div>
     </div>
   </button>
-
-  <button id="opt-open-panel" class="menu-btn" title="Open the floating check & PRPM panel">
-    <div class="menu-icon icon-panel">💬</div>
-    <div class="menu-info">
-      <div class="menu-label">Check panel</div>
-      <div class="menu-desc">Floating word lookup & PRPM window</div>
+  <button id="opt-scan-grammar" class="scan-btn" title="Highlight grammar-rule hits">
+    <div class="scan-ic ic-grammar">G</div>
+    <div>
+      <div class="scan-label">Scan grammar</div>
+      <div class="scan-desc">Rule Book grammar checks</div>
     </div>
   </button>
-
-  <button id="opt-clear-hl" class="menu-btn" title="Remove all highlights from this page">
-    <div class="menu-icon icon-clear">🧹</div>
-    <div class="menu-info">
-      <div class="menu-label">Clear highlights</div>
-      <div class="menu-desc">Remove all marks on this page</div>
+  <button id="opt-clear-hl" class="scan-btn" title="Remove all highlights from this page">
+    <div class="scan-ic ic-clear">✕</div>
+    <div>
+      <div class="scan-label">Clear highlights</div>
+      <div class="scan-desc">Remove all marks on this page</div>
     </div>
   </button>
-</div>
-
-<div class="section-label">Dashboard</div>
-<div class="menu-list">
-  <button id="opt-open-dashboard" class="menu-btn" title="Open the Tepat web dashboard (server frontend)">
-    <div class="menu-icon icon-dash">⚙️</div>
-    <div class="menu-info">
-      <div class="menu-label">Open dashboard</div>
-      <div class="menu-desc">Rules, proposals & settings (localhost:8377)</div>
-    </div>
-  </button>
-</div>
-
-<div class="footer-hint">
-  <b>Alt+S</b> — check the selected text · <b>Alt+Shift+S</b> — quick check
 </div>
 
 <script src="popup.js"></script>

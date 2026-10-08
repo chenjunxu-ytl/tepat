@@ -1,7 +1,7 @@
 /* content.js — Tepat content script
  *
  * 交互模型：
- *  1. 右键菜单直达功能（PRPM 直查 / Semak 语料规则 / Raise Error）
+ *  1. 右键菜单直达功能（Word 词存在性 / Grammar 规则检查）
  *  2. 弹窗支持：
  *     - 点击外部区域自动关闭
  *     - 顶部拖拽移动
@@ -32,7 +32,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
   });
 
   let panel = null;
-  let currentMode = 'prpm'; // 'prpm' | 'check' | 'raise'
+  let currentMode = 'prpm'; // 'prpm' | 'check'
   let isPinned = false;
   let isAutoGrab = false;
   let lastGrabbedText = '';
@@ -222,8 +222,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
       <div class="bmc-search-bar">
         <input type="text" class="bmc-search-input" placeholder="Type a word to check..." value="${esc(initialQuery)}">
         <div class="bmc-search-btns">
-          <button class="bmc-pill-btn bmc-pill-prpm" title="Look up in the PRPM dictionary">PRPM</button>
-          <button class="bmc-pill-btn bmc-pill-scan" title="Run the grammar rule check">Check</button>
+          <button class="bmc-pill-btn bmc-pill-prpm" title="Word Check">Word</button>
+          <button class="bmc-pill-btn bmc-pill-scan" title="Grammar Check">Grammar</button>
         </div>
       </div>
       <div class="bmc-body"></div>
@@ -388,6 +388,24 @@ const safeStorageSet = (obj) => new Promise((res) => {
     const groups = { hit: [], miss: [], warn: [], pending: new Set(words) };
 
     const b = panelBody();
+    // 词表身份（用户裁决 2026-10-08）：indo/casual 词表给 chip 加身份边色。
+    // 词表集从 /api/wordlists 拉一次（面板生命周期内缓存）；拉不到就无身份色。
+    let wlIdentities = null;
+    const fetchIdentities = async () => {
+      if (wlIdentities !== null) return wlIdentities;
+      try {
+        const r = await fetch(`${API}/api/wordlists`).then(x => x.json());
+        if (r && r.indo_only && r.casual) {
+          const map = {};
+          for (const w of r.indo_only) (map[w] ||= []).push('bmc-chip-indo');
+          for (const w of r.casual) (map[w] ||= []).push('bmc-chip-casual');
+          wlIdentities = map;
+        } else {
+          wlIdentities = {};
+        }
+      } catch { wlIdentities = {}; }
+      return wlIdentities;
+    };
     if (dualView) {
       b.innerHTML = `
         <div class="bmc-prpm-summary" id="bmc-prpm-summary">
@@ -408,9 +426,23 @@ const safeStorageSet = (obj) => new Promise((res) => {
           <div data-group="hit"></div>
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
-          `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span></span>`).join('')}</div>`;
-      // tab 切换
+          `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span></span>`).join('')}</div>
+        <div class="bmc-chip-legend">background = PRPM result<i style="background:#dcfce7"></i>found<i style="background:#fee2e2"></i>not found<i style="background:#fef9c3"></i>review · border<i style="border:1.5px solid #9333ea"></i>Indonesian-only<i style="border:1.5px solid #2563eb"></i>casual</div>`;
+      // 词表身份边色：拉到后一次性打上
+      fetchIdentities().then(idMap => {
+        for (const [w, cls] of Object.entries(idMap)) {
+          if (!words.includes(w)) continue;
+          b.querySelectorAll(`.bmc-chip[data-w="${CSS.escape(w)}"]`)
+            .forEach(el => el.classList.add(...cls));
+        }
+      });
+      // tab 切换（⟳ 不算 tab：它是 action button，不参与 active 态/视图切换）
       b.querySelector('#bmc-prpm-summary').addEventListener('click', e => {
+        const syncHit = e.target.closest('#bmc-flag-sync');
+        if (syncHit) {
+          syncBtn ? syncBtn.click() : null;  // 走下面绑定好的 sync 逻辑
+          return;
+        }
         const tabBtn = e.target.closest('.bmc-tab-btn');
         if (tabBtn) {
           b.querySelectorAll('.bmc-tab-btn').forEach(t =>
@@ -489,10 +521,13 @@ const safeStorageSet = (obj) => new Promise((res) => {
       };
       // 面板打开即对账（静默，失败不打扰）
       syncFlags();
-      // 手动 ⟳：带反馈
+      // 手动 ⟳：带反馈。旋转动画（用户裁决 2026-10-08）：加速转一圈再减速
+      // 停下——CSS keyframes 模拟 ease-out 的 360°。
       const syncBtn = b.querySelector('#bmc-flag-sync');
       if (syncBtn) syncBtn.onclick = async () => {
-        syncBtn.textContent = '…';
+        syncBtn.classList.remove('bmc-sync-spin');
+        void syncBtn.offsetWidth;  // restart animation
+        syncBtn.classList.add('bmc-sync-spin');
         const r = await syncFlags();
         syncBtn.textContent = '⟳';
         syncBtn.title = r.ok
@@ -900,70 +935,14 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }
   });
 
-  // ── Raise Error 表单 ──
-  function showRaiseForm(text) {
-    panel = mkPanel('Raise Error', '', 'raise');
-    // 隐藏搜索栏，保留反馈表单
-    panel.querySelector('.bmc-search-bar').style.display = 'none';
-
-    panelBody().innerHTML = `
-      <div class="bmc-raise-form">
-        <label class="bmc-form-label">Marked text
-          <div class="bmc-sel-preview">${esc(text.slice(0, 300))}${text.length > 300 ? '…' : ''}</div>
-        </label>
-        <label class="bmc-form-label">Error type
-          <select id="bmc-type" class="bmc-input-select">
-            <option value="spelling">Spelling</option>
-            <option value="grammar">Grammar</option>
-            <option value="terminology">Terminology</option>
-            <option value="collocation">Collocation</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-        <label class="bmc-form-label">Explanation (optional)
-          <textarea id="bmc-why" class="bmc-input-textarea" rows="3" placeholder="Why is this wrong? / What is the correct form?"></textarea>
-        </label>
-        <div class="bmc-row">
-          <button id="bmc-save" class="bmc-btn-primary">Save</button>
-          <button id="bmc-cancel" class="bmc-btn-secondary">Cancel</button>
-        </div>
-        <div id="bmc-msg" class="bmc-msg"></div>
-      </div>
-    `;
-
-    panel.querySelector('#bmc-cancel').onclick = removeUI;
-    panel.querySelector('#bmc-save').onclick = () => {
-      const entry = {
-        ts: new Date().toISOString(),
-        url: location.href.slice(0, 300),
-        text,
-        context: contextAround(text),
-        type: panel.querySelector('#bmc-type').value,
-        why: panel.querySelector('#bmc-why').value.trim(),
-      };
-      safeStorageGet({ log: [] }).then(async (s) => {
-        if (!s) { panel.querySelector('#bmc-msg').textContent = '✗ extension reloaded — reopen this panel'; return; }
-        const log = (s.log || []).concat(entry);
-        await safeStorageSet({ log });
-        panel.querySelector('#bmc-msg').textContent = `✓ Saved (${log.length} entries in log)`;
-        setTimeout(removeUI, 1200);
-      });
-    };
-  }
-
-  function contextAround(needle, radius = 120) {
-    const body = document.body.innerText || '';
-    const i = body.indexOf(needle);
-    if (i < 0) return '';
-    return body.slice(Math.max(0, i - radius), i + needle.length + radius);
-  }
-
   // ── 全页扫描高亮 (Imbas Seluruh Halaman) ──
   let activeHighlights = [];
 
-  function clearPageHighlights() {
+  // kind 缺省 = 全清；给 kind（word/grammar）= 只清那一种的 highlight。
+  function clearPageHighlights(kind) {
     const allHls = document.querySelectorAll('.bmc-hl');
     allHls.forEach(span => {
+      if (kind && !span.classList.contains('bmc-hl-' + kind)) return;
       const parent = span.parentNode;
       if (parent) {
         const textNode = document.createTextNode(span.textContent);
@@ -971,7 +950,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
         parent.normalize(); // 合并相邻文本节点，彻底恢复原始 DOM
       }
     });
-    activeHighlights = [];
+    activeHighlights = activeHighlights.filter(s =>
+      !(kind && s.classList.contains('bmc-hl-' + kind)) && s.isConnected);
     document.querySelector('.bmc-toast')?.remove();
   }
 
@@ -995,9 +975,12 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }
   }
 
-  async function scanFullPage() {
-    clearPageHighlights();
-    showToast('Sedang mengimbas teks seluruh halaman…', 0);
+  // 全页扫描（用户裁决 2026-10-08）：kind = 'word'（词级：词典/词表信号）或
+  // 'grammar'（规则级：Rule Book 语法命中）。两种互相独立——扫一种就清掉
+  // 另一种的 highlight（clearPageHighlights 按 kind 清理，保留另一种）。
+  async function scanFullPage(kind = 'word') {
+    clearPageHighlights(kind === 'word' ? 'grammar' : 'word');
+    showToast(kind === 'word' ? 'Scanning word signals…' : 'Scanning grammar rules…', 0);
 
     // 收集页面文本节点（放宽限制，只要含字母或符号且非脚本/系统控件即可）
     const walker = document.createTreeWalker(
@@ -1038,19 +1021,26 @@ const safeStorageSet = (obj) => new Promise((res) => {
     if (!fullText.trim()) { showToast('No suitable text found.',3000);return; }
     let r;
     try {
-      r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fullText})}).then(x=>x.json());
-      if (r.error || r.engine!=='evidence-v2') throw new Error(r.error || 'Versi Tepat perlu dikemas kini.');
+      // word 扫描走 /api/scan-words（不依赖 evidence.sqlite，词表信号即可）；
+      // grammar 走完整 /api/scan 后在本地过滤 grammar 类别。
+      const ep = kind === 'word' ? '/api/scan-words' : '/api/scan';
+      r=await fetch(`${API}${ep}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fullText})}).then(x=>x.json());
+      if (r.error) throw new Error(r.error);
     } catch (e) { showToast(esc(e.message || 'The check did not complete.'),4000);return; }
+    // grammar 模式本地过滤规则命中；word 模式 server 已只回词级类别
+    const isWordCat = c => c === 'terminology' || c === 'register' || c === 'spelling';
+    const issues = (r.issues || []).filter(i =>
+      kind === 'word' ? isWordCat(i.category) : i.category === 'grammar');
     let hitCount=0;
     for (const {node,start,raw} of nodes) {
       if (!node.parentNode) continue;
-      const parts=TepatResults.segments(raw,r.issues || [],start);
+      const parts=TepatResults.segments(raw,issues,start);
       if (!parts.some(p=>p.level)) continue;
       const frag=document.createDocumentFragment();
       for (const part of parts) {
         if (!part.level) {frag.appendChild(document.createTextNode(part.text));continue;}
         const span=document.createElement('span');
-        span.className='bmc-hl '+({error:'bmc-hl-err',warning:'bmc-hl-warn',info:'bmc-hl-info'}[part.level]);
+        span.className='bmc-hl bmc-hl-'+kind+' '+({error:'bmc-hl-err',warning:'bmc-hl-warn',info:'bmc-hl-info'}[part.level]);
         span.textContent=part.text;
         span.title=part.notes.join(' · ');
         span.onclick=e=>{e.stopPropagation();runCheck(part.text);};
@@ -1060,83 +1050,55 @@ const safeStorageSet = (obj) => new Promise((res) => {
       if (node.nodeValue.length>raw.length) frag.appendChild(document.createTextNode(node.nodeValue.slice(raw.length)));
       node.parentNode.replaceChild(frag,node);
     }
-    showToast(`Scanned up to 30,000 characters: <b>${hitCount}</b> passages marked. Facts are not checked.
+    showToast(`<b>${kind === 'word' ? 'Word' : 'Grammar'}</b> scan: <b>${hitCount}</b> passages marked. Facts are not checked.
       <button id="bmc-btn-clear-hl" style="margin-left:8px;padding:2px 8px;">Clear marks</button>`,12000);
 
     setTimeout(() => {
       const btn = document.querySelector('#bmc-btn-clear-hl');
-      if (btn) btn.onclick = () => clearPageHighlights();
+      if (btn) btn.onclick = () => clearPageHighlights(kind);
     }, 50);
   }
 
-  // Rule Book 检查（用户裁决 2026-10-08）：计算全部下沉 server——插件不再
-  // 本地跑正则（旧 rules-pack 引擎已废），直接调 /api/scan 渲染结果。
-  // 规则命中带 origin（规则 ID），grammar flag 靠它定位规则。
-  async function runRuleBook(text, shouldCreatePanel = true) {
-    const cleanText = sanitizeText(text);
-    if (shouldCreatePanel || !panel) {
-      panel = mkPanel('Rule Book', cleanText, 'check');
-    } else {
-      currentMode = 'check';
-      panel.querySelector('.bmc-title-text').textContent = 'Rule Book';
-      panel.querySelector('.bmc-search-input').value = cleanText;
-    }
-    panelBody().innerHTML = cuteLoader('Menganalisis teks…');
-    let r;
-    try {
-      r = await fetch(`${API}/api/scan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: cleanText })
-      }).then(x => x.json());
-      if (r.error) throw new Error(r.error);
-    } catch (e) {
-      panelBody().innerHTML = `
-        <div class="bmc-err-box">
-          <div class="bmc-err-title">Tepat.exe is not running</div>
-          <div class="bmc-err-desc">Make sure the Tepat app is running on this computer (localhost:${PORT}).</div>
-        </div>`;
-      return;
-    }
-    // 只呈现规则命中（grammar 类别）；词级/证据通道由其他面板负责
-    const hits = (r.issues || []).filter(i => i.category === 'grammar');
-    const errors = hits.filter(f => f.level === 'error');
-    const warns = hits.filter(f => f.level === 'warning');
-    const notes = hits.filter(f => f.level === 'info');
-    const itemHtml = (f, kind) => {
-      const dot = { error: '🔴', warn: '🟠', note: '🟡' }[kind];
-      const label = { error: 'error', warn: 'needs context — hover for nuance', note: 'reminder' }[kind];
-      const ruleId = (f.origin || '').split('-').slice(0, 2).join('-');
-      const tip = TepatResults.escapeHtml(
-        kind === 'warn'
-          ? `${ruleId}: ${f.note}\nRegex cannot judge context — this is a reminder, not a verdict. See Rule Book ${ruleId} before deciding.`
-          : `${ruleId}: ${f.note}`);
-      return `<div class="bmc-item bmc-item-${kind} bmc-tip" data-tip="${tip.replace(/"/g, '&quot;').replace(/\n/g, ' ')}" data-rule-flag="${TepatResults.escapeHtml(ruleId)}" data-rule-span="${TepatResults.escapeHtml(f.span)}">
-           <div class="bmc-item-main">${dot} <b>${TepatResults.escapeHtml(f.span)}</b>
-             <span class="bmc-rule-id">[${TepatResults.escapeHtml(ruleId)}]</span><span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this rule hit">⚑</span></div>
-           <div class="bmc-info-note">${TepatResults.escapeHtml(f.note)} · ${label}</div>
-         </div>`;
+  // general flag 弹窗（用户裁决 2026-10-08）：popup ⚑ 入口，报告本页的主观
+  // 问题（假阳性/漏报/建议）——不属于某个词或某条规则。scope=general，
+  // Issue title 占位符 [flag:general:kind]，与词/规则级 flag 靠前缀区分。
+  function openGeneralFlagDialog() {
+    document.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
+    const dlg = document.createElement('div');
+    dlg.className = 'bmc-flag-dialog';
+    dlg.innerHTML = `
+      <div class="bmc-flag-title">⚑ Report an issue on this page</div>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-genk" value="overflag"> Something was flagged that shouldn't be</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-genk" value="underflag"> A problem was missed</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-genk" value="other"> Other / suggestion</label>
+      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="What happened? (a short description helps)"></textarea>
+      <div class="bmc-flag-row">
+        <button class="bmc-flag-go" disabled>Submit</button>
+        <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
+      </div>`;
+    document.body.appendChild(dlg);
+    const go = dlg.querySelector('.bmc-flag-go');
+    dlg.querySelectorAll('input[name="bmc-genk"]').forEach(r =>
+      r.addEventListener('change', () => go.disabled = false));
+    dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+    go.onclick = async () => {
+      const kind = dlg.querySelector('input[name="bmc-genk"]:checked')?.value;
+      const note = dlg.querySelector('.bmc-flag-note').value.trim();
+      if (!kind) return;
+      go.disabled = true; go.textContent = 'Submitting…';
+      try {
+        const r = await fetch(`${API}/api/flag`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word: 'page', kind, note, scope: 'general' })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'flag failed');
+        dlg.remove();
+        showToast(`✓ Reported — issue opened`, 4000);
+      } catch (err) {
+        go.disabled = false; go.textContent = `✗ ${err.message}`;
+      }
     };
-    const section = (title, arr, kind) => arr.length
-      ? `<div class="bmc-sec-title">${title} (${arr.length})</div>` + arr.map(f => itemHtml(f, kind)).join('')
-      : '';
-    panelBody().innerHTML = (errors.length || warns.length || notes.length)
-      ? section('Errors', errors, 'error')
-        + section('Needs context', warns, 'warn')
-        + section('Reminders', notes, 'note')
-        + `<div class="bmc-foot">${errors.length} errors · ${warns.length} need context · ${notes.length} reminders · checked by server</div>`
-      : `<div class="bmc-clean">✓ No findings according to the Rule Book.</div>`;
-
-    // 规则命中的 flag（scope=grammar）：点 ⚑ 弹选择窗（同词级 flag 的三 kind）
-    panelBody().querySelectorAll('[data-rule-flag] .bmc-att-flag').forEach(ic => {
-      ic.addEventListener('click', e => {
-        e.stopPropagation();
-        const item = ic.closest('[data-rule-flag]');
-        const rule = item.dataset.ruleFlag;
-        const span = item.dataset.ruleSpan;
-        openGrammarFlagDialog(rule, span, item);
-      });
-    });
   }
 
   // grammar flag 弹窗：三 kind + optional note + submit → Issue [flag:grammar:kind]
@@ -1189,12 +1151,6 @@ const safeStorageSet = (obj) => new Promise((res) => {
     } else if (m.type === 'context-check') {
       runCheck(m.text || '');
       sendResponse({ ok: true });
-    } else if (m.type === 'context-rulebook') {
-      runRuleBook(m.text || '');
-      sendResponse({ ok: true });
-    } else if (m.type === 'context-raise') {
-      showRaiseForm(m.text || '');
-      sendResponse({ ok: true });
     } else if (m.type === 'check-selection') {
       const text = getPageSelection();
       if (text && text.length >= 2) {
@@ -1223,8 +1179,11 @@ const safeStorageSet = (obj) => new Promise((res) => {
         openBlankPanel();
       }
       sendResponse({ ok: true });
-    } else if (m.type === 'scan-full-page') {
-      scanFullPage();
+    } else if (m.type === 'scan-page') {
+      scanFullPage(m.kind || 'word');
+      sendResponse({ ok: true });
+    } else if (m.type === 'open-general-flag') {
+      openGeneralFlagDialog();
       sendResponse({ ok: true });
     } else if (m.type === 'clear-highlights') {
       clearPageHighlights();

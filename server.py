@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from checker import Checker
+from checker import Checker, utf16_offset
 from evidence import EvidenceStore
 from text_units import normalize
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -237,6 +237,7 @@ def _gh_open_proposal_issue(rule: dict, regex_valid: bool) -> str:
 FLAG_SCOPES = {
     "prpm":    "word existence / meaning from the PRPM panel",
     "grammar": "rule hit from the Rule Book / grammar check",
+    "general": "page-level subjective issue from the popup flag (not tied to a word/rule)",
 }
 FLAG_KINDS = {
     "underflag":   "should have been flagged but was not (missed / passed wrongly)",
@@ -438,6 +439,56 @@ def load_words() -> int:
 
 def word_exists(w: str) -> bool:
     return bool(_checker and _checker.store.lexical(normalize(w))["state"] != "unknown")
+
+
+# 无 evidence 的词级扫描（用户裁决 2026-10-08）：evidence.sqlite 删除后
+# /api/scan 直接 503，但词表信号（indo/casual）只需要 indo_words.json +
+# 分词器——不依赖任何数据库。全页 Scan words 走这里；有 evidence 时
+# spelling/cold 通道仍由 /api/scan 提供（面板查询用）。
+def scan_words_lightweight(text: str, register: str = "formal") -> dict:
+    from text_units import tokens, sentences
+    try:
+        indo = json.loads(Path(_config_path("indo_words.json")).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        indo = {}
+    if "indo_only" in indo and "casual" in indo:
+        indo_map = {w: (v.get("ms", "") if isinstance(v, dict) else "")
+                    for w, v in indo["indo_only"].items()}
+        casual_map = {w: (v.get("ms", "") if isinstance(v, dict) else "")
+                      for w, v in indo["casual"].items()}
+    else:  # 旧结构兼容
+        legacy_sug = indo.get("suggestions", {})
+        indo_map = {w: legacy_sug.get(w, "") for w in indo.get("indo_only_words", [])}
+        casual_map = {w: "" for w in indo.get("uncertain_words", [])}
+        casual_map.update({w: v.get("expansion", "")
+                           for w, v in indo.get("register_words", {}).items()})
+        casual_map.update({w: "" for w in indo.get("context_words", {})})
+    issues = []
+    # 句界跟踪：句首大写不是专名（checker 的 named 语义）——只有非句首的
+    # 大写词才算专有名词跳过。
+    from text_units import sentences
+    sent_starts = {s for s, _e, _t in sentences(text[:30000])}
+    for t in tokens(text[:30000]):
+        named = t.raw[:1].isupper() and t.start not in sent_starts
+        acronym = t.raw.isupper() and len(t.raw) > 1
+        if t.word in indo_map and not named and not acronym:
+            sug = indo_map.get(t.word, "")
+            issues.append({"category": "terminology", "level": "info" if named else "warning",
+                           "start": utf16_offset(text, t.start), "end": utf16_offset(text, t.end),
+                           "span": t.raw, "note": "Bentuk calon bahasa Indonesia; "
+                           "semak makna dan laras sebelum menggantikannya.",
+                           "origin": f"indo:{t.word}", "suggestion": sug})
+        elif t.word in casual_map and not named and not acronym and register == "formal":
+            ms = casual_map.get(t.word, "")
+            issues.append({"category": "register",
+                           "level": "warning" if ms else "info",
+                           "start": utf16_offset(text, t.start), "end": utf16_offset(text, t.end),
+                           "span": t.raw, "note": "Bentuk tidak formal; pertimbangkan "
+                           "bentuk standard dalam penulisan formal." if ms else
+                           "Penggunaan ini memerlukan konteks.",
+                           "origin": f"casual:{t.word}", "suggestion": ms})
+    return {"engine": "wordlists-v1", "register": register,
+            "issues": issues, "total_words": len(issues)}
 
 
 def _load_rules_json() -> dict | None:
@@ -646,15 +697,18 @@ def prpm_lookup(word: str) -> dict:
         if status in {"hit", "miss", "warn"}:
             cache_put(word, status, definition)
         time.sleep(0.2)  # 槽内小间隔：3 并发 × 0.2s ≈ 均匀 15 req/s 以下
-        if status in {"miss", "warn"}:
-            # 剥 partikel/akhiran/awalan 后重查词根（PRPM 不收组合形）
-            root_hit = _prpm_root_retry(word)
-            if root_hit:
-                return {"word": word, "url": url, "status": "hit",
-                        "definition": root_hit["definition"],
-                        "root": root_hit["root"],
-                        "root_note": f"entri untuk akar kata '{root_hit['root']}' (bentuk penuh = {root_hit['root']} + imbuhan)"}
-        return {"word": word, "url": url, **parsed}
+    # 词根重查在信号量外（用户裁决 2026-10-08，77/258 卡死根因）：root retry
+    # 递归调用 prpm_lookup，若在槽内递归，外层持槽等内层、内层排队等槽，
+    # 3 个并发递归即占满全部槽 → 永久死锁。
+    if status in {"miss", "warn"}:
+        # 剥 partikel/akhiran/awalan 后重查词根（PRPM 不收组合形）
+        root_hit = _prpm_root_retry(word)
+        if root_hit:
+            return {"word": word, "url": url, "status": "hit",
+                    "definition": root_hit["definition"],
+                    "root": root_hit["root"],
+                    "root_note": f"entri untuk akar kata '{root_hit['root']}' (bentuk penuh = {root_hit['root']} + imbuhan)"}
+    return {"word": word, "url": url, **parsed}
 
 
 _PARTICLES_FOR_PRPM = ("nya", "lah", "kah", "tah", "pun", "ku", "mu")
@@ -701,14 +755,30 @@ def _strip_particles_suffix(word: str) -> list[str]:
     return ordered[:6]
 
 
+_PRPM_RETRY_DEPTH = threading.local()
+
+
 def _prpm_root_retry(word: str) -> dict | None:
     """miss 后的词根重查。四条修复规则（实测 PRPM 真值标定 2026-10-07）：
     A. 连字符词拆分重查（litium-ion → litium HIT + ion HIT = 组件全在）
     B. 英文复数 s 剥离（cycles → cycle）
     C. FUNCTION_WORD 短路 hit 不作依据（keadaannya→adaannya→ada 假链）——
        例外：ke-X-an 构词时 X 是虚词合法（keadaannya = ke+ada+an）
-    D. 常规剥离链按直接 stem 优先"""
+    D. 常规剥离链按直接 stem 优先
+    递归深度上限 2（77/258 卡死的另一半根因：词根的词根的词根…候选爆炸；
+    外层死锁修掉后仍需防止一环 miss 触发整棵剥离树递归）。"""
     from checker import FUNCTION_WORDS
+    depth = getattr(_PRPM_RETRY_DEPTH, "depth", 0)
+    if depth >= 2:
+        return None
+    _PRPM_RETRY_DEPTH.depth = depth + 1
+    try:
+        return _prpm_root_retry_inner(word, FUNCTION_WORDS)
+    finally:
+        _PRPM_RETRY_DEPTH.depth = depth
+
+
+def _prpm_root_retry_inner(word: str, FUNCTION_WORDS) -> dict | None:
     # A. 连字符词：组件全部 hit 才算
     if "-" in word and len(word) > 4:
         parts = [p for p in word.split("-") if len(p) >= 2]
@@ -921,6 +991,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(403, {"error": "admin machine required"})
                 return
             self._json(200, _load_word_overrides())
+        elif self.path == "/api/wordlists":
+            # 词表词集（extension Word 面板 chip 身份色用）：只给词列表，
+            # 不带 mapping，轻量免 token。新旧结构都读。
+            try:
+                indo = json.loads(Path(_config_path("indo_words.json")).read_text(
+                    encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                self._json(200, {"indo_only": [], "casual": []})
+                return
+            if "indo_only" in indo and "casual" in indo:
+                self._json(200, {"indo_only": sorted(indo["indo_only"]),
+                                 "casual": sorted(indo["casual"])})
+            else:
+                self._json(200, {
+                    "indo_only": sorted(indo.get("indo_only_words", [])),
+                    "casual": sorted(set(indo.get("uncertain_words", []))
+                                     | set(indo.get("register_words", {}))
+                                     | set(indo.get("context_words", {})))})
         elif self.path == "/api/flag/sync":
             # flag 对账（用户裁决 2026-10-08）：返回已关闭的 word-flag Issue URL 集。
             # 前端拿它清本地 flaggedWords 里的死记录（云端已 close → 本地撤标记）。
@@ -955,7 +1043,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     with _rq.urlopen(req, timeout=15) as resp:
                         for it in json.loads(resp.read()):
-                            m = re.match(r"\[flag:(prpm|grammar):(underflag|mismeaning|overflag)\]\s*(.+)",
+                            m = re.match(r"\[flag:(prpm|grammar|general):(underflag|mismeaning|overflag|other)\]\s*(.+)",
                                          it.get("title", ""))
                             body = it.get("body") or ""
                             def body_field(k):
@@ -1018,6 +1106,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": str(e)})
             except (RuntimeError, sqlite3.Error):
                 self._json(503, {"error": "Evidence unavailable; scan was not completed"})
+        elif self.path == "/api/scan-words":
+            # 词级全页扫描：不依赖 evidence.sqlite（词表信号即可用）。
+            # 有 evidence 时升级用完整 scan 的词级类别。
+            text = str(req.get("text") or "")
+            register = str(req.get("register") or "formal")
+            if _checker is not None:
+                try:
+                    r = scan(text, register)
+                    word_cats = {"terminology", "register", "spelling"}
+                    r = {**r, "engine": "evidence-v2-words",
+                         "issues": [i for i in r.get("issues", []) if i["category"] in word_cats]}
+                    self._json(200, r)
+                    return
+                except (RuntimeError, sqlite3.Error):
+                    pass  # evidence 在但查询失败 → 落到轻量路径
+            self._json(200, scan_words_lightweight(text, register))
         elif self.path == "/api/prpm":
             raw_word = str(req.get("word") or "").strip().lower()
             word = re.sub(r"[\u00ad\u200b-\u200d\ufeff]", "", raw_word).strip("-'")
@@ -1096,9 +1200,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "entry_id": entry_id, "enabled": bool(enabled),
                              "active_rules": len(_checker.rules) if _checker else 0})
         elif self.path == "/api/sync":
-            if not IS_ADMIN_MACHINE:
-                self._json(403, {"error": "admin machine required"})
-                return
+            # 手动拉 GitHub 规则文件：全员可用（用户裁决 2026-10-08）——
+            # 5 分钟自动同步本来就不分机器跑，手动触发没有理由限制；
+            # 拉的是公开 repo，无权限风险。push 类操作才限 admin。
             try:
                 results = _gh_sync_rules()
             except Exception as e:  # noqa: BLE001
@@ -1180,12 +1284,33 @@ class Handler(BaseHTTPRequestHandler):
                              "github_error": gh_error})
         elif self.path == "/api/flag":
             # 词级 flag（用户裁决 2026-10-08）：免 token 反馈通道。
-            # scope 区分 prpm（PRPM 面板）与 grammar（Rule Book 规则命中）；
-            # kind 三选一由用户在小弹窗选；状态/定义以 server 查询为准。
+            # scope 区分 prpm（PRPM 面板）/ grammar（规则命中）/ general
+            # （popup ⚑ 页面级主观问题）；kind 由用户在小弹窗选。
             word = str(req.get("word") or "").strip().lower()[:80]
             kind = str(req.get("kind") or "").strip()
             scope = str(req.get("scope") or "prpm").strip()
             rule_id = str(req.get("rule") or "").strip()[:40]
+            if scope == "general":
+                # general 不绑词/规则：note 是主体，不查 PRPM
+                if not word:
+                    word = "page"
+                if kind not in FLAG_KINDS:
+                    self._json(400, {"error": "kind must be underflag/mismeaning/overflag/other"})
+                    return
+                note = str(req.get("note") or "").strip()[:500]
+                if not note:
+                    self._json(400, {"error": "a short explanation is required for general flags"})
+                    return
+                try:
+                    gh_url = _gh_open_word_flag(word, scope, kind, "-",
+                                                "-", note, rule_id="")
+                except RuntimeError as e:
+                    self._json(502, {"error": f"GitHub issue failed: {e}"})
+                    return
+                _log(f"[flag] general/{kind} -> {gh_url}")
+                self._json(200, {"ok": True, "kind": kind, "scope": scope,
+                                 "github_issue": gh_url})
+                return
             if not word:
                 self._json(400, {"error": "word required"})
                 return
@@ -1212,6 +1337,56 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "word": word, "status": status,
                              "kind": kind, "scope": scope,
                              "github_issue": gh_url})
+        elif self.path == "/api/wordlists/add":
+            # Word Lists tab 添加词（admin 专属，用户裁决 2026-10-08）：两个
+            # field——原词 + 标准马来文。写 indo_words.json（APPDATA）→ 热重载
+            # → auto-push GitHub（其他机器 5 分钟内拉到）。list 取
+            # indo_only|casual；ms 可空（没对应就留空）。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            lst = str(req.get("list") or "").strip()
+            word = str(req.get("word") or "").strip().lower()[:80]
+            ms = str(req.get("ms") or "").strip()[:120]
+            if lst not in ("indo_only", "casual"):
+                self._json(400, {"error": "list must be indo_only or casual"})
+                return
+            if not word or " " in word:
+                self._json(400, {"error": "single word required"})
+                return
+            path = Path(_config_path("indo_words.json"))
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as e:
+                self._json(500, {"error": f"indo_words.json unreadable: {e}"})
+                return
+            if word in data.get(lst, {}):
+                self._json(409, {"error": f"'{word}' already in {lst} "
+                                          f"(ms: {data[lst][word].get('ms', '')!r})"})
+                return
+            other = "casual" if lst == "indo_only" else "indo_only"
+            if word in data.get(other, {}):
+                self._json(409, {"error": f"'{word}' already in {other}"})
+                return
+            data.setdefault(lst, {})[word] = {"ms": ms}
+            data[lst] = {w: data[lst][w] for w in sorted(data[lst])}
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8")
+            if _checker is not None:  # 热重载：加了就生效
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[wordlists] hot-reload failed: {e!r}")
+            pushed = None
+            try:  # auto-push：让其他机器自动拉到（失败不阻塞本地添加）
+                pushed = _gh_push_file("indo_words.json",
+                                       path.read_text(encoding="utf-8"),
+                                       f"word lists: add {word!r} to {lst}")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[wordlists] GitHub push failed: {e!r}")
+            _log(f"[wordlists] {lst} += {word!r} (ms={ms!r}) pushed={bool(pushed)}")
+            self._json(200, {"ok": True, "list": lst, "word": word, "ms": ms,
+                             "pushed": bool(pushed)})
         elif self.path == "/api/flags/decide":
             # Word flag 审核决议（用户裁决 2026-10-08，admin 专属）：
             #   accept: status 由 flag kind 推导（underflag → 该词存在 hit；

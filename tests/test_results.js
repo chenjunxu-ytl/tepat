@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {html,segments}=require('./extension/results.js');
+const {html,segments}=require('../extension/results.js');
 let parts=segments('Dr. Ali dan dr', [{start:12,end:14,level:'warning',note:'SMS'}]);
 assert.equal(parts.filter(p=>p.level).map(p=>p.text).join(''),'dr');
 parts=segments('😀 dokter', [{start:3,end:9,level:'warning',note:'ID'}]);
@@ -17,6 +17,5 @@ parts=segments('Ali ialah adalah doktor.',[{...reminder,start:4,end:16},{start:4
 assert.equal(parts.find(p=>p.text==='ialah adalah').level,'error');
 const output=html({engine:'evidence-v2',issues:[{level:'warning',category:'spelling',span:'<script>x</script>',note:'"onclick=x',suggestion:'a&b'}],coverage:{},total_words:1});
 assert(!output.includes('<script>'));assert(output.includes('&lt;script&gt;'));
-assert(html({engine:'evidence-v2',issues:[]}).includes('Fakta: belum disemak'));
-assert(html({engine:'evidence-v2',issues:[]}).includes('Ketepatan seluruh ayat'));
+assert(html({engine:'evidence-v2',issues:[]}).includes('Whole-sentence accuracy and facts remain unverified'));
 console.log('Result rendering / UTF-16 / occurrence / overlapping span checks passed');
