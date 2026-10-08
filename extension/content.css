@@ -379,7 +379,6 @@
 .bmc-item-miss {
   background: #fff5f5;
   border-color: #fecaca;
-  border-left: 3.5px solid #ef4444;
 }
 
 .bmc-word-err {
@@ -435,7 +434,6 @@
 .bmc-item-warn {
   background: #fffbeb;
   border-color: #fed7aa;
-  border-left-color: #f59e0b;
 }
 
 .bmc-warn-note {
@@ -801,12 +799,14 @@
 }
 .bmc-chip-w{ }
 .bmc-chip-flag-ic{
-  font-size: 11px; opacity: 0; transition: opacity 0.15s;
-  padding: 0 2px; border-radius: 6px;
+  font-size: 11px; opacity: 0.55; padding: 0 2px; border-radius: 6px;
+  cursor: pointer; transition: transform 0.12s;
 }
-.bmc-chip:hover .bmc-chip-flag-ic{ opacity: 0.55; }
-.bmc-chip-flag-ic:hover{ opacity: 1 !important; transform: scale(1.15); }
-.bmc-chip-flag-ic.done{ opacity: 0.9 !important; color: #d97706; }
+.bmc-chip-flag-ic:hover{ opacity: 1; transform: scale(1.2); }
+.bmc-chip-flag-ic.done{ opacity: 0.9; color: #d97706; }
+/* attention box 内的 flag：常驻渲染，靠右 */
+.bmc-item-main{ position: relative; }
+.bmc-att-flag{ margin-left: auto; }
 .bmc-chip-pending{ opacity: .55; }
 .bmc-chip-hit{ background: #dcfce7; color: #166534; }
 .bmc-chip-miss{ background: #fee2e2; color: #b91c1c; font-weight: 700; }

@@ -387,15 +387,15 @@
           <span class="bmc-tab-btn" data-view="attention" title="Show problem words">⚠</span>
         </div>
         <div id="bmc-prpm-attention" style="display:none">
-          <div class="bmc-att-head bmc-att-hit-head" data-att="hit" style="${words.length <= 5 ? '' : 'display:none'}">✓ Found <span class="bmc-att-toggle">▾</span></div>
-          <div data-group="hit" style="${words.length <= 5 ? '' : 'display:none'}"></div>
-          <div class="bmc-att-head" data-att="miss">✗ Not found <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head bmc-att-hit-head" data-att="hit">Found <span class="bmc-att-toggle">▾</span></div>
+          <div data-group="hit"></div>
+          <div class="bmc-att-head" data-att="miss">Not found <span class="bmc-att-toggle">▾</span></div>
           <div data-group="miss"></div>
-          <div class="bmc-att-head" data-att="warn">? Needs review <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head" data-att="warn">Needs review <span class="bmc-att-toggle">▾</span></div>
           <div data-group="warn"></div>
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
-          `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span><span class="bmc-chip-flag-ic" title="Flag this word">⚑</span></span>`).join('')}</div>`;
+          `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span></span>`).join('')}</div>`;
       // tab 切换
       b.querySelector('#bmc-prpm-summary').addEventListener('click', e => {
         const tabBtn = e.target.closest('.bmc-tab-btn');
@@ -430,17 +430,54 @@
         head.querySelector('.bmc-att-toggle').textContent = collapsed ? '▾' : '▸';
       });
       const chipsBox = b.querySelector('#bmc-prpm-chips');
-      // chip 内右侧小旗帜：hover 显示文案（跟状态走），点击直接 flag
+      // flag 提交（chips 与 attention 共用）：word + 所在 chip 上下文
+      const submitFlag = async (word, ic) => {
+        if (!word || ic.classList.contains('done')) return;
+        ic.textContent = '…';
+        try {
+          const r = await fetch(`${API}/api/flag`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ word, page: location.href.slice(0, 300) })
+          }).then(x => x.json());
+          if (!r.ok) throw new Error(r.error || 'flag failed');
+          ic.textContent = '⚑';
+          ic.classList.add('done');
+          ic.title = `Flagged (${r.kind}) — issue opened`;
+          // 本地防重（chrome.storage.local）+ 全部该词的 chip 标橙
+          chrome.storage.local.get({ flaggedWords: {} }, (s) => {
+            s.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue, kind: r.kind };
+            chrome.storage.local.set({ flaggedWords: s.flaggedWords });
+          });
+          b.querySelectorAll(`[data-w="${CSS.escape(word)}"], [data-att-w="${CSS.escape(word)}"]`)
+            .forEach(el => el.classList.add('bmc-chip-flagged'));
+        } catch (err) {
+          ic.textContent = '⚑';
+          ic.title = `✗ ${err.message}`;
+        }
+      };
+      const flagTitle = (st) => ({
+        miss: 'This word exists — report missing',
+        warn: 'This flag is wrong — report false alarm',
+        hit: 'This word is actually wrong',
+      }[st] || 'Flag word');
+
+      // chips：flag icon 悬停时才插入 DOM（不默认渲染）；已 flag 的常驻
+      const ensureChipFlag = (chipEl) => {
+        if (chipEl.querySelector('.bmc-chip-flag-ic')) return;
+        const ic = document.createElement('span');
+        ic.className = 'bmc-chip-flag-ic';
+        ic.textContent = '⚑';
+        if (chipEl.classList.contains('bmc-chip-flagged')) ic.classList.add('done');
+        chipEl.appendChild(ic);
+        // hover 结束移除（已 flag 的常驻）
+        chipEl.addEventListener('mouseleave', () => {
+          if (!ic.classList.contains('done')) ic.remove();
+        }, { once: true });
+      };
       chipsBox.addEventListener('mouseover', e => {
-        const ic = e.target.closest('.bmc-chip-flag-ic');
-        if (!ic) return;
-        const chipEl = ic.closest('.bmc-chip');
-        const st = chipEl?.dataset.st || 'pending';
-        ic.title = {
-          miss: 'This word exists — report missing',
-          warn: 'This flag is wrong — report false alarm',
-          hit: 'This word is actually wrong',
-        }[st] || 'Flag word';
+        const chipEl = e.target.closest('.bmc-chip');
+        if (chipEl && chipEl.dataset.st) ensureChipFlag(chipEl);
       });
       chipsBox.addEventListener('click', async e => {
         // ── flag 图标：chip 行内右侧，不进 details 流 ──
@@ -448,29 +485,8 @@
         if (ic) {
           e.stopPropagation();
           const chipEl = ic.closest('.bmc-chip');
-          const word = chipEl?.dataset.w;
-          if (!word || ic.classList.contains('done')) return;
-          ic.textContent = '…';
-          try {
-            const r = await fetch(`${API}/api/flag`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ word, page: location.href.slice(0, 300) })
-            }).then(x => x.json());
-            if (!r.ok) throw new Error(r.error || 'flag failed');
-            ic.textContent = '⚑';
-            ic.classList.add('done');
-            chipEl.classList.add('bmc-chip-flagged');
-            ic.title = `Flagged (${r.kind}) — issue opened`;
-            // 本地防重（chrome.storage.local）
-            chrome.storage.local.get({ flaggedWords: {} }, (s) => {
-              s.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue, kind: r.kind };
-              chrome.storage.local.set({ flaggedWords: s.flaggedWords });
-            });
-          } catch (err) {
-            ic.textContent = '⚑';
-            ic.title = `✗ ${err.message}`;
-          }
+          ic.title = flagTitle(chipEl?.dataset.st);
+          submitFlag(chipEl?.dataset.w, ic);
           return;
         }
         // ── chip 主体：展开 details（单展开互斥）──
@@ -489,11 +505,20 @@
           <div style="margin:4px 0">${esc(chip.dataset.def || '—')}</div>`;
         chip.after(box);
       });
+      // attention：每个词 box 右上角常驻 flag（独立格子，常驻渲染）
+      b.querySelector('#bmc-prpm-attention').addEventListener('click', async e => {
+        const ic = e.target.closest('.bmc-chip-flag-ic');
+        if (!ic) return;
+        e.stopPropagation();
+        const box = ic.closest('[data-att-w]');
+        ic.title = flagTitle(box?.dataset.st);
+        submitFlag(box?.dataset.attW, ic);
+      });
       // 已 flag 过的词显示标记（chrome.storage.local 防重）
       chrome.storage.local.get({ flaggedWords: {} }, (s) => {
         for (const w of Object.keys(s.flaggedWords || {})) {
-          const c = b.querySelector(`.bmc-chip[data-w="${CSS.escape(w)}"]`);
-          if (c) c.classList.add('bmc-chip-flagged');
+          b.querySelectorAll(`[data-w="${CSS.escape(w)}"], [data-att-w="${CSS.escape(w)}"]`)
+            .forEach(el => el.classList.add('bmc-chip-flagged'));
         }
       });
     } else {
@@ -545,22 +570,21 @@
       groups[status in groups ? status : 'warn'].push(w);
 
       if (dualView) {
-        // chips 永远存在并着色；miss/warn 在 attention 视图展开
+        // chips 永远存在并着色；全部状态进 attention（Found/Not found/Needs review）
         if (chip) {
           chip.classList.remove('bmc-chip-pending');
           chip.classList.add(`bmc-chip-${status === 'unreachable' ? 'warn' : status}`);
           chip.dataset.def = def || '';  // 全状态都存：details 展开用
         }
+        // attention box：右上角常驻 flag icon（data-att-w 供 flag 定位）
+        const flagIc = `<span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this word">⚑</span>`;
         if (status === 'hit') {
-          // 少量词（≤5）：hit 也进 attention（⚠ 视图里看到全部状态）
-          if (words.length <= 5) {
-            attention('hit', `<div class="bmc-item bmc-item-hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-hit" title="Found in PRPM">✓</span></div></div>`);
-          }
+          attention('hit', `<div class="bmc-item bmc-item-hit" data-att-w="${esc(w)}" data-st="hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-hit" title="Found in PRPM">✓</span>${flagIc}</div></div>`);
         } else if (status === 'miss') {
-          attention('miss', `<div class="bmc-item bmc-item-miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span><span class="bmc-badge bmc-badge-miss" title="No entry">✗</span></div><div class="bmc-miss-note">No dictionary entry found</div></div>`);
+          attention('miss', `<div class="bmc-item bmc-item-miss" data-att-w="${esc(w)}" data-st="miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span><span class="bmc-badge bmc-badge-miss" title="No entry">✗</span>${flagIc}</div><div class="bmc-miss-note">No dictionary entry found</div></div>`);
         } else {
           const note = status === 'unreachable' ? 'Could not reach PRPM' : (def || 'No exact entry — related suggestions available');
-          attention('warn', `<div class="bmc-item bmc-item-warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-warn" title="Suggestion / unverifiable">?</span></div><div class="bmc-warn-note">${esc(note)}</div></div>`);
+          attention('warn', `<div class="bmc-item bmc-item-warn" data-att-w="${esc(w)}" data-st="warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-warn" title="Suggestion / unverifiable">?</span>${flagIc}</div><div class="bmc-warn-note">${esc(note)}</div></div>`);
         }
         bumpSummary(status === 'unreachable' ? 'warn' : status);
       } else {
