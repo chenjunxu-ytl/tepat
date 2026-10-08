@@ -792,7 +792,7 @@
   padding-top: 6px; border-top: 1px dashed #cbd5e1;
 }
 .bmc-chip{
-  font-size: 12px; padding: 3px 6px 3px 10px; border-radius: 10px;
+  font-size: 12px; padding: 3px 22px 3px 10px; border-radius: 10px;
   background: #f1f5f9; color: #334155; cursor: pointer; user-select: none;
   border: 1px solid transparent;
   display: inline-flex; align-items: center; gap: 5px;
