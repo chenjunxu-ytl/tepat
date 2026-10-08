@@ -232,6 +232,37 @@ def _gh_open_word_flag(word: str, kind: str, status: str, definition: str,
     return _gh_create_issue(title[:120], body, ["word-flag", f"flag:{kind}"])
 
 
+def _gh_closed_flag_issues() -> list[str]:
+    """拉取已关闭的 word-flag Issues（对账用）。返回 issue html_url 列表。
+    60s 进程内缓存：对账在面板打开时发生，多用户共享一次 API 调用。"""
+    global _closed_flags_cache, _closed_flags_at
+    now = time.time()
+    if _closed_flags_cache is not None and now - _closed_flags_at < 60:
+        return _closed_flags_cache
+    import urllib.error as _ue
+    import urllib.request as _rq
+    token = _gh_token()
+    if not token:
+        raise RuntimeError("no GitHub token configured")
+    urls = []
+    req = _rq.Request(
+        f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/issues"
+        f"?labels=word-flag&state=closed&per_page=100",
+        headers={"Authorization": f"Bearer {token}",
+                 "Accept": "application/vnd.github+json"})
+    with _rq.urlopen(req, timeout=15) as resp:
+        for it in json.loads(resp.read()):
+            u = it.get("html_url", "")
+            if u:
+                urls.append(u)
+    _closed_flags_cache, _closed_flags_at = urls, now
+    return urls
+
+
+_closed_flags_cache: list[str] | None = None
+_closed_flags_at: float = 0.0
+
+
 def _gh_close_issue(issue_url: str) -> None:
     """关闭一条 flag Issue（unflag = 撤回审核请求；数据留档不删）。"""
     import urllib.error as _ue
@@ -781,6 +812,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "rules-pack.json not found or broken"})
                 return
             self._json(200, {"path": str(_pack_path()), "pack": pack})
+        elif self.path == "/api/flag/sync":
+            # flag 对账（用户裁决 2026-10-08）：返回已关闭的 word-flag Issue URL 集。
+            # 前端拿它清本地 flaggedWords 里的死记录（云端已 close → 本地撤标记）。
+            try:
+                closed = _gh_closed_flag_issues()
+            except RuntimeError as e:
+                self._json(502, {"error": str(e)})
+                return
+            self._json(200, {"closed": closed, "count": len(closed),
+                             "synced_at": int(time.time())})
         elif self.path == "/api/proposals":
             # Rule Book 申请列表：读取需要 admin（申请内容对普通用户互相不可见）。
             if not IS_ADMIN_MACHINE:

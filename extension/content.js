@@ -385,6 +385,7 @@
           <span style="flex:1"></span>
           <span class="bmc-tab-btn bmc-tab-btn-active" data-view="chips" title="Show all words">☰</span>
           <span class="bmc-tab-btn" data-view="attention" title="Show problem words">⚠</span>
+          <span class="bmc-tab-btn" id="bmc-flag-sync" title="Sync flag status with GitHub (closed issues clear local flags)">⟳</span>
         </div>
         <div id="bmc-prpm-attention" style="display:none">
           <div class="bmc-att-head" data-att="miss">Not found <span class="bmc-att-toggle">▾</span></div>
@@ -430,10 +431,62 @@
         head.querySelector('.bmc-att-toggle').textContent = collapsed ? '▾' : '▸';
       });
       const chipsBox = b.querySelector('#bmc-prpm-chips');
+      // ── flag 状态对账（用户裁决 2026-10-08）──
+      // 云端关闭的 Issue = 本地该撤的标记。closed 集存 chrome.storage.local
+      // （closedIssues），作为每次 flag 判定"是否已 flag"的首要核实对象。
+      // 触发点：面板打开、手动 ⟳、每次 flag 弹窗打开前。
+      const syncFlags = async () => {
+        let closed = [];
+        try {
+          const r = await fetch(`${API}/api/flag/sync`).then(x => x.json());
+          if (!r.closed) throw new Error(r.error || 'sync failed');
+          closed = r.closed;
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+        return new Promise((resolve) => {
+          chrome.storage.local.get({ flaggedWords: {}, closedIssues: [] }, (s) => {
+            const closedSet = new Set(closed);
+            // 清死记录：本地 flag 的 issue 已被云端关闭
+            let removed = 0;
+            for (const w of Object.keys(s.flaggedWords)) {
+              if (closedSet.has(s.flaggedWords[w].issue)) {
+                delete s.flaggedWords[w];
+                removed++;
+              }
+            }
+            chrome.storage.local.set({ closedIssues: closed, flaggedWords: s.flaggedWords }, () => {
+              // 撤掉的标记从 UI 上抹掉
+              for (const el of b.querySelectorAll('.bmc-chip-flagged')) {
+                const w = el.dataset.w || el.dataset.attW;
+                if (w && !(w in s.flaggedWords)) {
+                  el.classList.remove('bmc-chip-flagged');
+                  const ic = el.querySelector('.bmc-chip-flag-ic'); ic && ic.classList.remove('done');
+                }
+              }
+              resolve({ ok: true, removed, total: closed.length });
+            });
+          });
+        });
+      };
+      // 面板打开即对账（静默，失败不打扰）
+      syncFlags();
+      // 手动 ⟳：带反馈
+      const syncBtn = b.querySelector('#bmc-flag-sync');
+      if (syncBtn) syncBtn.onclick = async () => {
+        syncBtn.textContent = '…';
+        const r = await syncFlags();
+        syncBtn.textContent = '⟳';
+        syncBtn.title = r.ok
+          ? `Synced — ${r.total} closed issues checked, ${r.removed} local flags cleared`
+          : `Sync failed: ${r.error}`;
+      };
       // flag 弹窗（用户裁决 2026-10-08）：三选一 + optional note + Submit。
-      // 简单实现：面板内浮层，同时只存在一个。
-      const openFlagDialog = (word, anchor) => {
+      // 简单实现：面板内浮层，同时只存在一个。打开前先对账（closedIssues
+      // 是首要核实对象——云端已关的不再显示 Unflag）。
+      const openFlagDialog = async (word, anchor) => {
         b.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
+        await syncFlags();
         chrome.storage.local.get({ flaggedWords: {} }, (s) => {
           const existing = s.flaggedWords[word];
           const dlg = document.createElement('div');
