@@ -691,8 +691,16 @@
 /* ── PRPM 批量 compact 模式（>8 词）：summary bar + chips ── */
 .bmc-prpm-summary{
   position: sticky; top: 0; z-index: 5;
-  display: flex; gap: 8px; padding: 8px 0 8px;
-  background: inherit; margin: -4px 0 6px;
+  display: flex; gap: 8px; padding: 8px 0 12px;
+  margin: -4px 0 6px;
+  /* 白底 + 往下渐隐：sticky 条本身纯白，下缘 24px 白→透明的过渡带
+     盖住下方滚上来的内容（伪元素实现，不占布局） */
+  background: #fff;
+}
+.bmc-prpm-summary::after{
+  content: ''; position: absolute; left: 0; right: 0; bottom: -24px;
+  height: 24px; pointer-events: none;
+  background: linear-gradient(to bottom, #fff, rgba(255,255,255,0));
 }
 .bmc-sum-chip{
   display: inline-flex; align-items: center; gap: 5px;
