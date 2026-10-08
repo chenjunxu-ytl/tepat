@@ -466,15 +466,23 @@
         if (box && box.classList.contains('bmc-chip-def')) { box.remove(); return; }
         box = document.createElement('div');
         box.className = 'bmc-chip-def';
-        const status = chip.className.includes('miss') ? 'not found'
-          : chip.className.includes('warn') ? 'needs review'
-          : chip.className.includes('hit') ? 'found' : 'pending';
+        const st = chip.className.includes('miss') ? 'miss'
+          : chip.className.includes('warn') ? 'warn'
+          : chip.className.includes('hit') ? 'hit' : 'pending';
+        const status = { miss: 'not found', warn: 'needs review', hit: 'found' }[st] || 'pending';
+        // 按钮文案跟状态走（与 server _flag_kind_for_status 同一映射）——
+        // 用户只看到一句人话，点下去就是确定性那一类
+        const flagLabel = {
+          miss: '⚑ This word exists — report missing',
+          warn: '⚑ This flag is wrong — report false alarm',
+          hit: '⚑ This word is actually wrong',
+        }[st] || '⚑ Flag word';
         const flagged = chip.classList.contains('bmc-chip-flagged');
         box.innerHTML = `
           <div><b>${esc(chip.dataset.w)}</b> — ${status}${chip.dataset.root ? ` · root: ${esc(chip.dataset.root)}` : ''}</div>
           <div style="margin:4px 0">${esc(chip.dataset.def || '')}</div>
           <button class="bmc-chip-flag act" style="font-size:11px;padding:3px 10px;cursor:pointer;border:1px solid #c4ced8;border-radius:6px;background:#fff;">
-            ${flagged ? '⚑ Already flagged' : '⚑ Flag word (opens GitHub issue)'}
+            ${flagged ? '⚑ Already flagged' : flagLabel}
           </button>`;
         chip.after(box);
       });
