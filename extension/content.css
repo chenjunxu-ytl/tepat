@@ -794,10 +794,19 @@
   padding-top: 6px; border-top: 1px dashed #cbd5e1;
 }
 .bmc-chip{
-  font-size: 12px; padding: 3px 10px; border-radius: 10px;
+  font-size: 12px; padding: 3px 6px 3px 10px; border-radius: 10px;
   background: #f1f5f9; color: #334155; cursor: pointer; user-select: none;
   border: 1px solid transparent;
+  display: inline-flex; align-items: center; gap: 5px;
 }
+.bmc-chip-w{ }
+.bmc-chip-flag-ic{
+  font-size: 11px; opacity: 0; transition: opacity 0.15s;
+  padding: 0 2px; border-radius: 6px;
+}
+.bmc-chip:hover .bmc-chip-flag-ic{ opacity: 0.55; }
+.bmc-chip-flag-ic:hover{ opacity: 1 !important; transform: scale(1.15); }
+.bmc-chip-flag-ic.done{ opacity: 0.9 !important; color: #d97706; }
 .bmc-chip-pending{ opacity: .55; }
 .bmc-chip-hit{ background: #dcfce7; color: #166534; }
 .bmc-chip-miss{ background: #fee2e2; color: #b91c1c; font-weight: 700; }
@@ -824,4 +833,4 @@
 .bmc-att-head[data-att="warn"]{ color: #a16207; }
 .bmc-att-toggle{ font-size: 10px; opacity: .7; }
 .bmc-att-hit-head{ color: #15803d; }
-.bmc-chip-flagged{ outline: 2px dotted #f59e0b; outline-offset: 1px; }
+.bmc-chip-flagged .bmc-chip-flag-ic{ opacity: 0.9; color: #d97706; }

@@ -395,7 +395,7 @@
           <div data-group="warn"></div>
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
-          `<span class="bmc-chip bmc-chip-pending" data-w="${esc(w)}">${esc(w)}</span>`).join('')}</div>`;
+          `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span><span class="bmc-chip-flag-ic" title="Flag this word">⚑</span></span>`).join('')}</div>`;
       // tab 切换
       b.querySelector('#bmc-prpm-summary').addEventListener('click', e => {
         const tabBtn = e.target.closest('.bmc-tab-btn');
@@ -429,15 +429,28 @@
         grp.style.display = collapsed ? '' : 'none';
         head.querySelector('.bmc-att-toggle').textContent = collapsed ? '▾' : '▸';
       });
-      b.querySelector('#bmc-prpm-chips').addEventListener('click', async e => {
-        const flagBtn = e.target.closest('.bmc-chip-flag');
-        if (flagBtn) {
-          // flag → server → GitHub Issue（事实性：词/状态/定义/页面）
-          const chipEl = flagBtn.closest('.bmc-chip-def').previousElementSibling;
+      const chipsBox = b.querySelector('#bmc-prpm-chips');
+      // chip 内右侧小旗帜：hover 显示文案（跟状态走），点击直接 flag
+      chipsBox.addEventListener('mouseover', e => {
+        const ic = e.target.closest('.bmc-chip-flag-ic');
+        if (!ic) return;
+        const chipEl = ic.closest('.bmc-chip');
+        const st = chipEl?.dataset.st || 'pending';
+        ic.title = {
+          miss: 'This word exists — report missing',
+          warn: 'This flag is wrong — report false alarm',
+          hit: 'This word is actually wrong',
+        }[st] || 'Flag word';
+      });
+      chipsBox.addEventListener('click', async e => {
+        // ── flag 图标：chip 行内右侧，不进 details 流 ──
+        const ic = e.target.closest('.bmc-chip-flag-ic');
+        if (ic) {
+          e.stopPropagation();
+          const chipEl = ic.closest('.bmc-chip');
           const word = chipEl?.dataset.w;
-          if (!word || flagBtn.disabled) return;
-          flagBtn.disabled = true;
-          flagBtn.textContent = 'Flagging…';
+          if (!word || ic.classList.contains('done')) return;
+          ic.textContent = '…';
           try {
             const r = await fetch(`${API}/api/flag`, {
               method: 'POST',
@@ -445,45 +458,35 @@
               body: JSON.stringify({ word, page: location.href.slice(0, 300) })
             }).then(x => x.json());
             if (!r.ok) throw new Error(r.error || 'flag failed');
-            flagBtn.textContent = `✓ Flagged — issue opened`;
-            // 本地防重标记（chrome.storage.local，用户裁决保留）
+            ic.textContent = '⚑';
+            ic.classList.add('done');
+            chipEl.classList.add('bmc-chip-flagged');
+            ic.title = `Flagged (${r.kind}) — issue opened`;
+            // 本地防重（chrome.storage.local）
             chrome.storage.local.get({ flaggedWords: {} }, (s) => {
-              s.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue };
+              s.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue, kind: r.kind };
               chrome.storage.local.set({ flaggedWords: s.flaggedWords });
-              const c = b.querySelector(`.bmc-chip[data-w="${CSS.escape(word)}"]`);
-              if (c) c.classList.add('bmc-chip-flagged');
             });
           } catch (err) {
-            flagBtn.disabled = false;
-            flagBtn.textContent = `✗ ${err.message}`;
+            ic.textContent = '⚑';
+            ic.title = `✗ ${err.message}`;
           }
           return;
         }
+        // ── chip 主体：展开 details（单展开互斥）──
         const chip = e.target.closest('.bmc-chip');
-        if (!chip || !chip.dataset.def) return;
-        // 点击 chip 展开/收起 details（状态 + 释义 + flag 按钮）
-        let box = chip.nextElementSibling;
-        if (box && box.classList.contains('bmc-chip-def')) { box.remove(); return; }
-        box = document.createElement('div');
+        if (!chip || !chip.dataset.st) return;  // 未查询完/无状态不展开
+        const open = chip.nextElementSibling;
+        if (open && open.classList.contains('bmc-chip-def')) { open.remove(); return; }
+        // 互斥：收起其它已展开的
+        chipsBox.querySelectorAll('.bmc-chip-def').forEach(d => d.remove());
+        const st = chip.dataset.st === 'unreachable' ? 'warn' : chip.dataset.st;
+        const status = { miss: 'not found', warn: 'needs review', hit: 'found' }[st] || st;
+        const box = document.createElement('div');
         box.className = 'bmc-chip-def';
-        const st = chip.className.includes('miss') ? 'miss'
-          : chip.className.includes('warn') ? 'warn'
-          : chip.className.includes('hit') ? 'hit' : 'pending';
-        const status = { miss: 'not found', warn: 'needs review', hit: 'found' }[st] || 'pending';
-        // 按钮文案跟状态走（与 server _flag_kind_for_status 同一映射）——
-        // 用户只看到一句人话，点下去就是确定性那一类
-        const flagLabel = {
-          miss: '⚑ This word exists — report missing',
-          warn: '⚑ This flag is wrong — report false alarm',
-          hit: '⚑ This word is actually wrong',
-        }[st] || '⚑ Flag word';
-        const flagged = chip.classList.contains('bmc-chip-flagged');
         box.innerHTML = `
           <div><b>${esc(chip.dataset.w)}</b> — ${status}${chip.dataset.root ? ` · root: ${esc(chip.dataset.root)}` : ''}</div>
-          <div style="margin:4px 0">${esc(chip.dataset.def || '')}</div>
-          <button class="bmc-chip-flag act" style="font-size:11px;padding:3px 10px;cursor:pointer;border:1px solid #c4ced8;border-radius:6px;background:#fff;">
-            ${flagged ? '⚑ Already flagged' : flagLabel}
-          </button>`;
+          <div style="margin:4px 0">${esc(chip.dataset.def || '—')}</div>`;
         chip.after(box);
       });
       // 已 flag 过的词显示标记（chrome.storage.local 防重）
@@ -530,7 +533,10 @@
           (r.definition && /adakah anda bermaksud/i.test(r.definition));
         status = isSuggestion ? 'warn' : r.status;
         def = r.definition || '';
-        if (r.root) chip && (chip.dataset.root = r.root);
+        if (chip) {
+          chip.dataset.st = status;
+          if (r.root) chip.dataset.root = r.root;
+        }
       } catch {
         status = 'unreachable';
         def = 'Tepat.exe is not running in the background';
@@ -543,7 +549,7 @@
         if (chip) {
           chip.classList.remove('bmc-chip-pending');
           chip.classList.add(`bmc-chip-${status === 'unreachable' ? 'warn' : status}`);
-          if (status === 'hit') chip.dataset.def = def || '(entry found)';
+          chip.dataset.def = def || '';  // 全状态都存：details 展开用
         }
         if (status === 'hit') {
           // 少量词（≤5）：hit 也进 attention（⚠ 视图里看到全部状态）
