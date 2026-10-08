@@ -80,11 +80,13 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-wordflags">
  <h2>Word flags (PRPM)</h2>
- <p class="sub">Flags on word existence / meaning from the PRPM panel. Open = awaiting review; closed = handled (written into rules/wordlist or rejected). Legacy = filed before scopes existed.</p>
+ <p class="sub">Review word flags. <b>Accept</b>: pick the final status (exists / not found) and a definition — the source can be the issue's own explanation, the reporter's note, or your own; the decision is written to <code>word-overrides.json</code>, the issue is closed with the decision as a comment, and the override becomes the first check on every lookup. <b>Reject</b>: close without an override. Commit <code>word-overrides.json</code> to the repo so other machines sync it.</p>
  <div class="card">
   <div class="controls" style="margin:0 0 8px">
    <button class="act" id="btn-wf-load">Reload</button>
-   <label><input type="checkbox" id="wf-show-closed" checked> show closed</label>
+   <label>Kind <select id="wf-kind"><option value="">all</option><option>underflag</option><option>mismeaning</option><option>overflag</option></select></label>
+   <label><input type="checkbox" id="wf-show-closed"> show closed</label>
+   <button class="act" id="btn-wf-json" title="Download current word-overrides.json">⬇ overrides.json</button>
    <span id="wf-msg" class="msg"></span></div>
   <div id="wf-list"></div>
  </div>
@@ -271,29 +273,110 @@ async function loadFlagsView(which){
  msg.textContent='Loading…';
  try{
   const r = await fetch(API+'/api/flags/list').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  const all = (r.flags||[]).filter(f => f.scope === scope || (scope==='prpm' && f.scope==='legacy'));
+  const kindFilter = which==='wf' ? ($('#wf-kind').value||'') : '';
+  const all = (r.flags||[]).filter(f =>
+    (f.scope === scope || (scope==='prpm' && f.scope==='legacy'))
+    && (!kindFilter || f.kind === kindFilter));
   const showClosed = $(`#${which}-show-closed`).checked;
   const open = all.filter(f => f.state==='open');
   const closed = all.filter(f => f.state==='closed');
   msg.innerHTML=`<span class="ok">✓ ${open.length} open · ${closed.length} closed</span>`;
   const kindBadge = k => `<span class="lvl ${k==='overflag'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc(k||'?')}</span>`;
-  const row = f => `
-    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px;${f.state==='closed'?'opacity:.6':''}">
+  // 决策行（仅 word flags 的 open 条目）：status + definition 来源 + Accept/Reject
+  const decideRow = f => {
+    const id = `wf-d-${f.number}`;
+    return `
+    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px">
       <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
-      <span class="lvl ${f.state==='open'?'lvl-warn':'lvl-note'}">${f.state}</span>
-      <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}${f.closed_at?' → closed '+esc(f.closed_at.slice(0,10)):''}</span>
-      <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">open ↗</a>
-      ${f.state==='closed'?'<span style="font-size:11px;color:#256b58;margin-left:6px">✓ handled</span>':''}
+      <span style="font-size:11px;color:#5d6977">#${f.number} · prpm: ${esc(f.prpm_status||'?')} · ${esc((f.created_at||'').slice(0,10))}</span>
+      <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
+      <div style="font-size:12px;color:#526273;margin:5px 0">
+        ${f.user_note && f.user_note!=='-' ? `📝 reporter: ${esc(f.user_note.slice(0,160))}<br>` : ''}
+        📖 def: ${esc((f.definition||'').slice(0,160))}
+      </div>
+      <div class="controls" style="margin:0;gap:8px">
+        <label>status <select id="${id}-st"><option value="hit">exists (hit)</option><option value="miss">not found (miss)</option></select></label>
+        <label>definition <select id="${id}-src">
+          <option value="definition">from issue</option>
+          <option value="user_note">reporter's note</option>
+          <option value="custom">my own</option>
+        </select></label>
+        <input type="text" id="${id}-def" placeholder="definition (auto-filled by source)" style="flex:1;font:inherit;padding:5px 8px;border:1px solid #c4ced8;border-radius:6px">
+        <button class="act primary" data-decide="accept" data-id="${id}" data-word="${esc(f.target)}" data-issue="${esc(f.url)}">Accept</button>
+        <button class="act" data-decide="reject" data-id="${id}" data-word="${esc(f.target)}" data-issue="${esc(f.url)}">Reject</button>
+      </div>
+    </div>`;
+  };
+  const row = f => `
+    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px;opacity:.6">
+      <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
+      <span class="lvl lvl-note">closed</span>
+      <span style="font-size:11px;color:#5d6977">#${f.number}${f.closed_at?' · closed '+esc(f.closed_at.slice(0,10)):''}</span>
+      <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
     </div>`;
   list.innerHTML =
-    (open.length ? open.map(row).join('') : '<p class="sub" style="margin:0">No open flags.</p>')
+    (open.length
+      ? (which==='wf' ? open.map(decideRow).join('') : open.map(f=>`
+        <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px">
+          <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
+          <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}</span>
+          <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
+        </div>`).join(''))
+      : '<p class="sub" style="margin:0">No open flags.</p>')
     + (showClosed && closed.length
-        ? `<div class="bmc-sec-title">Closed (handled / rejected)</div>` + closed.map(row).join('')
+        ? `<div class="bmc-sec-title">Closed</div>` + closed.map(row).join('')
         : '');
+  if (which==='wf') {
+   // definition 来源切换自动填充
+   list.querySelectorAll('select[id$="-src"]').forEach(sel => sel.onchange = () => {
+     const id = sel.id.slice(0, -4);
+     const f = open.find(x => `wf-d-${x.number}` === id);
+     const src = sel.value;
+     $(`#${id}-def`).value = src==='definition' ? (f?.definition||'')
+       : src==='user_note' ? (f?.user_note||'') : '';
+   });
+   // 初始填充 issue definition
+   list.querySelectorAll('select[id$="-src"]').forEach(sel => sel.onchange());
+   // Accept / Reject
+   list.querySelectorAll('[data-decide]').forEach(btn => btn.onclick = async () => {
+     const id = btn.dataset.id;
+     const decision = btn.dataset.decide;
+     let body = { decision, word: btn.dataset.word, issue: btn.dataset.issue };
+     if (decision === 'accept') {
+       body.status = $(`#${id}-st`).value;
+       body.source = $(`#${id}-src`).value;
+       body.definition = $(`#${id}-def`).value.trim();
+       if (!body.definition) { $(`#${id}-def`).focus(); msg.innerHTML='<span class="bad">✗ pick a definition source or write one</span>'; return; }
+     }
+     btn.disabled = true; btn.textContent = '…';
+     try{
+       const r = await request('/api/flags/decide', body);
+       msg.innerHTML = decision==='accept'
+         ? `<span class="ok">✓ ${esc(r.word)} → override ${r.override.status} (issue closed)</span>`
+         : `<span class="ok">✓ ${esc(r.word)} rejected (issue closed)</span>`;
+       loadFlagsView('wf');
+     }catch(e){ btn.disabled=false; btn.textContent=decision; msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>'; }
+   });
+  }
  }catch(e){msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
 $('#btn-wf-load').onclick=()=>loadFlagsView('wf');
 $('#btn-gf-load').onclick=()=>loadFlagsView('gf');
 $('#wf-show-closed').onchange=()=>loadFlagsView('wf');
 $('#gf-show-closed').onchange=()=>loadFlagsView('gf');
+$('#wf-kind').onchange=()=>loadFlagsView('wf');
+$('#btn-wf-json').onclick=async()=>{
+ try{
+  const r=await fetch(API+'/api/flags/decide',{method:'OPTIONS'}).then(x=>x.status);
+ }catch{}
+ // overrides 文件在 server 本地——经 decide 端点之外给一个只读拉取：
+ fetch(API+'/api/word-overrides').then(async x=>{
+  if(!x.ok) throw new Error((await x.json()).error||'unavailable');
+  return x.json();
+ }).then(j=>{
+  const blob=new Blob([JSON.stringify(j,null,1)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='word-overrides.json'; a.click();
+ }).catch(e=>alert('word-overrides.json: '+e.message));
+};
 </script></body></html>

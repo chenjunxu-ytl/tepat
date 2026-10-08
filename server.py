@@ -105,7 +105,22 @@ GH_PROPOSAL_REPO = os.environ.get("TEPAT_GH_REPO", "chenjunxu-ytl/tepat")
 # 本地 reload 改为 fetch GitHub main 分支最新内容，而不是读本地文件自嗨。
 GH_RULES_BRANCH = os.environ.get("TEPAT_GH_BRANCH", "main")
 GH_SYNC_FILES = ("rules.json", "indo_words.json", "blacklist.json",
-                 "extension/rules-pack.json")
+                 "extension/rules-pack.json", "word-overrides.json")
+
+
+def _word_overrides_path() -> Path:
+    return Path(_ROOT) / "word-overrides.json"
+
+
+def _load_word_overrides() -> dict:
+    """word flags 审核产物（accept 生成的 override 集）。
+    形态 {"word": {"status": "hit|miss", "definition": str, "source_issue": N,
+                   "decided_at": ts, "decided_by": "admin"}}。
+    prpm_lookup 的首要核实层：命中 override 直接用，不打 PRPM。"""
+    try:
+        return json.loads(_word_overrides_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def _gh_fetch_file(repo_path: str) -> bytes:
@@ -134,6 +149,10 @@ def _gh_sync_rules() -> dict:
         try:
             content = _gh_fetch_file(name)
         except RuntimeError as e:
+            # word-overrides.json 尚未进 repo（还没第一个 accept decision）= 正常
+            if name == "word-overrides.json" and "HTTP 404" in str(e):
+                results[name] = {"ok": True, "bytes": 0, "note": "not in repo yet"}
+                continue
             results[name] = {"ok": False, "error": str(e)}
             continue
         # 先校验再落盘
@@ -272,6 +291,24 @@ def _gh_closed_flag_issues() -> list[str]:
 
 _closed_flags_cache: list[str] | None = None
 _closed_flags_at: float = 0.0
+
+
+def _gh_comment_issue(issue_url: str, body: str) -> None:
+    """在 Issue 上留决议评论（审核留痕）。"""
+    import urllib.request as _rq
+    token = _gh_token()
+    if not token:
+        return  # 无 token 时静默跳过评论，close 仍会尝试
+    m = re.search(r"github\.com/([^/]+/[^/]+)/issues/(\d+)", issue_url)
+    if not m:
+        return
+    req = _rq.Request(
+        f"https://api.github.com/repos/{m.group(1)}/issues/{m.group(2)}/comments",
+        data=json.dumps({"body": body}).encode(),
+        headers={"Authorization": f"Bearer {token}",
+                 "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json"})
+    _rq.urlopen(req, timeout=15).read()
 
 
 def _gh_close_issue(issue_url: str) -> None:
@@ -529,6 +566,13 @@ def prpm_lookup(word: str) -> dict:
          词根命中即报 hit，附带 root 信息
     """
     from checker import FUNCTION_WORDS
+    # word-overrides 首要核实层（用户裁决 2026-10-08）：admin 审核 accept 的
+    # flag 决议直接生效（hal → hit + 人工释义），不再打 PRPM/缓存。
+    ov = _load_word_overrides().get(word)
+    if ov:
+        return {"word": word, "status": ov["status"],
+                "definition": ov.get("definition", ""),
+                "override": True, "source_issue": ov.get("source_issue")}
     if word in FUNCTION_WORDS:
         return {"word": word, "status": "hit",
                 "definition": "Kata tugas (fungsi) — PRPM tidak menyenaraikan kata tugas sebagai entri.",
@@ -823,6 +867,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "rules-pack.json not found or broken"})
                 return
             self._json(200, {"path": str(_pack_path()), "pack": pack})
+        elif self.path == "/api/word-overrides":
+            # word-overrides.json 只读拉取（admin 下载 commit 进 repo 用）
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            self._json(200, _load_word_overrides())
         elif self.path == "/api/flag/sync":
             # flag 对账（用户裁决 2026-10-08）：返回已关闭的 word-flag Issue URL 集。
             # 前端拿它清本地 flaggedWords 里的死记录（云端已 close → 本地撤标记）。
@@ -859,6 +909,10 @@ class Handler(BaseHTTPRequestHandler):
                         for it in json.loads(resp.read()):
                             m = re.match(r"\[flag:(prpm|grammar):(underflag|mismeaning|overflag)\]\s*(.+)",
                                          it.get("title", ""))
+                            body = it.get("body") or ""
+                            def body_field(k):
+                                mm = re.search(rf"\*\*{k}:\*\*\s*(.+)", body)
+                                return mm.group(1).strip() if mm else ""
                             items.append({
                                 "number": it.get("number"),
                                 "title": it.get("title", ""),
@@ -867,6 +921,9 @@ class Handler(BaseHTTPRequestHandler):
                                 "scope": m.group(1) if m else "legacy",
                                 "kind": m.group(2) if m else "",
                                 "target": m.group(3) if m else it.get("title", ""),
+                                "definition": body_field("definition"),
+                                "user_note": body_field("user_note"),
+                                "prpm_status": body_field("prpm_status"),
                                 "created_at": it.get("created_at", ""),
                                 "closed_at": it.get("closed_at"),
                                 "labels": [l.get("name") for l in it.get("labels", [])],
@@ -1136,6 +1193,57 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "word": word, "status": status,
                              "kind": kind, "scope": scope,
                              "github_issue": gh_url})
+        elif self.path == "/api/flags/decide":
+            # Word flag 审核决议（用户裁决 2026-10-08，admin 专属）：
+            #   accept: status(hit/miss) + definition 来源（issue 里的解释/
+            #           user_note/自写）→ 写 word-overrides.json + close issue
+            #           附决议评论；下次 sync 该文件进 repo，全端热生效
+            #   reject: 只 close issue（附评论），不写 override
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            decision = str(req.get("decision") or "").strip()
+            word = str(req.get("word") or "").strip().lower()[:80]
+            issue_url = str(req.get("issue") or "").strip()[:300]
+            if decision not in ("accept", "reject") or not word \
+                    or not issue_url.startswith("https://github.com/"):
+                self._json(400, {"error": "decision (accept|reject), word and issue required"})
+                return
+            entry = None
+            if decision == "accept":
+                status = str(req.get("status") or "hit").strip()
+                if status not in ("hit", "miss"):
+                    self._json(400, {"error": "status must be hit or miss"})
+                    return
+                definition = str(req.get("definition") or "").strip()[:1000]
+                source = str(req.get("source") or "custom").strip()
+                if not definition:
+                    self._json(400, {"error": "definition required (pick a source or write one)"})
+                    return
+                m = re.search(r"/issues/(\d+)", issue_url)
+                entry = {"status": status, "definition": definition,
+                         "source": source, "source_issue": int(m.group(1)) if m else 0,
+                         "decided_at": int(time.time()), "decided_by": "admin"}
+                overrides = _load_word_overrides()
+                overrides[word] = entry
+                _word_overrides_path().write_text(
+                    json.dumps(overrides, ensure_ascii=False, indent=1) + "\n",
+                    encoding="utf-8")
+            # close issue（附决议评论）
+            comment = (f"**Decision: {decision}**"
+                       + (f"\n- status: `{entry['status']}`\n- definition: {entry['definition'][:300]}"
+                          f"\n- written to `word-overrides.json` (hot-applied on sync)"
+                          if entry else "\n- no override written"))
+            try:
+                _gh_comment_issue(issue_url, comment)
+                _gh_close_issue(issue_url)
+            except RuntimeError as e:
+                self._json(502, {"error": f"github failed: {e}"})
+                return
+            _log(f"[decide] {word}: {decision}"
+                 + (f" -> override {entry['status']}" if entry else " (rejected)"))
+            self._json(200, {"ok": True, "word": word, "decision": decision,
+                             "override": entry})
         elif self.path == "/api/unflag":
             # unflag = 关闭对应 GitHub Issue（撤回审核请求；数据留档）。
             # issue url 由前端从 chrome.storage.local 的 flaggedWords 带来。

@@ -388,11 +388,11 @@
           <span class="bmc-tab-btn" id="bmc-flag-sync" title="Sync flag status with GitHub (closed issues clear local flags)">⟳</span>
         </div>
         <div id="bmc-prpm-attention" style="display:none">
-          <div class="bmc-att-head" data-att="miss">Not found <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head" data-att="miss" style="display:none">Not found <span class="bmc-att-toggle">▾</span></div>
           <div data-group="miss"></div>
-          <div class="bmc-att-head" data-att="warn">Needs review <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head" data-att="warn" style="display:none">Needs review <span class="bmc-att-toggle">▾</span></div>
           <div data-group="warn"></div>
-          <div class="bmc-att-head bmc-att-hit-head" data-att="hit">Found <span class="bmc-att-toggle">▾</span></div>
+          <div class="bmc-att-head bmc-att-hit-head" data-att="hit" style="display:none">Found <span class="bmc-att-toggle">▾</span></div>
           <div data-group="hit"></div>
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
@@ -663,10 +663,13 @@
     }
 
     const attention = (group, html) => {
-      // dualView 模式：miss/warn 全条目插入 attention 视图对应组。
-      // 不自动切换视图（用户裁决：默认 ☰ chips，⚠ 图标才进 attention）。
+      // dualView 模式：条目插入 attention 视图对应组；首个条目到达才亮组头
+      //（空 section 不显示 title——用户裁决 2026-10-08）。
       const sec = b.querySelector(`#bmc-prpm-attention [data-group="${group}"]`);
-      if (sec) sec.insertAdjacentHTML('beforeend', html);
+      if (!sec) return;
+      sec.insertAdjacentHTML('beforeend', html);
+      const head = sec.previousElementSibling;
+      if (head && head.classList.contains('bmc-att-head')) head.style.display = '';
     };
     const bumpSummary = (group) => {
       const chip = b.querySelector(`#bmc-prpm-summary .bmc-sum-${group} b`);
