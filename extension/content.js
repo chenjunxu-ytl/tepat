@@ -522,11 +522,13 @@
               }
             };
           } else {
+            // 词的 flag（用户裁决 2026-10-08）：词没有 over/under 属性，只有
+            // "查询结果对不对"——选项按词的立场写人话，kind 值不变。
             dlg.innerHTML = `
               <div class="bmc-flag-title">⚑ Flag "${esc(word)}"</div>
-              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="underflag"> Under-flagged — problem missed</label>
-              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="mismeaning"> Wrong meaning — flag is off-target</label>
-              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="overflag"> Over-flagged — word is fine</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="underflag"> It's a real word, but it wasn't found</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="mismeaning"> It was found, but the meaning shown is wrong</label>
+              <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="overflag"> It was found, but it isn't a valid word</label>
               <input type="text" class="bmc-flag-note" placeholder="Explanation (optional)">
               <div class="bmc-flag-row">
                 <button class="bmc-flag-go" disabled>Submit</button>
