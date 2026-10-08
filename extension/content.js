@@ -532,13 +532,24 @@
         floatIc.style.top = `${r.top + r.height / 2}px`;
       };
       const hideFloat = () => { floatIc.style.display = 'none'; floatWord = null; };
+      // 鼠标是否正悬在 icon 热区（fixed 元素不在 chipsBox 内，事件不冒泡，
+      // 必须坐标判断——否则移到 icon 的瞬间 chipsBox mouseleave 误杀自己）
+      const overIcon = (e) => {
+        const r = floatIc.getBoundingClientRect();
+        return e.clientX >= r.left - 2 && e.clientX <= r.right + 2
+            && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2;
+      };
       chipsBox.addEventListener('mouseover', e => {
         if (e.target.closest('.bmc-flag-float')) return;  // icon 自身热区：保持
         const chipEl = e.target.closest('.bmc-chip');
         if (chipEl && chipEl.dataset.st) placeFloat(chipEl);
-        else if (!e.target.closest('.bmc-chip')) hideFloat();
+        else if (!e.target.closest('.bmc-chip') && !overIcon(e)) hideFloat();
       });
-      chipsBox.addEventListener('mouseleave', hideFloat);
+      chipsBox.addEventListener('mouseleave', e => {
+        if (!overIcon(e)) hideFloat();  // 移向 icon 途中不算离开
+      });
+      // icon 自身：移出即隐藏（点完弹窗/移开都收）
+      floatIc.addEventListener('mouseleave', hideFloat);
       // 滚动面板时重新贴位（fixed 坐标会脱节）
       panel.addEventListener('scroll', () => {
         const chipEl = floatWord && b.querySelector(`.bmc-chip[data-w="${CSS.escape(floatWord)}"]`);
