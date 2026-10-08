@@ -627,7 +627,7 @@
         // attention box：右上角常驻 flag icon；无 ✓/✗/? 徽章——box 颜色已表达状态
         const flagIc = `<span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this word">⚑</span>`;
         if (status === 'hit') {
-          attention('hit', `<div class="bmc-item bmc-item-hit" data-att-w="${esc(w)}" data-st="hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span>${flagIc}</div></div>`);
+          attention('hit', `<div class="bmc-item bmc-item-hit" data-att-w="${esc(w)}" data-st="hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span>${flagIc}</div>${def ? `<div class="bmc-def">${esc(def)}</div>` : ''}</div>`);
         } else if (status === 'miss') {
           attention('miss', `<div class="bmc-item bmc-item-miss" data-att-w="${esc(w)}" data-st="miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span>${flagIc}</div><div class="bmc-miss-note">No dictionary entry found</div></div>`);
         } else {
