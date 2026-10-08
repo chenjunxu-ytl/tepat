@@ -259,7 +259,7 @@
 
 /* 内容体 */
 .bmc-body {
-  padding: 12px 14px;
+  padding: 0 14px 12px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
