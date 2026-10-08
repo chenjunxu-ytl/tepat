@@ -431,7 +431,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
           `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span></span>`).join('')}</div>
-        <div class="bmc-chip-legend">background = PRPM result<i style="background:#dcfce7"></i>found<i style="background:#fee2e2"></i>not found<i style="background:#fef9c3"></i>review · border<i style="border:1.5px solid #9333ea"></i>Indonesian-only<i style="border:1.5px solid #2563eb"></i>casual</div>`;
+        <div class="bmc-chip-legend"><i style="background:#dcfce7"></i>found<i style="background:#fee2e2"></i>not found<i style="background:#fef9c3"></i>need review · border<i style="border:1.5px solid #9333ea"></i>Indonesian-only<i style="border:1.5px solid #2563eb"></i>casual</div>`;
       // 词表身份边色：拉到后一次性打上
       fetchIdentities().then(idMap => {
         for (const [w, cls] of Object.entries(idMap)) {
