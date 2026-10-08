@@ -445,28 +445,39 @@
           return { ok: false, error: String(e.message || e) };
         }
         return new Promise((resolve) => {
-          chrome.storage.local.get({ flaggedWords: {}, closedIssues: [] }, (s) => {
-            const closedSet = new Set(closed);
-            // 清死记录：本地 flag 的 issue 已被云端关闭
-            let removed = 0;
-            for (const w of Object.keys(s.flaggedWords)) {
-              if (closedSet.has(s.flaggedWords[w].issue)) {
-                delete s.flaggedWords[w];
-                removed++;
-              }
-            }
-            chrome.storage.local.set({ closedIssues: closed, flaggedWords: s.flaggedWords }, () => {
-              // 撤掉的标记从 UI 上抹掉
-              for (const el of b.querySelectorAll('.bmc-chip-flagged')) {
-                const w = el.dataset.w || el.dataset.attW;
-                if (w && !(w in s.flaggedWords)) {
-                  el.classList.remove('bmc-chip-flagged');
-                  const ic = el.querySelector('.bmc-chip-flag-ic'); ic && ic.classList.remove('done');
+          try {
+            chrome.storage.local.get({ flaggedWords: {}, closedIssues: [] }, (s) => {
+              try {
+                const closedSet = new Set(closed);
+                // 清死记录：本地 flag 的 issue 已被云端关闭（坏条目无 issue 字段直接删）
+                let removed = 0;
+                for (const w of Object.keys(s.flaggedWords || {})) {
+                  const rec = s.flaggedWords[w];
+                  if (!rec || !rec.issue || closedSet.has(rec.issue)) {
+                    delete s.flaggedWords[w];
+                    removed++;
+                  }
                 }
+                chrome.storage.local.set({ closedIssues: closed, flaggedWords: s.flaggedWords }, () => {
+                  // 撤掉的标记从 UI 上抹掉（面板可能已关，DOM 查询全程防御）
+                  try {
+                    for (const el of b.querySelectorAll('.bmc-chip-flagged')) {
+                      const w = el.dataset.w || el.dataset.attW;
+                      if (w && !(w in s.flaggedWords)) {
+                        el.classList.remove('bmc-chip-flagged');
+                        const ic = el.querySelector('.bmc-chip-flag-ic'); ic && ic.classList.remove('done');
+                      }
+                    }
+                  } catch { /* panel closed — nothing to update */ }
+                  resolve({ ok: true, removed, total: closed.length });
+                });
+              } catch (e) {
+                resolve({ ok: false, error: String(e.message || e) });
               }
-              resolve({ ok: true, removed, total: closed.length });
             });
-          });
+          } catch (e) {
+            resolve({ ok: false, error: String(e.message || e) });
+          }
         });
       };
       // 面板打开即对账（静默，失败不打扰）
