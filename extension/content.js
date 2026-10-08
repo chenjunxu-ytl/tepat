@@ -429,16 +429,61 @@
         grp.style.display = collapsed ? '' : 'none';
         head.querySelector('.bmc-att-toggle').textContent = collapsed ? '▾' : '▸';
       });
-      b.querySelector('#bmc-prpm-chips').addEventListener('click', e => {
+      b.querySelector('#bmc-prpm-chips').addEventListener('click', async e => {
+        const flagBtn = e.target.closest('.bmc-chip-flag');
+        if (flagBtn) {
+          // flag → server → GitHub Issue（事实性：词/状态/定义/页面）
+          const chipEl = flagBtn.closest('.bmc-chip-def').previousElementSibling;
+          const word = chipEl?.dataset.w;
+          if (!word || flagBtn.disabled) return;
+          flagBtn.disabled = true;
+          flagBtn.textContent = 'Flagging…';
+          try {
+            const r = await fetch(`${API}/api/flag`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ word, page: location.href.slice(0, 300) })
+            }).then(x => x.json());
+            if (!r.ok) throw new Error(r.error || 'flag failed');
+            flagBtn.textContent = `✓ Flagged — issue opened`;
+            // 本地防重标记（chrome.storage.local，用户裁决保留）
+            chrome.storage.local.get({ flaggedWords: {} }, (s) => {
+              s.flaggedWords[word] = { ts: Date.now(), issue: r.github_issue };
+              chrome.storage.local.set({ flaggedWords: s.flaggedWords });
+              const c = b.querySelector(`.bmc-chip[data-w="${CSS.escape(word)}"]`);
+              if (c) c.classList.add('bmc-chip-flagged');
+            });
+          } catch (err) {
+            flagBtn.disabled = false;
+            flagBtn.textContent = `✗ ${err.message}`;
+          }
+          return;
+        }
         const chip = e.target.closest('.bmc-chip');
         if (!chip || !chip.dataset.def) return;
-        // 点击 chip 展开/收起该词释义
+        // 点击 chip 展开/收起 details（状态 + 释义 + flag 按钮）
         let box = chip.nextElementSibling;
         if (box && box.classList.contains('bmc-chip-def')) { box.remove(); return; }
         box = document.createElement('div');
         box.className = 'bmc-chip-def';
-        box.textContent = chip.dataset.def;
+        const status = chip.className.includes('miss') ? 'not found'
+          : chip.className.includes('warn') ? 'needs review'
+          : chip.className.includes('hit') ? 'found' : 'pending';
+        const flagged = chip.classList.contains('bmc-chip-flagged');
+        box.innerHTML = `
+          <div><b>${esc(chip.dataset.w)}</b> — ${status}${chip.dataset.root ? ` · root: ${esc(chip.dataset.root)}` : ''}</div>
+          <div style="margin:4px 0">${esc(chip.dataset.def || '')}</div>
+          <button class="bmc-chip-flag act" style="font-size:11px;padding:3px 10px;cursor:pointer;border:1px solid #c4ced8;border-radius:6px;background:#fff;">
+            ${flagged ? '⚑ Already flagged' : '⚑ Flag word (opens GitHub issue)'}
+          </button>`;
         chip.after(box);
+      });
+      // 已 flag 过的词显示标记（chrome.storage.local 防重）
+      chrome.storage.local.get({ flaggedWords: {} }, (s) => {
+        for (const w of Object.keys(s.flaggedWords || {})) {
+          const c = b.querySelector(`.bmc-chip[data-w="${CSS.escape(w)}"]`);
+          if (c) c.classList.add('bmc-chip-flagged');
+        }
       });
     } else {
       b.innerHTML = words.map(w =>
@@ -477,6 +522,7 @@
           (r.definition && /adakah anda bermaksud/i.test(r.definition));
         status = isSuggestion ? 'warn' : r.status;
         def = r.definition || '';
+        if (r.root) chip && (chip.dataset.root = r.root);
       } catch {
         status = 'unreachable';
         def = 'Tepat.exe is not running in the background';

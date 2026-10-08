@@ -203,14 +203,37 @@ def _gh_open_proposal_issue(rule: dict, regex_valid: bool) -> str:
             + f"\n\n**regex_valid:** {regex_valid}"
             + f"\n**submitted_at:** {int(time.time())}"
             + "\n\n_Auto-filed by Tepat web UI._")
+    return _gh_create_issue(title[:120], body, ["rule-proposal"])
+
+
+def _gh_open_word_flag(word: str, status: str, definition: str,
+                       note: str, page_url: str) -> str:
+    """word flag 开成 GitHub Issue（用户裁决 2026-10-08：不带主观分类，
+    只带客观事实——词、状态、定义、页面；审核时人判断怎么处理）。"""
+    title = f"[flag] {word}"
+    body = (f"**word:** {word}\n"
+            f"**prpm_status:** {status}\n"
+            f"**definition:** {(definition or '')[:500]}\n"
+            f"**user_note:** {note or '-'}\n"
+            f"**page:** {page_url or '-'}\n"
+            f"**flagged_at:** {int(time.time())}\n"
+            + "\n\n_Auto-filed by Tepat extension._")
+    return _gh_create_issue(title[:120], body, ["word-flag"])
+
+
+def _gh_create_issue(title: str, body: str, labels: list[str]) -> str:
+    """GitHub 开 Issue 的公共实现（proposal / word flag 共用）。"""
+    import urllib.error as _ue
+    import urllib.request as _rq
+    token = _gh_token()
+    if not token:
+        raise RuntimeError("no GitHub token configured (%APPDATA%\\tepat\\gh_token)")
     req = _rq.Request(
         f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/issues",
-        data=json.dumps({"title": title[:120], "body": body,
-                         "labels": ["rule-proposal"]}).encode(),
+        data=json.dumps({"title": title, "body": body, "labels": labels}).encode(),
         headers={"Authorization": f"Bearer {token}",
                  "Accept": "application/vnd.github+json",
                  "Content-Type": "application/json"})
-    import urllib.error as _ue
     with _rq.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read()).get("html_url", "")
 
@@ -951,6 +974,31 @@ class Handler(BaseHTTPRequestHandler):
                              "self_test": mismatches or "pass",
                              "github_issue": gh_url or None,
                              "github_error": gh_error})
+        elif self.path == "/api/flag":
+            # 词级 flag（用户裁决 2026-10-08）：免 token 的用户反馈通道。
+            # 不带主观分类——Issue 只带客观事实（词/状态/定义/页面/note），
+            # admin 在 GitHub 上审。与 proposal 同一 gh_token 通道。
+            word = str(req.get("word") or "").strip().lower()[:60]
+            if not word or re.search(r"\s", word):
+                self._json(400, {"error": "single word required"})
+                return
+            note = str(req.get("note") or "").strip()[:500]
+            page_url = str(req.get("page") or "").strip()[:300]
+            # 状态/定义以 server 自己的查询结果为准（不信任前端传值）
+            result = prpm_lookup(word)
+            status = result.get("status", "unknown")
+            definition = result.get("definition", "")
+            root = result.get("root", "")
+            try:
+                gh_url = _gh_open_word_flag(word, status, definition,
+                                            (f"{note} | root: {root}" if root else note),
+                                            page_url)
+            except RuntimeError as e:
+                self._json(502, {"error": f"GitHub issue failed: {e}"})
+                return
+            _log(f"[flag] {word} ({status}) -> {gh_url}")
+            self._json(200, {"ok": True, "word": word, "status": status,
+                             "github_issue": gh_url})
         elif self.path == "/api/proposals/accept":
             # admin 批准申请：把规则追加进 rules-pack.json 的 rules 数组尾部。
             if not IS_ADMIN_MACHINE:

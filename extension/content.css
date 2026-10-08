@@ -824,3 +824,4 @@
 .bmc-att-head[data-att="warn"]{ color: #a16207; }
 .bmc-att-toggle{ font-size: 10px; opacity: .7; }
 .bmc-att-hit-head{ color: #15803d; }
+.bmc-chip-flagged{ outline: 2px dotted #f59e0b; outline-offset: 1px; }
