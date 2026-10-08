@@ -383,8 +383,8 @@
           <span class="bmc-sum-chip bmc-sum-warn" data-g="warn">? <b>0</b></span>
           <span class="bmc-sum-chip bmc-sum-hit" data-g="hit">✓ <b>0</b></span>
           <span style="flex:1"></span>
-          <span class="bmc-tab-btn" data-view="attention" title="Show problem words">⚠</span>
           <span class="bmc-tab-btn bmc-tab-btn-active" data-view="chips" title="Show all words">☰</span>
+          <span class="bmc-tab-btn" data-view="attention" title="Show problem words">⚠</span>
         </div>
         <div id="bmc-prpm-attention" style="display:none">
           <div class="bmc-att-head bmc-att-hit-head" data-att="hit" style="${words.length <= 5 ? '' : 'display:none'}">✓ Found <span class="bmc-att-toggle">▾</span></div>
