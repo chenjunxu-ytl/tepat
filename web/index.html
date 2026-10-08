@@ -312,23 +312,26 @@ async function loadFlagsView(which){
   // 决策行（仅 word flags 的 open 条目）：status + definition 来源 + Accept/Reject
   const decideRow = f => {
     const id = `wf-d-${f.number}`;
+    const prefill = (f.user_note && f.user_note !== '-')
+      ? f.user_note : (f.definition || '');
     return `
-    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px">
-      <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
-      <span style="font-size:11px;color:#5d6977">#${f.number} · prpm: ${esc(f.prpm_status||'?')} · ${esc((f.created_at||'').slice(0,10))}</span>
-      <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
-      <div style="font-size:12px;color:#526273;margin:5px 0">
-        ${f.user_note && f.user_note!=='-' ? `📝 reporter: ${esc(f.user_note.slice(0,160))}<br>` : ''}
-        📖 def: ${esc((f.definition||'').slice(0,160))}
+    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:12px 14px;margin:8px 0;font-size:13px">
+      <div>
+        <b style="font-size:15px">${esc(f.target)}</b> ${kindBadge(f.kind)}
+        <span style="font-size:11px;color:#5d6977">#${f.number} · PRPM said: ${esc(f.prpm_status||'?')} · ${esc((f.created_at||'').slice(0,10))}</span>
+        <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
       </div>
-      <div class="controls" style="margin:0;gap:8px">
-        <label>status <select id="${id}-st"><option value="hit">exists (hit)</option><option value="miss">not found (miss)</option></select></label>
-        <label>definition <select id="${id}-src">
-          <option value="definition">from issue</option>
-          <option value="user_note">reporter's note</option>
-          <option value="custom">my own</option>
-        </select></label>
-        <input type="text" id="${id}-def" placeholder="definition (auto-filled by source)" style="flex:1;font:inherit;padding:5px 8px;border:1px solid #c4ced8;border-radius:6px">
+      ${prefill ? `<div style="font-size:12px;color:#526273;margin:6px 0 0">reporter: ${esc(prefill.slice(0,220))}</div>` : ''}
+      <div style="margin-top:10px">
+        <div style="font-size:11.5px;font-weight:600;color:#526273;margin-bottom:5px">This word is:</div>
+        <label style="display:block;margin:0 0 4px"><input type="radio" name="${id}-st" value="hit" checked> a real word — lookups should find it</label>
+        <label style="display:block;margin:0"><input type="radio" name="${id}-st" value="miss"> not a valid word — lookups should reject it</label>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-size:11.5px;font-weight:600;color:#526273;margin-bottom:5px">Definition shown to users (edit freely):</div>
+        <textarea id="${id}-def" rows="3" placeholder="what to show when this word is looked up" style="width:100%;font:13px/1.5 system-ui;padding:8px 10px;border:1px solid #c4ced8;border-radius:7px">${esc(prefill)}</textarea>
+      </div>
+      <div style="display:flex;gap:9px;margin-top:10px">
         <button class="act primary" data-decide="accept" data-id="${id}" data-word="${esc(f.target)}" data-issue="${esc(f.url)}">Accept</button>
         <button class="act" data-decide="reject" data-id="${id}" data-word="${esc(f.target)}" data-issue="${esc(f.url)}">Reject</button>
       </div>
@@ -354,26 +357,16 @@ async function loadFlagsView(which){
         ? `<div class="bmc-sec-title">Closed</div>` + closed.map(row).join('')
         : '');
   if (which==='wf') {
-   // definition 来源切换自动填充
-   list.querySelectorAll('select[id$="-src"]').forEach(sel => sel.onchange = () => {
-     const id = sel.id.slice(0, -4);
-     const f = open.find(x => `wf-d-${x.number}` === id);
-     const src = sel.value;
-     $(`#${id}-def`).value = src==='definition' ? (f?.definition||'')
-       : src==='user_note' ? (f?.user_note||'') : '';
-   });
-   // 初始填充 issue definition
-   list.querySelectorAll('select[id$="-src"]').forEach(sel => sel.onchange());
-   // Accept / Reject
+   // Accept / Reject（definition 已预填在 textarea，admin 自由编辑）
    list.querySelectorAll('[data-decide]').forEach(btn => btn.onclick = async () => {
      const id = btn.dataset.id;
      const decision = btn.dataset.decide;
      let body = { decision, word: btn.dataset.word, issue: btn.dataset.issue };
      if (decision === 'accept') {
-       body.status = $(`#${id}-st`).value;
-       body.source = $(`#${id}-src`).value;
+       body.status = document.querySelector(`input[name="${id}-st"]:checked`)?.value || 'hit';
+       body.source = 'admin';
        body.definition = $(`#${id}-def`).value.trim();
-       if (!body.definition) { $(`#${id}-def`).focus(); msg.innerHTML='<span class="bad">✗ pick a definition source or write one</span>'; return; }
+       if (!body.definition) { $(`#${id}-def`).focus(); msg.innerHTML='<span class="bad">✗ write a definition first</span>'; return; }
      }
      btn.disabled = true; btn.textContent = '…';
      try{
