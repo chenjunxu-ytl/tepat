@@ -692,7 +692,7 @@
 .bmc-prpm-summary{
   position: sticky; top: 0; z-index: 5;
   display: flex; gap: 8px; padding: 8px 0 12px;
-  margin: -4px 0 6px;
+  margin: -4px 0 0;
   /* 白底 + 往下渐隐：sticky 条本身纯白，下缘 24px 白→透明的过渡带
      盖住下方滚上来的内容（伪元素实现，不占布局） */
   background: #fff;
