@@ -208,6 +208,10 @@ def _gh_open_proposal_issue(rule: dict, regex_valid: bool) -> str:
 
 # word flag 分类（用户裁决 2026-10-08）：三个报告者视角选项 + optional 说明。
 # kind 由用户在小弹窗里选（不再按状态自动映射——那套语义跟用户直觉不贴）。
+FLAG_SCOPES = {
+    "prpm":    "word existence / meaning from the PRPM panel",
+    "grammar": "rule hit from the Rule Book / grammar check",
+}
 FLAG_KINDS = {
     "underflag":   "should have been flagged but was not (missed / passed wrongly)",
     "mismeaning":  "flagged but the suggestion/meaning is wrong",
@@ -215,21 +219,28 @@ FLAG_KINDS = {
 }
 
 
-def _gh_open_word_flag(word: str, kind: str, status: str, definition: str,
-                       note: str, page_url: str) -> str:
-    """word flag 开成 GitHub Issue：用户选的 kind + 客观查询事实。"""
+def _gh_open_word_flag(word: str, scope: str, kind: str, status: str,
+                       definition: str, note: str, page_url: str,
+                       rule_id: str = "") -> str:
+    """word/rule flag 开成 GitHub Issue。scope 区分 prpm（词）与 grammar（规则），
+    kind 三选一；title 三段式 [flag:scope:kind]。"""
     if kind not in FLAG_KINDS:
         raise RuntimeError(f"unknown flag kind: {kind}")
-    title = f"[flag:{kind}] {word}"
+    if scope not in FLAG_SCOPES:
+        raise RuntimeError(f"unknown flag scope: {scope}")
+    title = f"[flag:{scope}:{kind}] {rule_id or word}"
     body = (f"**word:** {word}\n"
+            f"**scope:** {scope} — {FLAG_SCOPES[scope]}\n"
             f"**kind:** {kind} — {FLAG_KINDS[kind]}\n"
-            f"**prpm_status:** {status}\n"
+            + (f"**rule:** {rule_id}\n" if rule_id else "")
+            + f"**prpm_status:** {status}\n"
             f"**definition:** {(definition or '')[:500]}\n"
             f"**user_note:** {note or '-'}\n"
             f"**page:** {page_url or '-'}\n"
             f"**flagged_at:** {int(time.time())}\n"
             + "\n\n_Auto-filed by Tepat extension._")
-    return _gh_create_issue(title[:120], body, ["word-flag", f"flag:{kind}"])
+    return _gh_create_issue(title[:120], body,
+                            ["word-flag", f"flag:{scope}", f"flag:{scope}:{kind}"])
 
 
 def _gh_closed_flag_issues() -> list[str]:
@@ -822,6 +833,47 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, {"closed": closed, "count": len(closed),
                              "synced_at": int(time.time())})
+        elif self.path == "/api/flags/list":
+            # admin 审核台（用户裁决 2026-10-08）：全部 word-flag Issues（open +
+            # closed，含 scope/kind/word 解析），供 web UI 的 Grammar/Word flags
+            # 两个 tab 消费。"已写入规则"= issue body 带 rule= 或 closed 且有
+            # proposal 引用——以 label/closed 状态近似表达。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            import urllib.request as _rq
+            token = _gh_token()
+            if not token:
+                self._json(502, {"error": "no GitHub token configured"})
+                return
+            items = []
+            for state in ("open", "closed"):
+                req = _rq.Request(
+                    f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/issues"
+                    f"?labels=word-flag&state={state}&per_page=100",
+                    headers={"Authorization": f"Bearer {token}",
+                             "Accept": "application/vnd.github+json"})
+                import urllib.error as _ue
+                try:
+                    with _rq.urlopen(req, timeout=15) as resp:
+                        for it in json.loads(resp.read()):
+                            m = re.match(r"\[flag:(prpm|grammar):(underflag|mismeaning|overflag)\]\s*(.+)",
+                                         it.get("title", ""))
+                            items.append({
+                                "number": it.get("number"),
+                                "title": it.get("title", ""),
+                                "url": it.get("html_url", ""),
+                                "state": it.get("state", ""),
+                                "scope": m.group(1) if m else "legacy",
+                                "kind": m.group(2) if m else "",
+                                "target": m.group(3) if m else it.get("title", ""),
+                                "created_at": it.get("created_at", ""),
+                                "closed_at": it.get("closed_at"),
+                                "labels": [l.get("name") for l in it.get("labels", [])],
+                            })
+                except (_ue.HTTPError, OSError) as e:
+                    _log(f"[flags] list {state} failed: {e!r}")
+            self._json(200, {"flags": items, "count": len(items)})
         elif self.path == "/api/proposals":
             # Rule Book 申请列表：读取需要 admin（申请内容对普通用户互相不可见）。
             if not IS_ADMIN_MACHINE:
@@ -1051,12 +1103,17 @@ class Handler(BaseHTTPRequestHandler):
                              "github_error": gh_error})
         elif self.path == "/api/flag":
             # 词级 flag（用户裁决 2026-10-08）：免 token 反馈通道。
-            # kind 三选一由用户在小弹窗选（underflag/mismeaning/overflag），
-            # optional note；状态/定义以 server 查询为准。
-            word = str(req.get("word") or "").strip().lower()[:60]
+            # scope 区分 prpm（PRPM 面板）与 grammar（Rule Book 规则命中）；
+            # kind 三选一由用户在小弹窗选；状态/定义以 server 查询为准。
+            word = str(req.get("word") or "").strip().lower()[:80]
             kind = str(req.get("kind") or "").strip()
-            if not word or re.search(r"\s", word):
-                self._json(400, {"error": "single word required"})
+            scope = str(req.get("scope") or "prpm").strip()
+            rule_id = str(req.get("rule") or "").strip()[:40]
+            if not word:
+                self._json(400, {"error": "word required"})
+                return
+            if scope == "grammar" and not rule_id:
+                self._json(400, {"error": "rule id required for grammar flags"})
                 return
             if kind not in FLAG_KINDS:
                 self._json(400, {"error": "kind must be underflag/mismeaning/overflag"})
@@ -1069,14 +1126,15 @@ class Handler(BaseHTTPRequestHandler):
             definition = result.get("definition", "")
             root = result.get("root", "")
             try:
-                gh_url = _gh_open_word_flag(word, kind, status, definition,
+                gh_url = _gh_open_word_flag(word, scope, kind, status, definition,
                                             (f"{note} | root: {root}" if root else note),
-                                            page_url)
+                                            page_url, rule_id=rule_id)
             except RuntimeError as e:
                 self._json(502, {"error": f"GitHub issue failed: {e}"})
                 return
-            _log(f"[flag] {word} ({status}/{kind}) -> {gh_url}")
-            self._json(200, {"ok": True, "word": word, "status": status, "kind": kind,
+            _log(f"[flag] {word} ({scope}/{kind}) -> {gh_url}")
+            self._json(200, {"ok": True, "word": word, "status": status,
+                             "kind": kind, "scope": scope,
                              "github_issue": gh_url})
         elif self.path == "/api/unflag":
             # unflag = 关闭对应 GitHub Issue（撤回审核请求；数据留档）。

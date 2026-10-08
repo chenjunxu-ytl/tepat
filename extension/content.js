@@ -544,7 +544,7 @@
                 const r = await fetch(`${API}/api/flag`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ word, kind, note, page: location.href.slice(0, 300) })
+                  body: JSON.stringify({ word, kind, note, scope: 'prpm', page: location.href.slice(0, 300) })
                 }).then(x => x.json());
                 if (!r.ok) throw new Error(r.error || 'flag failed');
                 chrome.storage.local.get({ flaggedWords: {} }, (s2) => {
@@ -1101,11 +1101,11 @@
       const label = { error: 'error', warn: 'needs context — hover for nuance', note: 'reminder' }[kind];
       const tip = TepatResults.escapeHtml(
         kind === 'warn'
-          ? `${f.rule}: ${f.note}\nRegex tidak boleh menilai konteks — ini peringatan, bukan penghakiman. Rujuk Rule Book ${f.rule} sebelum memutuskan.`
+          ? `${f.rule}: ${f.note}\nRegex cannot judge context — this is a reminder, not a verdict. See Rule Book ${f.rule} before deciding.`
           : `${f.rule}: ${f.note}`);
-      return `<div class="bmc-item bmc-item-${kind} bmc-tip" data-tip="${tip.replace(/"/g, '&quot;').replace(/\n/g, ' ')}">
+      return `<div class="bmc-item bmc-item-${kind} bmc-tip" data-tip="${tip.replace(/"/g, '&quot;').replace(/\n/g, ' ')}" data-rule-flag="${TepatResults.escapeHtml(f.rule)}" data-rule-span="${TepatResults.escapeHtml(f.span)}">
            <div class="bmc-item-main">${dot} <b>${TepatResults.escapeHtml(f.span)}</b>
-             <span class="bmc-rule-id">[${f.rule}]</span></div>
+             <span class="bmc-rule-id">[${f.rule}]</span><span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this rule hit">⚑</span></div>
            <div class="bmc-info-note">${TepatResults.escapeHtml(f.note)} · ${label}</div>
          </div>`;
     };
@@ -1121,6 +1121,60 @@
         + suppressedNote
         + `<div class="bmc-foot">${errors.length} errors · ${warns.length} need context · ${notes.length} reminders · ${packs.length} packs · local check (offline)</div>`
       : `<div class="bmc-clean">✓ No findings according to the Rule Book. (${packs.map(p => p.meta.title).join('; ')})</div>`;
+
+    // 规则命中的 flag（scope=grammar）：点 ⚑ 弹选择窗（同词级 flag 的三 kind）
+    panelBody().querySelectorAll('[data-rule-flag] .bmc-att-flag').forEach(ic => {
+      ic.addEventListener('click', e => {
+        e.stopPropagation();
+        const item = ic.closest('[data-rule-flag]');
+        const rule = item.dataset.ruleFlag;
+        const span = item.dataset.ruleSpan;
+        openGrammarFlagDialog(rule, span, item);
+      });
+    });
+  }
+
+  // grammar flag 弹窗：三 kind + optional note + submit → Issue [flag:grammar:kind]
+  function openGrammarFlagDialog(rule, span, anchor) {
+    document.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
+    const dlg = document.createElement('div');
+    dlg.className = 'bmc-flag-dialog';
+    dlg.innerHTML = `
+      <div class="bmc-flag-title">⚑ Flag rule hit — [${TepatResults.escapeHtml(rule)}] "${TepatResults.escapeHtml(span)}"</div>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-gk" value="underflag"> Under-flagged — problem missed</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-gk" value="mismeaning"> Wrong meaning — flag is off-target</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-gk" value="overflag"> Over-flagged — this text is fine</label>
+      <input type="text" class="bmc-flag-note" placeholder="Explanation (optional)">
+      <div class="bmc-flag-row">
+        <button class="bmc-flag-go" disabled>Submit</button>
+        <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
+      </div>`;
+    const go = dlg.querySelector('.bmc-flag-go');
+    dlg.querySelectorAll('input[name="bmc-gk"]').forEach(r =>
+      r.addEventListener('change', () => go.disabled = false));
+    go.onclick = async () => {
+      const kind = dlg.querySelector('input[name="bmc-gk"]:checked')?.value;
+      const note = dlg.querySelector('.bmc-flag-note').value.trim();
+      if (!kind) return;
+      go.disabled = true; go.textContent = 'Submitting…';
+      try {
+        const r = await fetch(`${API}/api/flag`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            word: span, kind, note, scope: 'grammar', rule,
+            page: location.href.slice(0, 300)
+          })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'flag failed');
+        dlg.remove();
+        showToast(`✓ Flagged [${rule}] — issue opened`, 4000);
+      } catch (err) {
+        go.disabled = false; go.textContent = `✗ ${err.message}`;
+      }
+    };
+    dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+    anchor.after(dlg);
   }
 
   // ── 消息监听与快捷键 ──

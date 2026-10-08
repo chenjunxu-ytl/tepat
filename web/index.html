@@ -36,6 +36,8 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
  <button class="nav" data-tab="rulebook">📘 Rule Book</button>
  <button class="nav" data-tab="serverrules">⚙️ Server Rules</button>
  <button class="nav" id="nav-proposals" data-tab="proposals" style="display:none">📥 Proposals</button>
+ <button class="nav" id="nav-wordflags" data-tab="wordflags" style="display:none">⚑ Word flags</button>
+ <button class="nav" id="nav-grammarflags" data-tab="grammarflags" style="display:none">⚑ Grammar flags</button>
  <button class="nav" data-tab="about">ℹ️ About</button>
  <div class="side-status" id="status">Connecting…</div>
 </aside>
@@ -73,6 +75,30 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
   <div class="controls" style="margin:0 0 8px">
    <button class="act" id="btn-admin-load">Reload</button><span id="admin-msg" class="msg"></span></div>
   <div id="admin-list"></div>
+ </div>
+</section>
+
+<section class="tab" id="tab-wordflags">
+ <h2>Word flags (PRPM)</h2>
+ <p class="sub">Flags on word existence / meaning from the PRPM panel. Open = awaiting review; closed = handled (written into rules/wordlist or rejected). Legacy = filed before scopes existed.</p>
+ <div class="card">
+  <div class="controls" style="margin:0 0 8px">
+   <button class="act" id="btn-wf-load">Reload</button>
+   <label><input type="checkbox" id="wf-show-closed" checked> show closed</label>
+   <span id="wf-msg" class="msg"></span></div>
+  <div id="wf-list"></div>
+ </div>
+</section>
+
+<section class="tab" id="tab-grammarflags">
+ <h2>Grammar flags (Rule Book)</h2>
+ <p class="sub">Flags on Rule Book rule hits — wrong regex, missing context, over-triggering. Open = awaiting review; closed = handled (rule fixed in pack or rejected).</p>
+ <div class="card">
+  <div class="controls" style="margin:0 0 8px">
+   <button class="act" id="btn-gf-load">Reload</button>
+   <label><input type="checkbox" id="gf-show-closed" checked> show closed</label>
+   <span id="gf-msg" class="msg"></span></div>
+  <div id="gf-list"></div>
  </div>
 </section>
 
@@ -120,10 +146,14 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
  }else{
   src.closest('table').style.display='none';
  }
- // admin 机器（启动时 .env token hash match 内置 hash）：专属 Proposals tab
+ // admin 机器（启动时 .env token hash match 内置 hash）：专属 Proposals + flags tabs
  if(h.admin){
   $('#nav-proposals').style.display='';
+  $('#nav-wordflags').style.display='';
+  $('#nav-grammarflags').style.display='';
   loadAdminProposals();
+  loadFlagsView('wf');
+  loadFlagsView('gf');
  }
 }).catch(()=>{$('#status').textContent='Server unreachable.';});
 
@@ -233,4 +263,37 @@ async function loadAdminProposals(){
  }catch(e){$('#admin-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
 $('#btn-admin-load').onclick=loadAdminProposals;
+
+// ── flags 审核台（word/prpm 与 grammar 两 tab 共用一个加载器）──
+async function loadFlagsView(which){
+ const scope = which === 'wf' ? 'prpm' : 'grammar';
+ const msg = $(`#${which}-msg`), list = $(`#${which}-list`);
+ msg.textContent='Loading…';
+ try{
+  const r = await fetch(API+'/api/flags/list').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
+  const all = (r.flags||[]).filter(f => f.scope === scope || (scope==='prpm' && f.scope==='legacy'));
+  const showClosed = $(`#${which}-show-closed`).checked;
+  const open = all.filter(f => f.state==='open');
+  const closed = all.filter(f => f.state==='closed');
+  msg.innerHTML=`<span class="ok">✓ ${open.length} open · ${closed.length} closed</span>`;
+  const kindBadge = k => `<span class="lvl ${k==='overflag'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc(k||'?')}</span>`;
+  const row = f => `
+    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px;${f.state==='closed'?'opacity:.6':''}">
+      <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
+      <span class="lvl ${f.state==='open'?'lvl-warn':'lvl-note'}">${f.state}</span>
+      <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}${f.closed_at?' → closed '+esc(f.closed_at.slice(0,10)):''}</span>
+      <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">open ↗</a>
+      ${f.state==='closed'?'<span style="font-size:11px;color:#256b58;margin-left:6px">✓ handled</span>':''}
+    </div>`;
+  list.innerHTML =
+    (open.length ? open.map(row).join('') : '<p class="sub" style="margin:0">No open flags.</p>')
+    + (showClosed && closed.length
+        ? `<div class="bmc-sec-title">Closed (handled / rejected)</div>` + closed.map(row).join('')
+        : '');
+ }catch(e){msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+}
+$('#btn-wf-load').onclick=()=>loadFlagsView('wf');
+$('#btn-gf-load').onclick=()=>loadFlagsView('gf');
+$('#wf-show-closed').onchange=()=>loadFlagsView('wf');
+$('#gf-show-closed').onchange=()=>loadFlagsView('gf');
 </script></body></html>
