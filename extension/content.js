@@ -591,22 +591,16 @@
         el.classList.remove('bmc-item-pending');
         if (status === 'hit') {
           el.classList.add('bmc-item-hit');
-          el.querySelector('.bmc-item-main').innerHTML = `
-            <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-hit" title="Found in PRPM">✓</span>`;
+          el.querySelector('.bmc-item-main').innerHTML = `<span class="bmc-word">${esc(w)}</span>`;
           if (def) el.insertAdjacentHTML('beforeend', `<div class="bmc-def">${esc(def)}</div>`);
         } else if (status === 'miss') {
           el.classList.add('bmc-item-miss');
-          el.querySelector('.bmc-item-main').innerHTML = `
-            <span class="bmc-word bmc-word-err">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-miss" title="No entry">✗</span>`;
+          el.querySelector('.bmc-item-main').innerHTML = `<span class="bmc-word bmc-word-err">${esc(w)}</span>`;
           el.insertAdjacentHTML('beforeend', `<div class="bmc-miss-note">No dictionary entry found</div>`);
         } else {
           const note = status === 'unreachable' ? 'Could not reach PRPM' : (def || 'No exact entry — related suggestions available');
           el.classList.add('bmc-item-warn');
-          el.querySelector('.bmc-item-main').innerHTML = `
-            <span class="bmc-word">${esc(w)}</span>
-            <span class="bmc-badge bmc-badge-warn" title="Suggestion / unverifiable">?</span>`;
+          el.querySelector('.bmc-item-main').innerHTML = `<span class="bmc-word">${esc(w)}</span>`;
           el.insertAdjacentHTML('beforeend', `<div class="bmc-warn-note">${esc(note)}</div>`);
         }
       }
