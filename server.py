@@ -6,6 +6,7 @@ register reminders run independently. No automatic correction or factual verdict
 PRPM remains an on-demand dictionary lookup with hit/miss/unreachable states.
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -109,7 +110,19 @@ GH_SYNC_FILES = ("rules.json", "indo_words.json", "blacklist.json",
 
 
 def _word_overrides_path() -> Path:
-    return Path(_ROOT) / "word-overrides.json"
+    """运行时 override 位置 = %APPDATA%\\tepat\\（与 prpm_cache.sqlite 同位，
+    用户裁决 2026-10-08：运行时数据不落 exe/源码目录；打包目录可能只读）。
+    首次启动若 APPDATA 无此文件而源码目录有（开发 seed），复制过去。"""
+    base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat")
+    os.makedirs(base, exist_ok=True)
+    runtime = Path(base) / "word-overrides.json"
+    if not runtime.is_file():
+        seed = Path(_ROOT) / "word-overrides.json"
+        if seed.is_file():
+            runtime.write_bytes(seed.read_bytes())
+    return runtime
 
 
 def _load_word_overrides() -> dict:
@@ -181,8 +194,9 @@ def _gh_sync_rules() -> dict:
             if bad:
                 results[name] = {"ok": False, "error": "; ".join(bad)}
                 continue
-        local = _config_path(name) if not name.startswith("extension/") \
-            else str(Path(_ROOT) / "extension" / Path(name).name)
+        local = (_word_overrides_path() if name == "word-overrides.json"
+                 else _config_path(name) if not name.startswith("extension/")
+                 else str(Path(_ROOT) / "extension" / Path(name).name))
         Path(local).write_bytes(content)
         results[name] = {"ok": True, "bytes": len(content)}
     # 同步后立即热重载 checker（若已加载）
@@ -291,6 +305,44 @@ def _gh_closed_flag_issues() -> list[str]:
 
 _closed_flags_cache: list[str] | None = None
 _closed_flags_at: float = 0.0
+
+
+def _gh_push_file(repo_path: str, content: str, message: str) -> str | None:
+    """admin 决议/规则更新自动 commit 进 repo（Contents API）。返回 commit url；
+    失败返回 None（降级为仅本地——手动 git commit 也行）。需要 token 的
+    Contents: Read and write 权限。"""
+    import urllib.error as _ue
+    import urllib.request as _rq
+    token = _gh_token()
+    if not token:
+        return None
+    api = f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/contents/{repo_path}"
+    headers = {"Authorization": f"Bearer {token}",
+               "Accept": "application/vnd.github+json",
+               "Content-Type": "application/json"}
+    # 取当前文件 sha（存在则更新，404 则新建）
+    sha = None
+    try:
+        with _rq.urlopen(_rq.Request(api, headers=headers), timeout=15) as resp:
+            sha = json.loads(resp.read()).get("sha")
+    except _ue.HTTPError as e:
+        if e.code != 404:
+            return None
+    except OSError:
+        return None
+    payload = {"message": message[:200],
+               "content": base64.b64encode(content.encode("utf-8")).decode(),
+               "branch": GH_RULES_BRANCH}
+    if sha:
+        payload["sha"] = sha
+    try:
+        req = _rq.Request(api, data=json.dumps(payload).encode(), headers=headers,
+                          method="PUT")
+        with _rq.urlopen(req, timeout=15) as resp:
+            out = json.loads(resp.read())
+            return out.get("commit", {}).get("html_url")
+    except (_ue.HTTPError, OSError):
+        return None
 
 
 def _gh_comment_issue(issue_url: str, body: str) -> None:
@@ -1210,6 +1262,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "decision (accept|reject), word and issue required"})
                 return
             entry = None
+            push_url = None
             if decision == "accept":
                 status = str(req.get("status") or "hit").strip()
                 if status not in ("hit", "miss"):
@@ -1243,7 +1296,8 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[decide] {word}: {decision}"
                  + (f" -> override {entry['status']}" if entry else " (rejected)"))
             self._json(200, {"ok": True, "word": word, "decision": decision,
-                             "override": entry})
+                             "override": entry,
+                             "pushed": push_url if decision == "accept" else None})
         elif self.path == "/api/unflag":
             # unflag = 关闭对应 GitHub Issue（撤回审核请求；数据留档）。
             # issue url 由前端从 chrome.storage.local 的 flaggedWords 带来。
@@ -1380,6 +1434,24 @@ def main() -> int:
     # 看门狗（2026-10-02）：托盘窗口死了就整体重启托盘线程。
     # 背景：14:25 实例的托盘线程静默死亡（服务照活、图标消失、无报警）。
     # 消息循环自愈管"循环内异常"，看门狗管"整个线程没了"。
+    # 2026-10-08：每 20 个周期（≈5 分钟）自动 fetch GitHub 规则/override，
+    # user 侧免手动（TEPAT_AUTO_SYNC=0 可关）。失败静默重试下轮。
+    auto_sync = os.environ.get("TEPAT_AUTO_SYNC", "1") != "0"
+
+    def _rules_sync_thread():
+        while not stop_event.is_set():
+            for _ in range(20):  # 20 × 15s = 5min，可被退出打断
+                if stop_event.is_set():
+                    return
+                time.sleep(15)
+            try:
+                results = _gh_sync_rules()
+                ok = sum(1 for v in results.values() if v.get("ok"))
+                if ok:
+                    _log(f"[auto-sync] fetched {ok}/{len(results)} files from GitHub")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[auto-sync] failed: {e!r}")
+
     if not args.no_tray:
         def _tray_watchdog():
             # 赋值 tray_icon（重启托盘）需要 global 声明，否则整个函数里
@@ -1420,6 +1492,9 @@ def main() -> int:
                     dead_count = 0
         stop_event = threading.Event()
         threading.Thread(target=_tray_watchdog, daemon=True, name="tray-watchdog").start()
+        if auto_sync:
+            threading.Thread(target=_rules_sync_thread, daemon=True,
+                             name="rules-auto-sync").start()
 
     try:
         httpd.serve_forever()
