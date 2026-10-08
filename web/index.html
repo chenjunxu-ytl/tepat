@@ -29,6 +29,27 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 .lvl-error{background:#ffdbd8;color:#a3312a}
 .lvl-warn{background:#fff0bd;color:#8a6a10}
 .lvl-note{background:#e2edf9;color:#3a5d84}
+.wf-toolbar{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap}
+.wf-pills{display:flex;gap:6px}
+.wf-pill{
+  font:600 12px system-ui;padding:5px 13px;border-radius:14px;cursor:pointer;
+  border:1px solid #d7dee6;background:#fff;color:#526273;user-select:none;
+  transition:all .18s cubic-bezier(.34,1.56,.64,1);
+}
+.wf-pill:hover{border-color:#256b58;color:#256b58;transform:translateY(-1px)}
+.wf-pill-active{background:#256b58;color:#fff;border-color:#256b58;transform:none}
+.wf-closed-toggle{
+  font:600 12px system-ui;padding:5px 13px;border-radius:14px;cursor:pointer;
+  border:1px solid #d7dee6;background:#fff;color:#526273;user-select:none;
+  transition:all .18s cubic-bezier(.34,1.56,.64,1);
+}
+.wf-closed-toggle:hover{border-color:#8a6a10;color:#8a6a10}
+.wf-closed-toggle.on{background:#fff0bd;color:#8a6a10;border-color:#e5c76b}
+.wf-reload{
+  font-size:16px;cursor:pointer;color:#526273;padding:2px 6px;border-radius:8px;
+  transition:transform .35s ease;
+}
+.wf-reload:hover{transform:rotate(180deg);color:#256b58}
 </style></head><body>
 <aside>
  <h1>Tepat</h1>
@@ -80,14 +101,20 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 
 <section class="tab" id="tab-wordflags">
  <h2>Word flags (PRPM)</h2>
- <p class="sub">Review word flags. <b>Accept</b>: pick the final status (exists / not found) and a definition — the source can be the issue's own explanation, the reporter's note, or your own; the decision is written to <code>word-overrides.json</code>, the issue is closed with the decision as a comment, and the override becomes the first check on every lookup. <b>Reject</b>: close without an override. Commit <code>word-overrides.json</code> to the repo so other machines sync it.</p>
+ <p class="sub">Decisions land in <code>word-overrides.json</code> (the source of truth for word-level rules) and take effect on every lookup immediately. <b>Accept</b> = pick status + definition (from the issue, the reporter, or your own). <b>Reject</b> = close without an override. Commit the file to the repo so other machines pick it up via Fetch from GitHub.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 8px">
-   <button class="act" id="btn-wf-load">Reload</button>
-   <label>Kind <select id="wf-kind"><option value="">all</option><option>underflag</option><option>mismeaning</option><option>overflag</option></select></label>
-   <label><input type="checkbox" id="wf-show-closed"> show closed</label>
-   <button class="act" id="btn-wf-json" title="Download current word-overrides.json">⬇ overrides.json</button>
-   <span id="wf-msg" class="msg"></span></div>
+  <div class="wf-toolbar">
+   <div class="wf-pills">
+    <button class="wf-pill wf-pill-active" data-kind="">All</button>
+    <button class="wf-pill" data-kind="underflag">Under-flagged</button>
+    <button class="wf-pill" data-kind="mismeaning">Wrong meaning</button>
+    <button class="wf-pill" data-kind="overflag">Over-flagged</button>
+   </div>
+   <button class="wf-closed-toggle" id="wf-show-closed" title="Show closed flags">Closed</button>
+   <span style="flex:1"></span>
+   <span id="wf-msg" class="msg"></span>
+   <span class="wf-reload" id="btn-wf-load" title="Reload from GitHub">⟳</span>
+  </div>
   <div id="wf-list"></div>
  </div>
 </section>
@@ -273,11 +300,11 @@ async function loadFlagsView(which){
  msg.textContent='Loading…';
  try{
   const r = await fetch(API+'/api/flags/list').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  const kindFilter = which==='wf' ? ($('#wf-kind').value||'') : '';
+  const kindFilter = which==='wf' ? (document.querySelector('.wf-pill-active')?.dataset.kind || '') : '';
   const all = (r.flags||[]).filter(f =>
     (f.scope === scope || (scope==='prpm' && f.scope==='legacy'))
     && (!kindFilter || f.kind === kindFilter));
-  const showClosed = $(`#${which}-show-closed`).checked;
+  const showClosed = which==='wf' ? $('#wf-show-closed').classList.contains('on') : $('#gf-show-closed').checked;
   const open = all.filter(f => f.state==='open');
   const closed = all.filter(f => f.state==='closed');
   msg.innerHTML=`<span class="ok">✓ ${open.length} open · ${closed.length} closed</span>`;
@@ -360,23 +387,16 @@ async function loadFlagsView(which){
   }
  }catch(e){msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
+// Word flags：pill 切换 / closed toggle / ⟳ reload
+document.querySelectorAll('.wf-pill').forEach(pill => pill.onclick=()=>{
+  document.querySelectorAll('.wf-pill').forEach(x => x.classList.toggle('wf-pill-active', x===pill));
+  loadFlagsView('wf');
+});
+$('#wf-show-closed').onclick=()=>{
+  $('#wf-show-closed').classList.toggle('on');
+  loadFlagsView('wf');
+};
 $('#btn-wf-load').onclick=()=>loadFlagsView('wf');
 $('#btn-gf-load').onclick=()=>loadFlagsView('gf');
-$('#wf-show-closed').onchange=()=>loadFlagsView('wf');
 $('#gf-show-closed').onchange=()=>loadFlagsView('gf');
-$('#wf-kind').onchange=()=>loadFlagsView('wf');
-$('#btn-wf-json').onclick=async()=>{
- try{
-  const r=await fetch(API+'/api/flags/decide',{method:'OPTIONS'}).then(x=>x.status);
- }catch{}
- // overrides 文件在 server 本地——经 decide 端点之外给一个只读拉取：
- fetch(API+'/api/word-overrides').then(async x=>{
-  if(!x.ok) throw new Error((await x.json()).error||'unavailable');
-  return x.json();
- }).then(j=>{
-  const blob=new Blob([JSON.stringify(j,null,1)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='word-overrides.json'; a.click();
- }).catch(e=>alert('word-overrides.json: '+e.message));
-};
 </script></body></html>
