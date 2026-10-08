@@ -395,8 +395,8 @@
 
 /* 存在 (Hit) - 无绿色 border-left */
 .bmc-item-hit {
-  background: #ffffff;
-  border-color: #e2e8f0;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
 }
 
 .bmc-def {

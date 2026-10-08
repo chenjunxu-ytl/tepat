@@ -387,12 +387,12 @@
           <span class="bmc-tab-btn" data-view="attention" title="Show problem words">⚠</span>
         </div>
         <div id="bmc-prpm-attention" style="display:none">
-          <div class="bmc-att-head bmc-att-hit-head" data-att="hit">Found <span class="bmc-att-toggle">▾</span></div>
-          <div data-group="hit"></div>
           <div class="bmc-att-head" data-att="miss">Not found <span class="bmc-att-toggle">▾</span></div>
           <div data-group="miss"></div>
           <div class="bmc-att-head" data-att="warn">Needs review <span class="bmc-att-toggle">▾</span></div>
           <div data-group="warn"></div>
+          <div class="bmc-att-head bmc-att-hit-head" data-att="hit">Found <span class="bmc-att-toggle">▾</span></div>
+          <div data-group="hit"></div>
         </div>
         <div class="bmc-prpm-chips" id="bmc-prpm-chips">${words.map(w =>
           `<span class="bmc-chip" data-w="${esc(w)}"><span class="bmc-chip-w">${esc(w)}</span></span>`).join('')}</div>`;
@@ -576,15 +576,15 @@
           chip.classList.add(`bmc-chip-${status === 'unreachable' ? 'warn' : status}`);
           chip.dataset.def = def || '';  // 全状态都存：details 展开用
         }
-        // attention box：右上角常驻 flag icon（data-att-w 供 flag 定位）
+        // attention box：右上角常驻 flag icon；无 ✓/✗/? 徽章——box 颜色已表达状态
         const flagIc = `<span class="bmc-chip-flag-ic bmc-att-flag" title="Flag this word">⚑</span>`;
         if (status === 'hit') {
-          attention('hit', `<div class="bmc-item bmc-item-hit" data-att-w="${esc(w)}" data-st="hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-hit" title="Found in PRPM">✓</span>${flagIc}</div></div>`);
+          attention('hit', `<div class="bmc-item bmc-item-hit" data-att-w="${esc(w)}" data-st="hit"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span>${flagIc}</div></div>`);
         } else if (status === 'miss') {
-          attention('miss', `<div class="bmc-item bmc-item-miss" data-att-w="${esc(w)}" data-st="miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span><span class="bmc-badge bmc-badge-miss" title="No entry">✗</span>${flagIc}</div><div class="bmc-miss-note">No dictionary entry found</div></div>`);
+          attention('miss', `<div class="bmc-item bmc-item-miss" data-att-w="${esc(w)}" data-st="miss"><div class="bmc-item-main"><span class="bmc-word bmc-word-err">${esc(w)}</span>${flagIc}</div><div class="bmc-miss-note">No dictionary entry found</div></div>`);
         } else {
           const note = status === 'unreachable' ? 'Could not reach PRPM' : (def || 'No exact entry — related suggestions available');
-          attention('warn', `<div class="bmc-item bmc-item-warn" data-att-w="${esc(w)}" data-st="warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span><span class="bmc-badge bmc-badge-warn" title="Suggestion / unverifiable">?</span>${flagIc}</div><div class="bmc-warn-note">${esc(note)}</div></div>`);
+          attention('warn', `<div class="bmc-item bmc-item-warn" data-att-w="${esc(w)}" data-st="warn"><div class="bmc-item-main"><span class="bmc-word">${esc(w)}</span>${flagIc}</div><div class="bmc-warn-note">${esc(note)}</div></div>`);
         }
         bumpSummary(status === 'unreachable' ? 'warn' : status);
       } else {
