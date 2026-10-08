@@ -111,18 +111,9 @@ GH_SYNC_FILES = ("rules.json", "indo_words.json", "blacklist.json",
 
 def _word_overrides_path() -> Path:
     """运行时 override 位置 = %APPDATA%\\tepat\\（与 prpm_cache.sqlite 同位，
-    用户裁决 2026-10-08：运行时数据不落 exe/源码目录；打包目录可能只读）。
-    首次启动若 APPDATA 无此文件而源码目录有（开发 seed），复制过去。"""
-    base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
-                        "tepat") if os.name == "nt" else \
-        os.path.join(os.path.expanduser("~"), ".tepat")
-    os.makedirs(base, exist_ok=True)
-    runtime = Path(base) / "word-overrides.json"
-    if not runtime.is_file():
-        seed = Path(_ROOT) / "word-overrides.json"
-        if seed.is_file():
-            runtime.write_bytes(seed.read_bytes())
-    return runtime
+    用户裁决 2026-10-08：运行时数据不落 exe/源码目录；打包目录可能只读）。"""
+    _seed_to_appdata("word-overrides.json", os.path.join(_ROOT, "word-overrides.json"))
+    return Path(_appdata_dir()) / "word-overrides.json"
 
 
 def _load_word_overrides() -> dict:
@@ -196,7 +187,7 @@ def _gh_sync_rules() -> dict:
                 continue
         local = (_word_overrides_path() if name == "word-overrides.json"
                  else _config_path(name) if not name.startswith("extension/")
-                 else str(Path(_ROOT) / "extension" / Path(name).name))
+                 else str(_pack_path()))  # rules-pack 也归 APPDATA
         Path(local).write_bytes(content)
         results[name] = {"ok": True, "bytes": len(content)}
     # 同步后立即热重载 checker（若已加载）
@@ -410,12 +401,28 @@ EVIDENCE_PATH = os.environ.get("TEPAT_EVIDENCE_DB", os.path.join(_ROOT, "data", 
 _checker: Checker | None = None
 
 
+def _appdata_dir() -> str:
+    base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat")
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _seed_to_appdata(name: str, src: str) -> None:
+    """源码/exe 目录的配置文件复制到 APPDATA 作初始值（只补缺，不覆盖）。"""
+    import shutil
+    dst = os.path.join(_appdata_dir(), name)
+    if not os.path.isfile(dst) and os.path.isfile(src):
+        shutil.copyfile(src, dst)
+
+
 def _config_path(name: str) -> str:
-    if getattr(sys, "frozen", False):
-        external = os.path.join(os.path.dirname(sys.executable), name)
-        if os.path.isfile(external):
-            return external
-    return os.path.join(_ROOT, name)
+    """运行时配置位置（用户裁决 2026-10-08）：全部规则文件统一
+    %APPDATA%\\tepat\\（与 prpm_cache.sqlite 同位）。源码/exe 目录的同名
+    文件只作首次 seed；repo 同步、admin 决议、hot-reload 都读写 APPDATA。"""
+    _seed_to_appdata(name, os.path.join(_ROOT, name))
+    return os.path.join(_appdata_dir(), name)
 
 
 def load_words() -> int:
@@ -432,7 +439,11 @@ def word_exists(w: str) -> bool:
 
 
 def _pack_path() -> Path:
-    return Path(_ROOT) / "extension" / "rules-pack.json"
+    """Rule Book pack 的运行时位置：%APPDATA%\\tepat\\rules-pack.json
+    （与全部规则文件同位）；源码目录 extension/ 下那份只作 seed。"""
+    _seed_to_appdata("rules-pack.json",
+                     os.path.join(_ROOT, "extension", "rules-pack.json"))
+    return Path(_appdata_dir()) / "rules-pack.json"
 
 
 def _load_pack() -> dict | None:
