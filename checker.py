@@ -26,30 +26,27 @@ def utf16_offset(text, offset):
 # note, origin, suggestion='', ...) 与 scan 内部同签名——plugin 产出与
 # regex 命中同一格式，复用 flag/dedup/noflag 全套。
 # 插件签名稳定、代码在 exe 里（发版节奏）；词表类参数（"params" 字段）
-# 随 rules.json 走 GitHub 热更新——代码里不藏数据（用户裁决 2026-10-08）。
-# 未注册的 plugin 名只在 config_warnings 里告警。
+# 随 rules.json 走 GitHub 热更新——代码里不藏数据、不留兜底（用户裁决
+# 2026-10-08）：params 缺字段就是规则条目写错了，直接抛错进
+# config_warnings。未注册的 plugin 名同样只告警。
 
-# params 默认值：规则条目缺字段时的兜底（老 rules.json 没带 params 也能跑）
-_DEFAULTS = {
-    'ks02_antara': {'window': 120},
-    'sa01_dangling': {
-        'temporal_openers': ['setelah', 'selepas', 'semasa', 'ketika', 'tatkala'],
-        'animate': ['pelajar', 'guru', 'murid', 'orang', 'kanak-kanak', 'peserta',
-                    'pengguna', 'pelanggan', 'pekerja', 'kakitangan', 'pensyarah',
-                    'doktor', 'jururawat', 'ibu', 'bapa', 'ayah', 'anak', 'adik',
-                    'abang', 'kakak', 'rakan', 'kawan', 'penduduk', 'penumpang',
-                    'pemandu', 'pembeli', 'penjual', 'penerima'],
-    },
-}
+
+def _plugin_params(rule):
+    """plugin 参数（rules.json 条目的 "params" 字段）。缺 params 或缺必需
+    字段抛 ValueError——由 scan 的 plugin 调用层捕获转 config_warnings。"""
+    params = rule.get('params')
+    if not isinstance(params, dict):
+        raise ValueError(f"plugin rule {rule.get('id', '?')} missing params object")
+    return params
 
 
 def _plugin_ks02_antara(text, sents, rule, add):
     """KS-02 antara X dengan/dan：数并列项。2 项 + dan → error（该用 dengan）；
     ≥3 项 + dengan → warn（通常用 dan）。数法：antara 与 dan/dengan 之间按
     逗号和 'dan' 切分并列项（最后一项前的 dan 是连接词不算项）。
-    params: window（antara 后扫描窗口字符数，默认 120）。"""
-    params = {**_DEFAULTS['ks02_antara'], **(rule.get('params') or {})}
-    window_n = int(params.get('window', 120))
+    params: window（antara 后扫描窗口字符数）。"""
+    params = _plugin_params(rule)
+    window_n = int(params['window'])
     conf = {'high': 'error', 'medium': 'warning', 'low': 'info'}[rule.get('conf', 'medium')]
     for start, end, sent in sents:
         for m in re.finditer(r'\bantara\b', sent, re.IGNORECASE):
@@ -91,10 +88,9 @@ def _plugin_sa01_dangling(text, sents, rule, add):
     主句却是 di- 被动——从句动作没有发出者可挂，错。
     params: temporal_openers（触发词表）、animate（有生命名词表，
     从句首词命中即视为有主语不判）。"""
-    params = {**_DEFAULTS['sa01_dangling'], **(rule.get('params') or {})}
-    openers = tuple(params.get('temporal_openers') or
-                    _DEFAULTS['sa01_dangling']['temporal_openers'])
-    animate = set(params.get('animate') or _DEFAULTS['sa01_dangling']['animate'])
+    params = _plugin_params(rule)
+    openers = tuple(params['temporal_openers'])
+    animate = set(params['animate'])
     conf = {'high': 'error', 'medium': 'warning', 'low': 'info'}[rule.get('conf', 'medium')]
     for start, end, sent in sents:
         m = re.match(rf"\s*({'|'.join(openers)})\s+(\S+)", sent, re.IGNORECASE)
