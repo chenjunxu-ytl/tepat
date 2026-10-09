@@ -102,6 +102,16 @@ def prepare(app_dir, output):
 
     extension_files = git(BASE, 'ls-files', '--', 'extension').splitlines()
     archive(output / f'tepat-{TAG}-chrome.zip', [(BASE / name, name) for name in extension_files] + documents)
+
+    # all-in-one（用户裁决 2026-10-09）：exe 运行时 + extension 一步到位——
+    # 用户解压即得完整 Tepat（跑 exe + 加载扩展），不用分别下两个 zip。
+    bundle = [(source, 'tepat/' + name) for source, name in
+              [(path, path.relative_to(BASE).as_posix()) for path in
+               (BASE / name for name in extension_files) if path.is_file()]]
+    for source, name in runtime:
+        bundle.append((source, name.replace('tepat-v2/', 'tepat/tepat-v2/', 1)))
+    archive(output / f'tepat-{TAG}-all-in-one.zip', bundle)
+
     corpus_files = git(puzzle, 'ls-files', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json').splitlines()
     archive(output / f'tepat-{TAG}-corpus-tools.zip', [(puzzle / name, 'puzzle/' + name) for name in corpus_files] + documents)
 
