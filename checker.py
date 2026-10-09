@@ -20,6 +20,101 @@ def utf16_offset(text, offset):
     return len(text[:offset].encode('utf-16-le', errors='surrogatepass')) // 2
 
 
+# ── Rule plugins（用户裁决 2026-10-08）─────────────────────────────────────
+# regex 解决不了的结构性判断。每个 plugin 是 fn(text, sents, rule, add)，
+# sents = [(start, end, sentence_text)]，add(category, level, start, end,
+# note, origin, suggestion='', ...) 与 scan 内部同签名——plugin 产出与
+# regex 命中同一格式，复用 flag/dedup/noflag 全套。
+# 插件签名稳定、代码在 exe 里（发版节奏）；词表类参数放 rule 条目里
+# （GitHub 热更新）。未注册的 plugin 名只在 config_warnings 里告警。
+
+_PASSIVE_PREFIXES = ('di', 'ter')  # di- 被动；ter- 状态式被动（Kamus Dewan 认两种）
+_TEMPORAL_OPENERS = ('setelah', 'selepas', 'semasa', 'ketika', 'tatkala')
+
+_ANIMATE_SEED = {
+    'pelajar', 'guru', 'murid', 'orang', 'kanak-kanak', 'peserta', 'pengguna',
+    'pelanggan', 'pekerja', 'kakitangan', 'pensyarah', 'doktor', 'jururawat',
+    'ibu', 'bapa', 'ayah', 'anak', 'adik', 'abang', 'kakak', 'rakan', 'kawan',
+    'penduduk', 'penumpang', 'pemandu', 'pembeli', 'penjual', 'penerima',
+}
+
+
+def _plugin_ks02_antara(text, sents, rule, add):
+    """KS-02 antara X dengan/dan：数并列项。2 项 + dan → error（该用 dengan）；
+    ≥3 项 + dengan → warn（通常用 dan）。数法：antara 与 dan/dengan 之间按
+    逗号和 'dan' 切分并列项（最后一项前的 dan 是连接词不算项）。"""
+    conf = {'high': 'error', 'medium': 'warning', 'low': 'info'}[rule.get('conf', 'medium')]
+    for start, end, sent in sents:
+        for m in re.finditer(r'\bantara\b', sent, re.IGNORECASE):
+            window = sent[m.end():m.end() + 120]
+            stop = re.search(r'[.;:\n]|, (yang|tetapi|namun) ', window, re.IGNORECASE)
+            span_txt = window[:stop.start()] if stop else window
+            cj = re.search(r'\b(dan|dengan)\b', span_txt, re.IGNORECASE)
+            if not cj:
+                continue
+            conj = cj.group(1).lower()
+            head = span_txt[:cj.start()].strip()
+            tail = span_txt[cj.end():].strip(' ,.')
+            if not head or not tail:
+                continue  # antara dan X / antara X dan（结构不完整交给 regex 通道）
+            # 数 head 侧的项：逗号数 + 1；head 里的 'dan' 不应出现（出现了就是
+            # 嵌套结构，保守放弃）
+            if re.search(r'\bdan\b', head, re.IGNORECASE):
+                continue
+            n_items = head.count(',') + 2  # head + tail
+            w_s, w_e = start + m.start(), start + m.end() + cj.end() + (len(span_txt) - len(span_txt[cj.end():].lstrip(' ,')) if False else 0)
+            # span 覆盖从 antara 到连接词
+            e_off = start + m.end() + cj.end()
+            if conj == 'dan' and n_items == 2:
+                add('grammar', conf, w_s, e_off,
+                    rule.get('note', 'antara dua item → dengan'),
+                    rule.get('entry_id', rule['id']), suggestion='dengan',
+                    evidence=[{'source': 'plugin', 'plugin': 'ks02_antara', 'items': n_items}],
+                    confidence=rule.get('conf', 'medium'))
+            elif conj == 'dengan' and n_items >= 3:
+                add('grammar', 'info', w_s, e_off,
+                    rule.get('note_alt', 'antara ≥3 item biasanya dan'),
+                    rule.get('entry_id', rule['id']),
+                    evidence=[{'source': 'plugin', 'plugin': 'ks02_antara', 'items': n_items}],
+                    confidence='low')
+
+
+def _plugin_sa01_dangling(text, sents, rule, add):
+    """SA-01 dangling modifier：句首时间从句（setelah/selepas/semasa/ketika）
+    的动作发出者必须是主句主语。可判的确定形态：时间从句无主语（动词/分词
+    开头），主句却是 di- 被动——从句动作没有发出者可挂，错。"""
+    conf = {'high': 'error', 'medium': 'warning', 'low': 'info'}[rule.get('conf', 'medium')]
+    for start, end, sent in sents:
+        m = re.match(rf"\s*({'|'.join(_TEMPORAL_OPENERS)})\s+(\S+)", sent, re.IGNORECASE)
+        if not m:
+            continue
+        head = sent[:m.end()].lower()
+        # 从句首词是名词/代词（有主语）→ 不适用本插件（Ali setelah makan...）
+        first_word = m.group(2).lower().strip('.,;:()"\'')
+        if first_word in _ANIMATE_SEED or first_word not in FUNCTION_WORDS and not first_word.startswith(_PASSIVE_PREFIXES) and re.match(r'[A-Z]', m.group(2)):
+            # 大写开头 = 专名主语（Setelah Ali makan, ...）→ 不判
+            if re.match(r'[A-Z]', m.group(2)):
+                continue
+        comma = sent.find(',')
+        if comma < 0 or comma > 90:
+            continue
+        main_clause = sent[comma + 1:comma + 90]
+        # 主句谓语动词是 di- 被动 → dangling
+        if re.search(r'\b(di\w+(?:kan|i|an)?)\b', main_clause) and re.search(
+                r'\boleh\b|\bterus\b|\dibuat|\dipasang', main_clause, re.IGNORECASE):
+            add('grammar', conf, start, start + comma + min(60, len(main_clause)),
+                rule.get('note', 'setelah/selepas/semasa/ketika + klausa utama pasif = unsur penerang tergantung'),
+                rule.get('entry_id', rule['id']),
+                evidence=[{'source': 'plugin', 'plugin': 'sa01_dangling'}],
+                confidence=rule.get('conf', 'medium'))
+
+
+RULE_PLUGINS = {
+    'ks02_antara': _plugin_ks02_antara,
+    'sa01_dangling': _plugin_sa01_dangling,
+}
+
+
 class Checker:
     def __init__(self, store: EvidenceStore, rules_path, indo_path):
         self.store = store
@@ -31,11 +126,25 @@ class Checker:
         data = json.loads(self.rules_path.read_text(encoding='utf-8'))
         self.rules = []
         self.config_warnings = []
+        # plugin 规则（用户裁决 2026-10-08）：regex 解决不了的结构性判断
+        # （数 items、从句解析、词类一致）。rules.json 条目带 "plugin" 字段
+        # 引用注册表里的函数；regex 规则照旧。老规则文件没有 plugin 字段
+        # 完全不受影响；未知 plugin 名只告警不崩（老 exe 拉到新文件安全）。
+        self.plugin_rules = []
         for i,r in enumerate(data['rules']):
             if not isinstance(r,dict):
                 self.config_warnings.append(f"Skipped rule {i}: object required")
                 continue
             if r.get('enabled') is False:  # 用户关掉的规则（config UI toggle）
+                continue
+            plugin_name = r.get('plugin')
+            if plugin_name:
+                fn = RULE_PLUGINS.get(plugin_name)
+                if fn is None:
+                    self.config_warnings.append(
+                        f"Rule {r.get('id','?')}: unknown plugin {plugin_name!r} (skipped)")
+                    continue
+                self.plugin_rules.append((r, fn))
                 continue
             try:
                 if r.get('conf','medium') not in {'high','medium','low'} or not all(k in r for k in ('id','note','re')):
@@ -332,6 +441,24 @@ class Checker:
                              s,e,rule['note'],rule.get('entry_id',rule['id']),
                              evidence=[{'source':'manual_rule','rule':rule['id'],'basis':rule.get('source','Existing manually maintained rule')}],confidence=conf,highlight=conf!='low')
                     rule_hits.append({**item,'rule':rule['id'],'conf':conf})
+        # plugin 规则（结构判断，用户裁决 2026-10-08）：regex 全部跑完后执行，
+        # 产出同格式命中；noflag 区间同样生效（例外压 plugin 命中）。
+        all_sentences=list(sentences(text))
+        for rule,fn in self.plugin_rules:
+            if rule.get('register','any') not in {'any',register}:
+                continue
+            before=len(rule_hits)
+            try:
+                fn(text, all_sentences, rule, add)
+            except Exception as e:  # noqa: BLE001 — plugin 崩不能带垮整个 scan
+                self.config_warnings.append(f"plugin {rule.get('plugin')}: {e!r}")
+                continue
+            # noflag 抑制 + 计入 rule_hits（供 dedup/统计）
+            for h in rule_hits[before:]:
+                if any(h['start']<x_e and x_s<h['end'] for _rid,x_s,x_e in noflag_spans):
+                    issues[:] = [i for i in issues if i is not h]
+                    rule_hits[rule_hits.index(h)] = None
+            rule_hits = [h for h in rule_hits if h is not None]
         # 同 ID 去重（Rule Book 并入后）：粗规则（origin 形如 KS-01-02）与精化版
         # （origin 就是规则 ID）命中重叠区间时，只留精化版。add() 已把粗规则条目
         # 塞进 issues——这里同步从 issues 里摘掉被精化版覆盖的粗条目。

@@ -3,7 +3,11 @@
   "version": 3,
   "updated": "2026-10-08",
   "source": "rules.json + Rule Book pack merged (single source of truth, 用户裁决 2026-10-08)",
-  "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict. noflag: true entries are exception ranges suppressing overlapping findings from other rule IDs (Rule Book semantics)."
+  "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict. noflag: true entries are exception ranges suppressing overlapping findings from other rule IDs (Rule Book semantics).",
+  "plugins": [
+   "ks02_antara",
+   "sa01_dangling"
+  ]
  },
  "rules": [
   {
@@ -20,7 +24,7 @@
   {
    "id": "KS-01",
    "conf": "medium",
-   "re": "\\blebih [^\\n]{0,40}?\\bdari\\b",
+   "re": "\\b(?:lebih|kurang) [^\\n]{0,40}?\\bdari\\b",
    "note": "Semak dari/daripada dalam perbandingan lebih.",
    "entry_id": "KS-01-02",
    "category": "grammar",
@@ -41,14 +45,12 @@
   },
   {
    "id": "KS-02",
-   "conf": "medium",
-   "re": "\\bantara\\b[^\\n]{0,80}\\bdan\\b",
-   "note": "Semak antara X dengan Y; penggunaan dan bergantung pada binaan ayat.",
-   "entry_id": "KS-02-04",
-   "category": "grammar",
-   "register": "formal",
-   "source": "Anna rule_book / KS-02 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "plugin": "ks02_antara",
+   "conf": "high",
+   "note": "antara dua item → dengan; antara ≥3 item → dan",
+   "desc": "antara X dengan Y for two items; antara X, Y, dan Z for three or more — count the items before choosing the connector",
+   "status": "settled",
+   "source": "Bingka Ubi Rule Book KS-02 (item counting needs structure, plugin 2026-10-08)"
   },
   {
    "id": "KS-03",
@@ -92,17 +94,6 @@
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / PI-01 (inherited manual rule; inspect context)",
-   "exceptions": []
-  },
-  {
-   "id": "SA-01",
-   "conf": "low",
-   "re": "\\b(setelah|selepas|semasa|ketika)\\b[^.\\n]{0,60},?\\s+\\w+\\s+(ialah|adalah|merupakan)\\b",
-   "note": "Semak hubungan subjek dalam klausa waktu yang diletakkan di hadapan.",
-   "entry_id": "SA-01-09",
-   "category": "grammar",
-   "register": "formal",
-   "source": "Anna rule_book / SA-01 (inherited manual rule; inspect context)",
    "exceptions": []
   },
   {
@@ -205,7 +196,7 @@
   {
    "id": "KS-01",
    "conf": "high",
-   "re": "\\blebih\\s+[^.,;\\n]{0,40}?\\bdari\\b(?!\\s+(segi|sudut|aspek|perspektif)\\b)",
+   "re": "\\b(?:lebih|kurang)\\s+[^.,;\\n]{0,40}?\\bdari\\b(?!\\s+(segi|sudut|aspek|perspektif)\\b)",
    "note": "lebih … dari → lebih … daripada (perbandingan = KABOS)",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
   },
@@ -218,23 +209,9 @@
    "noflag": true
   },
   {
-   "id": "KS-02",
-   "conf": "medium",
-   "re": "\\bantara\\s+[^.,;\\n]{0,60}?\\s+dan\\s",
-   "note": "antara X dan Y — dua item biasanya dengan; kira item dahulu",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
-  },
-  {
-   "id": "KS-02",
-   "conf": "high",
-   "re": "\\bantara\\s+\\w+(\\s+\\w+){0,4}\\s+dengan\\b",
-   "note": "antara … dengan (dua item)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
-  },
-  {
    "id": "KS-03",
    "conf": "high",
-   "re": "\\blebih\\s+[^.,;\\n]{0,40}?\\bberbanding(\\s+dengan)?\\b",
+   "re": "\\b(?:lebih|kurang)\\s+[^.,;\\n]{0,40}?\\bberbanding(\\s+dengan)?\\b",
    "note": "lebih … berbanding (dengan) → lebih … daripada",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
   },
@@ -303,10 +280,12 @@
   },
   {
    "id": "SA-01",
-   "conf": "medium",
-   "re": "\\b(Setelah|Selepas|Semasa|Ketika)\\s+[^.\\n]{0,60}?,\\s+[^.\\n]{0,30}\\s+\\bdipasang|dibuat|diberi|digunakan\\b",
-   "note": "Setelah/Selepas/semasa/ketika … + pasif: subjek klausa utama mesti pelaku",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "plugin": "sa01_dangling",
+   "conf": "high",
+   "note": "setelah/selepas/semasa/ketika + klausa utama pasif = unsur penerang tergantung",
+   "desc": "After a temporal opening clause (setelah/selepas/semasa/ketika), the main clause must be active with the same doer as its subject — a passive main clause leaves the opening clause dangling",
+   "status": "settled",
+   "source": "Bingka Ubi Rule Book SA-01 (clause analysis, plugin 2026-10-08)"
   },
   {
    "id": "SA-02",
