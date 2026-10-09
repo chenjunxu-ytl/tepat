@@ -11,7 +11,7 @@ aside button:hover::before{background:#8fb3a5}
 aside button.active{background:#2b3d4d;color:white;border-left-color:#4fa08a}
 aside button.active::before{background:#4fa08a}
 aside .side-status{margin:14px 18px 0;font-size:11px;color:#8fa0af;line-height:1.5}
-main{flex:1;max-width:1180px;margin:0 auto;padding:28px 26px;width:100%}
+main{flex:1;max-width:1200px;margin:0 auto;padding:28px 26px;width:100%}
 h2{font-size:21px;margin:0 0 6px}
 /* tab 标题右侧的 icon 按钮组（照 extension popup 的 head-btn 语言：
    28×28 透明底、svg stroke、hover 浅灰）*/
@@ -223,7 +223,6 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">Every rule here was born in the <b>Rule Book</b> — a human description turned into a rule by the LLM, then accepted by you. Source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code>. New rules sit at <b>trial</b> (half level) until you accept them.</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px">
    <div class="wf-pills" id="cfg-pills">
@@ -234,7 +233,9 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    </div>
    <span style="flex:1"></span>
    <span id="cfg-badge" class="sub" style="margin:0"></span>
-   <button class="act primary" id="btn-sync">↻ Fetch from GitHub</button>
+   <button class="head-btn" id="btn-sync" title="Fetch from GitHub">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+   </button>
    <span id="cfg-msg" class="msg"></span>
   </div>
   <table id="cfg-rules"><thead><tr><th>No.</th><th>Level</th><th>Type</th><th>What it flags</th><th>Status</th><th>Details</th><th>On</th></tr></thead><tbody></tbody></table>
@@ -329,9 +330,7 @@ async function loadConfig(){
   const views=cfgConfFilter?all.filter(v=>v.conf===cfgConfFilter):all;
   const active=all.filter(v=>v.enabled!==false).length;
   const trials=all.filter(v=>v.status==='trial').length;
-  $('#cfg-badge').textContent=r.loaded
-    ?`${active} of ${all.length} on${trials?` · ${trials} awaiting review`:''}`
-    :'grammar module not loaded (add data/evidence.sqlite to enable server-side rules)';
+  $('#cfg-badge').textContent=`${active} of ${all.length} on${trials?` · ${trials} awaiting review`:''}`;
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
   const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
   const pluginType={regex_match:'regex',ks02_antara:'items',sa01_dangling:'clause'};
