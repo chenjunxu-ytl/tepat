@@ -179,7 +179,11 @@ def _gh_sync_rules() -> dict:
     """把 GitHub 上的规则文件拉下来覆盖本地（rules.json 是唯一规则源，
     用户裁决 2026-10-08：Rule Book pack 已并入，双轨废除）。
     返回每个文件的状态；校验失败的文件不落盘（JSON 必须可解析，
-    rules.json 每条正则必须可编译）。"""
+    rules.json 每条正则必须可编译）。
+    本地领先保护（2026-10-09 Step2 失败根因）：本地 mtime 比上次成功
+    sync 晚、且上次写盘后的 push 未确认成功（push 失败/token 缺失）时，
+    GitHub 是旧版本——覆盖会把本地刚写的 trial 规则冲掉。此情况跳过该
+    文件并标 stale。上次 push 成功则 GitHub 已含本地写入，正常覆盖。"""
     import tempfile
     results = {}
     for name in GH_SYNC_FILES:
@@ -202,12 +206,16 @@ def _gh_sync_rules() -> dict:
         except (json.JSONDecodeError, ValueError) as e:
             results[name] = {"ok": False, "error": f"bad JSON: {e}"}
             continue
-        # rules.json 额外校验每条正则可编译（跟 Checker.reload 同口径）
+        # rules.json 额外校验：每条 regex/plugin 参数可执行（跟 reload 同口径；
+        # 2026-10-09 起规则是 plugin 形态，re 字段不再存在）
         if name == "rules.json":
             bad = []
+            from checker import RULE_PLUGINS
             for i, r in enumerate(parsed.get("rules", [])):
                 try:
-                    re.compile(r.get("re", ""))
+                    if r.get("plugin") == "regex_match":
+                        re.compile((r.get("params") or {}).get("pattern", ""))
+                    # 其他 plugin 的 params 校验交给 reload（缺字段进 config_warnings）
                 except re.error as e:
                     bad.append(f"rule {i} ({r.get('id', '?')}): {e}")
             if bad:
@@ -215,8 +223,17 @@ def _gh_sync_rules() -> dict:
                 continue
         local = (_word_overrides_path() if name == "word-overrides.json"
                  else _config_path(name))
+        # 本地领先保护（内容指纹，2026-10-09 Step2 根因）：本地文件内容与
+        # "上次确认与 GitHub 一致"的指纹不同 = 有未同步的本地写入（translate/
+        # enhance/accept 落盘且 push 未确认成功）→ GitHub 是旧的，跳过覆盖。
+        # push 成功（_gh_push_file）/sync 覆盖成功都会刷新指纹。
+        if _local_ahead(str(local)):
+            results[name] = {"ok": True, "bytes": len(content),
+                             "note": "local newer, sync skipped (pending push)"}
+            continue
         Path(local).write_bytes(content)
         results[name] = {"ok": True, "bytes": len(content)}
+        _mark_synced(name, str(local))
     # 同步后立即热重载 checker（若已加载）
     if _checker is not None:
         try:
@@ -225,6 +242,37 @@ def _gh_sync_rules() -> dict:
         except Exception as e:  # noqa: BLE001
             _log(f"[sync] hot-reload after sync failed: {e!r}")
     return results
+
+
+# 每个规则文件的"已同步基线"内容 sha：与 GitHub 最后一次对齐时的本地内容。
+# 本地内容指纹 ≠ 基线 = 有未同步的本地写入（stale）。mtime 在同秒快速连写
+# 时分辨不出（Windows），内容指纹没有这个坑。
+_sync_baseline: dict[str, str] = {}
+
+
+def _file_sha(path: str) -> str | None:
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _local_ahead(local_path: str) -> bool:
+    name = os.path.basename(local_path)
+    base = _sync_baseline.get(name)
+    if base is None:
+        return False  # 无基线（首次）→ 以 GitHub 为准
+    return _file_sha(local_path) != base
+
+
+def _mark_synced(repo_path: str, local_path: str | None = None) -> None:
+    """本地写入 + push 成功（或 sync 刚覆盖）后调用：把基线刷成当前本地内容
+    指纹，表示"GitHub 已含本地内容"。push 失败时不调用——sync 会保护这个
+    文件直到 push 成功。"""
+    path = local_path or _config_path(repo_path)
+    sha = _file_sha(path)
+    if sha is not None:
+        _sync_baseline[repo_path] = sha
 
 
 def _gh_token() -> str:
@@ -328,8 +376,8 @@ _closed_flags_at: float = 0.0
 
 def _gh_push_file(repo_path: str, content: str, message: str) -> str | None:
     """admin 决议/规则更新自动 commit 进 repo（Contents API）。返回 commit url；
-    失败返回 None（降级为仅本地——手动 git commit 也行）。需要 token 的
-    Contents: Read and write 权限。"""
+    失败返回 None（本地写入保留，sync 层会保护这份领先写入不被回滚）。
+    成功时刷新同步基线。需要 token 的 Contents: Read and write 权限。"""
     import urllib.error as _ue
     import urllib.request as _rq
     token = _gh_token()
@@ -354,14 +402,19 @@ def _gh_push_file(repo_path: str, content: str, message: str) -> str | None:
                "branch": GH_RULES_BRANCH}
     if sha:
         payload["sha"] = sha
-    try:
-        req = _rq.Request(api, data=json.dumps(payload).encode(), headers=headers,
-                          method="PUT")
-        with _rq.urlopen(req, timeout=15) as resp:
-            out = json.loads(resp.read())
-            return out.get("commit", {}).get("html_url")
-    except (_ue.HTTPError, OSError):
-        return None
+        try:
+            req = _rq.Request(api, data=json.dumps(payload).encode(), headers=headers,
+                              method="PUT")
+            with _rq.urlopen(req, timeout=15) as resp:
+                out = json.loads(resp.read())
+                url = out.get("commit", {}).get("html_url")
+                if url:
+                    _mark_synced(repo_path,
+                                 str(_word_overrides_path()) if repo_path == "word-overrides.json"
+                                 else None)  # GitHub 已含本地内容
+                return url
+        except (_ue.HTTPError, OSError):
+            return None
 
 
 def _gh_comment_issue(issue_url: str, body: str) -> None:
@@ -637,6 +690,11 @@ def load_words() -> int:
     store = EvidenceStore(EVIDENCE_PATH)
     _checker = Checker(store, _config_path("rules.json"), _config_path("indo_words.json"))
     _words = store.lexicon  # compatibility: health word count now counts DBP attestation
+    # 同步基线初始化：启动时刻的文件 mtime 视为"与 GitHub 一致"。启动后本地
+    # 写盘（translate/enhance/accept）会领先基线；push 成功刷新基线；push
+    # 失败则 auto-sync 跳过该文件（本地领先保护，2026-10-09 Step2 根因）。
+    for name in GH_SYNC_FILES:
+        _mark_synced(name)
     print(f"[evidence] loaded {len(_words):,} dictionary forms; run={store.metadata['review_run']}")
     return len(_words)
 
