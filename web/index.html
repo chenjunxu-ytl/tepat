@@ -424,7 +424,7 @@ async function ruleDecide(v,decision){
  // 用 #prop-msg（同一动作可能从两处发起）。
  const msgEl=$('#cfg-msg')||$('#prop-msg');
  try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision});
-  if(msgEl)msgEl.innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
+  if(msgEl)msgEl.innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
   await loadConfig();
   return res;
  }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
@@ -442,7 +442,7 @@ function ruleEnhanceDialog(v){
   try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,text});
    if(res.needs_plugin){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
    const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
-   if(msgEl)msgEl.innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`;
+   if(msgEl)msgEl.innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
    await loadConfig();
   }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  }
@@ -459,7 +459,7 @@ function ruleUpdateDialog(v){
  if(!conf&&!desc&&!note){if(msgEl)msgEl.innerHTML='<span class="bad">✗ nothing to update</span>';return;}
  request('/api/rules/update',{entry_id:v.entry_id,
    conf:conf||undefined,desc:desc||undefined,note:note||undefined})
-  .then(async res=>{if(msgEl)msgEl.innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`;await loadConfig();})
+  .then(async res=>{if(msgEl)msgEl.innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');await loadConfig();})
   .catch(e=>{if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>'});
 }
 // pill filter 作用域：只认 cfg-pills 自己的；btn-sync 提成具名函数供
@@ -552,7 +552,7 @@ $('#wl-add-go').onclick=async()=>{
  $('#wl-add-go').disabled=true;$('#wl-add-msg').textContent='Adding…';
  try{
   const r=await request('/api/wordlists/add',{list:wlState.which,word,ms});
-  $('#wl-add-msg').innerHTML=`<span class="ok">✓ ${esc(r.word)} added${r.pushed?' · pushed to GitHub':' (local only)'}</span>`;
+  $('#wl-add-msg').innerHTML=`<span class="ok">✓ ${esc(r.word)} added${r.pushed?' · pushed to GitHub':' (local only)'}</span>`+(r.push_error?`<div class="bad" style="margin-top:4px">⚠ ${esc(r.push_error)}</div>`:'');
   $('#wl-add-word').value='';$('#wl-add-ms').value='';
   await loadWordLists();  // 重新拉配置，新词即现
  }catch(e){$('#wl-add-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
@@ -579,7 +579,7 @@ $('#btn-prop-submit').onclick=async()=>{
    return;
   }
   const e=r.entry||{}, st=e.self_test_failures;
-  $('#prop-msg').innerHTML=`<span class="ok">✓ <b>${esc(r.id)}</b> created as a trial rule${r.pushed?' · pushed to GitHub':''}.</span>`;
+  $('#prop-msg').innerHTML=`<span class="ok">✓ <b>${esc(r.id)}</b> created as a trial rule${r.pushed?' · pushed to GitHub':''}.</span>`+(r.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(r.push_error)}</div>`:'');
   $('#prop-result').style.display='';
   const ex=e.examples||{};
   const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
@@ -778,7 +778,9 @@ async function loadFlagsView(which){
      try{
        const r = await request('/api/flags/decide', body);
        msg.innerHTML = decision==='accept'
-         ? `<span class="ok">✓ ${esc(r.word)} → override ${r.override.status} (issue closed)</span>`
+         ? (r.push_error
+             ? `<span class="bad">⚠ ${esc(r.word)} → override ${r.override.status} saved locally, but NOT synced to GitHub: ${esc(r.push_error)}</span>`
+             : `<span class="ok">✓ ${esc(r.word)} → override ${r.override.status} (issue closed)</span>`)
          : `<span class="ok">✓ ${esc(r.word)} rejected (issue closed)</span>`;
        loadFlagsView('wf');
      }catch(e){ btn.disabled=false; btn.textContent=decision; msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>'; }

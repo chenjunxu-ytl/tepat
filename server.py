@@ -408,15 +408,21 @@ _closed_flags_cache: list[str] | None = None
 _closed_flags_at: float = 0.0
 
 
-def _gh_push_file(repo_path: str, content: str, message: str) -> str | None:
+class GHPushError(RuntimeError):
+    """push 失败（token 缺失/权限不足/网络）——调用方必须把这个错误显示给
+    admin，不能静默吞掉。2026-10-09 air 事件：accept 显示成功但 override
+    没同步上 GitHub，admin 以为链路通了。"""
+
+
+def _gh_push_file(repo_path: str, content: str, message: str) -> str:
     """admin 决议/规则更新自动 commit 进 repo（Contents API）。返回 commit url；
-    失败返回 None（本地写入保留，sync 层会保护这份领先写入不被回滚）。
+    失败抛 GHPushError（本地写入保留，sync 层会保护这份领先写入不被回滚）。
     成功时刷新同步基线。需要 token 的 Contents: Read and write 权限。"""
     import urllib.error as _ue
     import urllib.request as _rq
     token = _gh_token()
     if not token:
-        return None
+        raise GHPushError("no GitHub token — set TEPAT_GH_TOKEN in the Env tab")
     api = f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/contents/{repo_path}"
     headers = {"Authorization": f"Bearer {token}",
                "Accept": "application/vnd.github+json",
@@ -428,9 +434,10 @@ def _gh_push_file(repo_path: str, content: str, message: str) -> str | None:
             sha = json.loads(resp.read()).get("sha")
     except _ue.HTTPError as e:
         if e.code != 404:
-            return None
-    except OSError:
-        return None
+            raise GHPushError(f"GitHub GET {repo_path}: HTTP {e.code} — "
+                              f"check TEPAT_GH_TOKEN / TEPAT_GH_REPO") from e
+    except OSError as e:
+        raise GHPushError(f"GitHub GET {repo_path}: {e}") from e
     payload = {"message": message[:200],
                "content": base64.b64encode(content.encode("utf-8")).decode(),
                "branch": GH_RULES_BRANCH}
@@ -447,8 +454,16 @@ def _gh_push_file(repo_path: str, content: str, message: str) -> str | None:
                                  str(_word_overrides_path()) if repo_path == "word-overrides.json"
                                  else None)  # GitHub 已含本地内容
                 return url
-        except (_ue.HTTPError, OSError):
-            return None
+        except _ue.HTTPError as e:
+            detail = ""
+            try:
+                detail = json.loads(e.read()).get("message", "")
+            except Exception:  # noqa: BLE001
+                pass
+            raise GHPushError(f"GitHub PUT {repo_path}: HTTP {e.code} {detail} — "
+                              f"token needs Contents: Read and write") from e
+        except OSError as e:
+            raise GHPushError(f"GitHub PUT {repo_path}: {e}") from e
 
 
 def _gh_comment_issue(issue_url: str, body: str) -> None:
@@ -1599,14 +1614,17 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     _log(f"[rules] hot-reload after decide failed: {e!r}")
             pushed = None
+            push_err = None
             try:
                 pushed = _gh_push_file("rules.json",
                                        path.read_text(encoding="utf-8"),
                                        f"rules: {action} (human review)")
-            except Exception as e:  # noqa: BLE001
+            except GHPushError as e:
+                push_err = str(e)
                 _log(f"[rules] GitHub push failed: {e!r}")
             _log(f"[rules] {action} pushed={bool(pushed)}")
-            self._json(200, {"ok": True, "action": action, "pushed": bool(pushed)})
+            self._json(200, {"ok": True, "action": action, "pushed": bool(pushed),
+                             **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/rules/translate":
             # LLM 转译入口（admin 发起，用户裁决 2026-10-09）：人类用自己的
             # 话描述语言现象（哪些用法错、哪些对，可夹例句），server 取 PRPM
@@ -1659,15 +1677,18 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     _log(f"[rules] hot-reload after translate failed: {e!r}")
             pushed = None
+            push_err = None
             try:
                 pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
                                        f"rules: add trial {rid} (LLM translation)")
-            except Exception as e:  # noqa: BLE001
+            except GHPushError as e:
+                push_err = str(e)
                 _log(f"[rules] GitHub push failed: {e!r}")
             _log(f"[rules] translated {rid} trial pushed={bool(pushed)} "
                  f"self_test={entry.get('self_test_failures', 'pass')}")
             self._json(200, {"ok": True, "id": rid, "entry": entry,
-                             "pushed": bool(pushed)})
+                             "pushed": bool(pushed),
+                             **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/rules/enhance":
             # Enhance（admin，用户裁决 2026-10-09）：trial 规则行为不对时，
             # 人类用自然语言补充（哪里不对、正确的用法是什么，可夹例句），
@@ -1742,14 +1763,17 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     _log(f"[rules] hot-reload after enhance failed: {e!r}")
             pushed = None
+            push_err = None
             try:
                 pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
                                        f"rules: enhance trial {target['id']} (new examples)")
-            except Exception as e:  # noqa: BLE001
+            except GHPushError as e:
+                push_err = str(e)
                 _log(f"[rules] GitHub push failed: {e!r}")
             _log(f"[rules] enhanced {target['id']} (examples {len(triggers)}T/{len(clears)}C) "
                  f"self_test={fresh.get('self_test_failures', 'pass')}")
-            self._json(200, {"ok": True, "entry": fresh, "pushed": bool(pushed)})
+            self._json(200, {"ok": True, "entry": fresh, "pushed": bool(pushed),
+                             **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/rules/update":
             # Update（admin，用户裁决 2026-10-09）：非行为字段直改——conf/
             # desc/note。行为规格（pattern/例句）不走这里：行为错 = 补例句
@@ -1800,13 +1824,16 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     _log(f"[rules] hot-reload after update failed: {e!r}")
             pushed = None
+            push_err = None
             try:
                 pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
                                        f"rules: update {target.get('id')} fields")
-            except Exception as e:  # noqa: BLE001
+            except GHPushError as e:
+                push_err = str(e)
                 _log(f"[rules] GitHub push failed: {e!r}")
             _log(f"[rules] updated {entry_id} fields={list(filter(None, ['conf' if conf else '', 'desc' if desc else '', 'note' if note else '']))}")
-            self._json(200, {"ok": True, "entry_id": entry_id, "pushed": bool(pushed)})
+            self._json(200, {"ok": True, "entry_id": entry_id, "pushed": bool(pushed),
+                             **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/sync":
             # 手动拉 GitHub 规则文件：全员可用（用户裁决 2026-10-08）——
             # 5 分钟自动同步本来就不分机器跑，手动触发没有理由限制；
@@ -1986,15 +2013,18 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     _log(f"[wordlists] hot-reload failed: {e!r}")
             pushed = None
+            push_err = None
             try:  # auto-push：让其他机器自动拉到（失败不阻塞本地添加）
                 pushed = _gh_push_file("indo_words.json",
                                        path.read_text(encoding="utf-8"),
                                        f"word lists: add {word!r} to {lst}")
-            except Exception as e:  # noqa: BLE001
+            except GHPushError as e:
+                push_err = str(e)
                 _log(f"[wordlists] GitHub push failed: {e!r}")
             _log(f"[wordlists] {lst} += {word!r} (ms={ms!r}) pushed={bool(pushed)}")
             self._json(200, {"ok": True, "list": lst, "word": word, "ms": ms,
-                             "pushed": bool(pushed)})
+                             "pushed": bool(pushed),
+                             **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/flags/decide":
             # Word flag 审核决议（用户裁决 2026-10-08，admin 专属）：
             #   accept: status 由 flag kind 推导（underflag → 该词存在 hit；
@@ -2014,6 +2044,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             entry = None
             push_url = None
+            push_err = None
             if decision == "accept":
                 # 词没有 over/under 属性——真相只有 is a word / not a word。
                 # reporter 的立场（kind）推导出词的最终状态。
@@ -2032,9 +2063,16 @@ class Handler(BaseHTTPRequestHandler):
                 content = json.dumps(overrides, ensure_ascii=False, indent=1) + "\n"
                 _word_overrides_path().write_text(content, encoding="utf-8")
                 # 自动 push 进 repo（用户裁决 2026-10-08）：user 只 pull。
-                push_url = _gh_push_file(
-                    "word-overrides.json", content,
-                    f"word-override: {word} -> {status} (#{entry['source_issue']})")
+                # push 失败（token 权限/网络）不再静默——2026-10-09 air 事件：
+                # issue closed + 评论成功让 admin 误以为同步完成。本地写入保留
+                # （sync 基线保护），错误显式回传前端。
+                try:
+                    push_url = _gh_push_file(
+                        "word-overrides.json", content,
+                        f"word-override: {word} -> {status} (#{entry['source_issue']})")
+                except GHPushError as e:
+                    push_err = str(e)
+                    _log(f"[decide] {word}: push failed: {e}")
             # close issue（附决议评论）
             comment = (f"**Decision: {decision}**"
                        + (f"\n- status: `{entry['status']}`\n- definition: {entry['definition'][:300]}"
@@ -2050,7 +2088,8 @@ class Handler(BaseHTTPRequestHandler):
                  + (f" -> override {entry['status']}" if entry else " (rejected)"))
             self._json(200, {"ok": True, "word": word, "decision": decision,
                              "override": entry,
-                             "pushed": push_url if decision == "accept" else None})
+                             "pushed": push_url if decision == "accept" else None,
+                             **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/unflag":
             # unflag = 关闭对应 GitHub Issue（撤回审核请求；数据留档）。
             # issue url 由前端从 chrome.storage.local 的 flaggedWords 带来。
