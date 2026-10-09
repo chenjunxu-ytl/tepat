@@ -25,7 +25,8 @@
     "trigger": [
      "Harga ini murah sangat.",
      "Makanan di situ sedap sangat.",
-     "Baju itu murah sangat."
+     "Baju itu murah sangat.",
+     "Barang ini murah sangat berbanding dengan barang di KL."
     ],
     "clear": [
      "Harga ini sangat murah.",
@@ -34,7 +35,7 @@
     ]
    },
    "params": {
-    "pattern": "\\b(\\w+)\\s+sangat\\b(?!\\s*\\w)",
+    "pattern": "\\b(\\w+)\\s+sangat\\b(?!\\s+(?:murah|mahal|besar|kecil|tinggi|rendah|baik|buruk|cantik|hodoh|pandai|bodoh|cepat|lambat|panas|sejuk|panjang|pendek|berat|ringan|kuat|lemah|lapar|kenyang|letih|sihat|sakit|sedap|banyak|sedikit|lama|baru|indah|teruk|bagus|menarik|mudah|susah|senang|payah|kaya|miskin|tebal|nipis|basah|kering|bersih|kotor|jelas|kabur|senyap|bising|laju|perlahan|awal|lewat|dekat|jauh)\\b)",
     "exceptions": [
      "\\bsangat[\\s-]+sangat\\b"
     ],
