@@ -802,11 +802,20 @@ def scan_words_lightweight(text: str, register: str = "formal") -> dict:
         except re.error:
             continue
         level = {"high": "error", "medium": "warning", "low": "info"}[rule.get("conf", "medium")]
+        suggestion_tpl = params.get("suggestion", "")
         for start, _end, sent in all_sents:
             excl = [m.span() for ex in exceptions for m in ex.finditer(sent)]
             for m in rx.finditer(sent):
                 if any(a <= m.start() and m.end() <= b for a, b in excl):
                     continue
+                # 捕获组替换（如 sangat \1）：pattern 带 group 时 m.groups() 有值
+                suggestion = ""
+                if suggestion_tpl:
+                    try:
+                        suggestion = m.expand(suggestion_tpl) if "\\1" in suggestion_tpl \
+                            else suggestion_tpl
+                    except (re.error, IndexError):
+                        suggestion = suggestion_tpl
                 issues.append({"category": rule.get("category", "grammar"),
                                "level": level, "confidence": rule.get("conf", "medium"),
                                "start": utf16_offset(text, start + m.start()),
@@ -814,7 +823,7 @@ def scan_words_lightweight(text: str, register: str = "formal") -> dict:
                                "span": sent[m.start():m.end()],
                                "note": rule.get("note", ""),
                                "origin": rule.get("entry_id", rule["id"]),
-                               "suggestion": params.get("suggestion", "")})
+                               "suggestion": suggestion})
     # 词表通道：句首大写不是专名（checker 的 named 语义）——只有非句首的
     # 大写词才算专有名词跳过。
     sent_starts = {s for s, _e, _t in sentences(text[:30000])}
@@ -1313,6 +1322,8 @@ class Handler(BaseHTTPRequestHandler):
                                        "source": r.get("source"),
                                        "examples": r.get("examples", {}),
                                        "self_test": r.get("self_test_failures", "pass"),
+                                       "params": r.get("params"),
+                                       "register": r.get("register", "any"),
                                        "valid": ok, "error": err})
             # 词表文件视图（用户裁决 2026-10-08）：三分类 indo_only / casual /
             # overrides，词表条目带 ms mapping。新旧结构都读（旧 exe 拉新文件

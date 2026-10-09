@@ -5,7 +5,7 @@
   const category = {spelling:'Spelling', grammar:'Grammar', terminology:'Terminology / usage', register:'Register'};
   function html(r) {
     if (r.error) return `<div class="bmc-err-box">${esc(r.error)}</div>`;
-    if (r.engine !== 'evidence-v2') return '<div class="bmc-err-box">Please use the latest Tepat version with the cleaned evidence database.</div>';
+    if (!r.engine) return '<div class="bmc-err-box">Server did not return a result — is Tepat running?</div>';
     const sections = [];
     sections.push('<div class="bmc-foot">Spelling & terminology: limited evidence · Grammar: local rules and context · Facts: not checked.</div>');
     if (r.coverage?.unsupported_script) sections.push('<div class="bmc-warn-note">Teks mengandungi tulisan di luar skop Latin yang belum disemak sepenuhnya.</div>');

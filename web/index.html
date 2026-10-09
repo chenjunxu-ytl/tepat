@@ -384,21 +384,43 @@ function showCfgDetail(v){
   ops+=`<button class="act" data-op="update">Update…</button>`;
  }
  const selfOk=v.self_test==='pass'||v.self_test===undefined;
+ const hasCode=v.plugin||v.params;
+ const nlBody=`
+  <p style="margin:0 0 10px;font-size:13px"><b>What it flags:</b> ${esc(v.desc||'—')}</p>
+  <p style="margin:0 0 10px;font-size:13px"><b>Shown to users:</b> ${esc(v.note||'—')}</p>`;
+ const codeBody=`
+  <pre style="margin:0 0 10px;font-size:11.5px;line-height:1.5;background:#0f1c17;color:#cde3d8;border:1px solid #24382f;border-radius:8px;padding:10px 12px;overflow:auto">${esc(JSON.stringify({id:v.id,entry_id:v.entry_id,plugin:v.plugin,register:v.register,conf:v.conf,status:v.status,params:v.params},null,2))}</pre>`;
  list.innerHTML=`
   <div class="controls" style="margin:0 0 14px">
    <button class="act" id="cfg-back">← Back to rules</button>
-   <span style="flex:1"></span><span id="cfg-msg" class="msg"></span>
+   <span style="flex:1"></span>
+   ${hasCode?`<div style="display:flex;border:1px solid #c4ccd4;border-radius:8px;overflow:hidden">
+     <button class="act cfg-view-btn" data-view="nl" style="border:none;border-radius:0">Natural language</button>
+     <button class="act cfg-view-btn" data-view="code" style="border:none;border-radius:0">Rule code</button>
+   </div>`:''}
+   <span id="cfg-msg" class="msg"></span>
   </div>
-  <h3 style="margin:0 0 2px;font-size:17px">${esc(v.id)} <span class="lvl ${confMapLvl(v)}" style="vertical-align:2px">${confMapLvlTxt(v)}</span>
+  <h3 style="margin:0 0 8px;font-size:17px">${esc(v.id)} <span class="lvl ${confMapLvl(v)}" style="vertical-align:2px">${confMapLvlTxt(v)}</span>
    ${v.status==='trial'?'<span class="lvl lvl-warn" style="vertical-align:2px">trial</span>':''}</h3>
-  <p style="margin:0 0 10px;font-size:13px"><b>What it flags:</b> ${esc(v.desc||'—')}</p>
-  <p style="margin:0 0 10px;font-size:13px"><b>Shown to users:</b> ${esc(v.note||'—')}</p>
+  <div id="cfg-detail-body">${nlBody}</div>
   <p style="margin:0 0 10px;font-size:12px;color:#5d6977">Type: ${esc(pluginTypeL(v))} · self-test: ${selfOk?'<span class="ok">✓ pass</span>':'<span class="bad">✗ '+esc((Array.isArray(v.self_test)?v.self_test.join('; '):String(v.self_test)).slice(0,160))+'</span>'} · source: ${esc(v.source||'')} · entry: ${esc(v.entry_id)}</p>
   ${trig||clear?`<div style="margin-bottom:12px"><b style="font-size:13px">Examples</b>
     ${trig?`<div style="font-size:11px;color:#5d6977;margin:4px 0 2px">Flags:</div><div style="font-size:12px">${trig}</div>`:''}
     ${clear?`<div style="font-size:11px;color:#5d6977;margin:8px 0 2px">Doesn't flag:</div><div style="font-size:12px">${clear}</div>`:''}</div>`:''}
   <div style="display:flex;gap:8px">${ops}</div>`;
  $('#cfg-back').onclick=()=>{list.innerHTML=cfgDetailReturn;cfgDetailReturn=null;bindCfgControls();loadConfig();};
+ const setView=view=>{
+  $('#cfg-detail-body').innerHTML=view==='code'?codeBody:nlBody;
+  list.querySelectorAll('.cfg-view-btn').forEach(b=>{
+   const on=b.dataset.view===view;
+   b.style.background=on?'#256b58':'';
+   b.style.color=on?'#fff':'';
+  });
+ };
+ if(hasCode){
+  setView('nl');
+  list.querySelectorAll('.cfg-view-btn').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+ }
  list.querySelectorAll('button[data-op]').forEach(b=>b.onclick=()=>{
   const op=b.dataset.op;
   if(op==='accept')ruleDecide(v,'accept');
