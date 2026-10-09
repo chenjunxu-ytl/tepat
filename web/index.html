@@ -127,12 +127,12 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-rulebook">
  <h2>Rule Book</h2>
- <p class="sub">The rule playground: write example sentences, the LLM turns them into a rule — no regex needed. You provide the knowledge; the machine only does the typing. Everything lands as a <b>trial</b> rule (half level) on the Server Rules tab, where you accept, enhance or reject it.</p>
+ <p class="sub">Write what you know about the language, in plain words — sentences that are wrong, sentences that are right, why. The LLM turns it into a rule and checks itself against your examples. Everything lands as a <b>trial</b> rule on the Server Rules tab, where you accept, enhance or reject it.</p>
  <div class="card">
-  <h3 style="margin:0 0 4px;font-size:16px">New rule from examples</h3>
-  <p class="sub" style="margin:0 0 10px">One sentence per line. <code>✗</code> = wrong, should be flagged; <code>✓</code> = right, must not be flagged (no prefix counts as ✗). Key words are looked up in PRPM automatically before translation.</p>
-  <textarea id="prop-input" placeholder="✗ Harga buku itu lebih murah dari harga asal.&#10;✓ Harga buku itu lebih murah daripada harga asal.&#10;✓ Air sungai itu berasal dari gunung.&#10;Beliau berasal dari Kedah." style="min-height:140px;margin-top:8px"></textarea>
-  <div class="controls"><button class="act primary" id="btn-prop-submit">✦ Translate into a rule</button><span id="prop-msg" class="msg"></span></div>
+  <h3 style="margin:0 0 4px;font-size:16px">New rule</h3>
+  <p class="sub" style="margin:0 0 10px">Explain naturally — the LLM works out which sentences define the mistake and which are fine.</p>
+  <textarea id="prop-input" placeholder="People write 'lebih murah dari' but comparison takes 'daripada' — 'lebih murah daripada harga asal' is right, 'lebih murah dari harga asal' is wrong.&#10;'Berasal dari' is fine for things ('air sungai itu berasal dari gunung') but a person's origin takes 'daripada': 'beliau berasal dari Kedah' should be 'beliau berasal daripada Kedah'." style="min-height:140px;margin-top:8px"></textarea>
+  <div class="controls"><button class="act primary" id="btn-prop-submit">✦ Make a rule from this</button><span id="prop-msg" class="msg"></span></div>
   <div id="prop-result" style="display:none;margin-top:12px;border-top:1px solid #e3e9ee;padding-top:12px"></div>
  </div>
 </section>
@@ -414,18 +414,13 @@ async function ruleDecide(v,decision){
 }
 // Enhance 对话框：补例句（误报→clear，漏报→trigger）重跑 LLM 转译
 function ruleEnhanceDialog(v){
- const w=prompt('New CLEAR sentences (false positives — comma-separated, will NOT be flagged):');
- if(w===null)return;
- const t=prompt('New TRIGGER sentences (missed cases — WILL be flagged, comma-separated):');
- if(t===null)return;
- const note=prompt('Note for the translator (optional):','')||'';
- const clears=w.split(',').map(s=>s.trim()).filter(Boolean);
- const triggers=t.split(',').map(s=>s.trim()).filter(Boolean);
- if(!clears.length&&!triggers.length){$('#cfg-msg').innerHTML='<span class="bad">✗ no examples given</span>';return;}
- go(triggers,clears);
+ const text=prompt(`What's wrong with rule ${v.id}? Describe it naturally — e.g. "it also flags 'X berlaku pada 2020' but dates are fine", or "it misses: Ali berasal dari Kelantan"`);
+ if(text===null)return;
+ if(!text.trim()){$('#cfg-msg').innerHTML='<span class="bad">✗ describe what\'s wrong first</span>';return;}
+ go(text);
  async function go(){
-  $('#cfg-msg').textContent='Re-translating with enriched examples…';
-  try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,triggers,clears,note});
+  $('#cfg-msg').textContent='Re-translating with your correction…';
+  try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,text});
    if(res.needs_plugin){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
    const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
    $('#cfg-msg').innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`;
@@ -548,21 +543,15 @@ $('#wl-add-word').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wl-add-g
 $('#wl-add-ms').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wl-add-go').click();});
 loadWordLists();
 
-// ── Rule Book playground：例句 → LLM 转译 → trial 规则 ──
-// 人类提供知识（例句），机器只做转译；产物进 Server Rules 的 trial 队列。
-// 单 textarea：✗ 前缀 = trigger（默认），✓ 前缀 = clear。
+// ── Rule Book playground：自然语言描述 → LLM 提炼例句并转译 → trial 规则 ──
+// 人类只管用自己的话描述语言现象；例句提取、regex 生成、自测都是机器的事。
 $('#btn-prop-submit').onclick=async()=>{
- const triggers=[],clears=[];
- for(let line of $('#prop-input').value.split('\n')){
-  line=line.trim();if(!line)continue;
-  if(line.startsWith('✓')){const s=line.slice(1).trim();if(s)clears.push(s);}
-  else{const s=line.replace(/^✗/,'').trim();if(s)triggers.push(s);}
- }
- if(!triggers.length){$('#prop-msg').innerHTML='<span class="bad">✗ at least one ✗ sentence is required</span>';return;}
- const btn=$('#btn-prop-submit');btn.disabled=true;btn.textContent='Translating… (PRPM + LLM)';
+ const text=$('#prop-input').value.trim();
+ if(!text){$('#prop-msg').innerHTML='<span class="bad">✗ describe the language point first</span>';return;}
+ const btn=$('#btn-prop-submit');btn.disabled=true;btn.textContent='Working… (reading examples, PRPM, LLM)';
  $('#prop-msg').textContent='';$('#prop-result').style.display='none';
  try{
-  const r=await request('/api/rules/translate',{triggers,clears});
+  const r=await request('/api/rules/translate',{text});
   if(r.needs_plugin){
    $('#prop-msg').innerHTML='<span class="bad">✗ The LLM could not express this as a regex:</span>';
    $('#prop-result').style.display='';
@@ -582,7 +571,7 @@ $('#btn-prop-submit').onclick=async()=>{
   $('#prop-input').value='';
   if(typeof loadConfig==='function')loadConfig();  // Server Rules 表即时带上新 trial
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
- finally{btn.disabled=false;btn.textContent='✦ Translate into a rule';}
+ finally{btn.disabled=false;btn.textContent='✦ Make a rule from this';}
 };
 // ── Env tab（admin 专属：读写磁盘 .env，重启后生效）──
 // key=value 逐行拆解成可编辑行（用户裁决 2026-10-09）；注释/空行在保存时
