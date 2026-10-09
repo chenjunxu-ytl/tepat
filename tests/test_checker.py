@@ -57,10 +57,16 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(hit['suggestion'],'kualiti')
 
     def test_rule_runs_on_attested_words_and_separate_clauses(self):
-        r=self.checker.scan('Ali ialah adalah doktor.')
+        # rules.json 只留 Rule Book 产物（RB-*）；regex 规则机制用注入验证
+        config=self.root/'rules.json'
+        config.write_text(json.dumps({'rules':[
+            {'id':'KL-TEST','plugin':'regex_match','conf':'high','note':'pemeri kembar',
+             'params':{'pattern':r'\b(ialah\s+ialah|adalah\s+adalah|ialah\s+adalah|adalah\s+ialah)\b'}}]}),encoding='utf-8')
+        c=Checker(self.store,config,BASE/'indo_words.json')
+        r=c.scan('Ali ialah adalah doktor.')
         self.assertTrue(any(h['conf']=='high' for h in r['rule_hits']))
-        r=self.checker.scan('Ali ialah doktor dan Abu adalah ketua.')
-        self.assertFalse(any(h['conf']=='high' and 'pemeri' in h['note'] for h in r['rule_hits']))
+        r=c.scan('Ali ialah doktor dan Abu adalah ketua.')
+        self.assertFalse(any(h['conf']=='high' for h in r['rule_hits']))
 
     def test_sentence_derived_blacklist_cannot_create_grammar_alerts(self):
         # These survived unchanged in corrections, or changed only with context.
@@ -76,19 +82,29 @@ class CheckerTests(unittest.TestCase):
         self.assertFalse(any(i['origin'].startswith('legacy_bigram:') for i in r['issues']))
 
     def test_context_reminders_stay_visible_without_inline_error_marks(self):
-        r=self.checker.scan('Ali ialah doktor.')
+        # low-conf 规则提醒不内联高亮——用注入的 RB-REMIND 验证（rules.json
+        # 只留 Rule Book 产物，不再有内置 low 规则）
+        config=self.root/'rules.json'
+        config.write_text(json.dumps({'rules':[
+            {'id':'RB-REMIND','plugin':'regex_match','conf':'low','note':'pemeri reminder',
+             'params':{'pattern':r'\bialah\b'}}]}),encoding='utf-8')
+        c=Checker(self.store,config,BASE/'indo_words.json')
+        r=c.scan('Ali ialah doktor.')
         reminders=[i for i in r['rule_hits'] if i['conf']=='low']
         self.assertTrue(reminders)
         self.assertTrue(all(i['highlight'] is False for i in reminders))
-        r=self.checker.scan('Ali ialah adalah doktor.')
-        self.assertTrue(any(i['level']=='error' and i['highlight'] for i in r['rule_hits']))
-        r=self.checker.scan('qzxv qzxy qzxz qzxw.')
+        r=c.scan('qzxv qzxy qzxz qzxw.')
         context=[i for i in r['issues'] if i['origin'].startswith('context_sentence:')]
         self.assertTrue(context)
         self.assertTrue(all(i['highlight'] is False for i in context))
 
     def test_rule_matches_do_not_cross_sentence_boundary(self):
-        r=self.checker.scan('Ali ialah doktor. Abu adalah ketua.')
+        config=self.root/'rules.json'
+        config.write_text(json.dumps({'rules':[
+            {'id':'RB-BOUND','plugin':'regex_match','conf':'high','note':'boundary',
+             'params':{'pattern':r'\b(ialah\s+ialah|adalah\s+adalah)\b'}}]}),encoding='utf-8')
+        c=Checker(self.store,config,BASE/'indo_words.json')
+        r=c.scan('Ali ialah doktor. Abu adalah ketua.')
         self.assertFalse(any(h['conf']=='high' for h in r['rule_hits']))
 
     def test_function_words_and_single_count_evidence_retained(self):

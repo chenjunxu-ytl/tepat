@@ -11,7 +11,7 @@ aside button:hover::before{background:#8fb3a5}
 aside button.active{background:#2b3d4d;color:white;border-left-color:#4fa08a}
 aside button.active::before{background:#4fa08a}
 aside .side-status{margin:14px 18px 0;font-size:11px;color:#8fa0af;line-height:1.5}
-main{flex:1;max-width:980px;margin:0 auto;padding:28px 26px;width:100%}
+main{flex:1;max-width:1180px;margin:0 auto;padding:28px 26px;width:100%}
 h2{font-size:21px;margin:0 0 6px}
 /* tab 标题右侧的 icon 按钮组（照 extension popup 的 head-btn 语言：
    28×28 透明底、svg stroke、hover 浅灰）*/
@@ -223,7 +223,7 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">All rules run as plugins (regex or structural) — the source of truth is the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code>. Trial rules come from the LLM translation of human examples; they flag at half a level until accepted. Click a row to see its description, examples and review actions.</p>
+ <p class="sub">Every rule here was born in the <b>Rule Book</b> — a human description turned into a rule by the LLM, then accepted by you. Source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code>. New rules sit at <b>trial</b> (half level) until you accept them.</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px">
    <div class="wf-pills" id="cfg-pills">
@@ -237,7 +237,7 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    <button class="act primary" id="btn-sync">↻ Fetch from GitHub</button>
    <span id="cfg-msg" class="msg"></span>
   </div>
-  <table id="cfg-rules"><thead><tr><th>No.</th><th>Level</th><th>Type</th><th>What it flags</th><th>Status</th><th>On</th></tr></thead><tbody></tbody></table>
+  <table id="cfg-rules"><thead><tr><th>No.</th><th>Level</th><th>Type</th><th>What it flags</th><th>Status</th><th>Details</th><th>On</th></tr></thead><tbody></tbody></table>
  </div>
 </section>
 
@@ -347,11 +347,11 @@ async function loadConfig(){
     tr.innerHTML=`<td class="cfg-no">${i+1}</td>
       <td><span class="lvl ${cls}">${lvl}</span></td>
       <td style="font-size:11px;color:#5d6977">${esc(type)}${v.plugin&&v.plugin!=='regex_match'?'<div class="lvl lvl-note" style="margin-top:3px;font-size:10px">plugin</div>':''}</td>
-      <td style="font-size:12px;max-width:420px">${esc(v.desc||v.note||'')}${v.valid===false?'<div class="bad">✗ '+esc(v.error||'')+'</div>':''}${selfOk?'':'<div class="bad">✗ self-test: '+esc(String(v.self_test).slice(0,120))+'</div>'}</td>
+      <td style="font-size:12px">${esc(v.desc||v.note||'')}${v.valid===false?'<div class="bad">✗ '+esc(v.error||'')+'</div>':''}${selfOk?'':'<div class="bad">✗ self-test failed</div>'}</td>
       <td>${v.status==='trial'?'<span class="lvl lvl-warn">trial</span>':'<span style="font-size:11px;color:#5d6977">settled</span>'}</td>
+      <td><button class="act cfg-detail-btn" style="font-size:11.5px;padding:2px 10px">Open</button></td>
       <td></td>`;
-    // 行点击 = 展开 desc 详情（Enhance/Update/Accept/Reject 都在展开区）
-    tr.onclick=e=>{if(e.target.closest('input,button,select,textarea'))return;toggleCfgDetail(tr,v);};
+    tr.querySelector('.cfg-detail-btn').onclick=e=>{e.stopPropagation();showCfgDetail(v);};
     // 动态 toggle：On/Off 开关（本地静音，GitHub sync 恢复 repo 态）
     const tg=document.createElement('button');
     tg.className='cfg-toggle'+(v.enabled!==false?' on':'');
@@ -365,24 +365,17 @@ async function loadConfig(){
     tr.lastElementChild.appendChild(tg);
     tb.appendChild(tr);
   });
-  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="6" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
+  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="7" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
  }catch(e){$('#cfg-badge').textContent='config unavailable';}
 }
-// 展开行：desc 详情 + 例句 + 审阅操作（一次只开一行）
-function toggleCfgDetail(tr,v){
- const existing=tr.parentNode?.querySelector('.cfg-detail-row');
- if(existing&&existing.dataset.entry===v.entry_id){existing.remove();return;}
- if(existing)existing.remove();
- const dr=document.createElement('tr');
- dr.className='cfg-detail-row';dr.dataset.entry=v.entry_id;
+// 详情视图：点 Details 才进（不是 list 里展开）。返回列表 = ✕ 或浏览器 back。
+let cfgDetailReturn=null;
+function showCfgDetail(v){
+ const list=$('#tab-serverrules .card');
+ cfgDetailReturn=list.innerHTML;   // 简单起见：整卡内容暂存
  const ex=v.examples||{};
  const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
  const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
- const detail=`
-  <div style="margin-bottom:6px"><b>What it flags:</b> ${esc(v.desc||'—')}</div>
-  <div style="margin-bottom:6px"><b>User note:</b> ${esc(v.note||'—')}</div>
-  ${trig||clear?`<div style="margin-bottom:6px"><b>Examples:</b>${trig?`<div style="font-size:11px;color:#5d6977;margin:3px 0">Flags:</div>`+trig:''}${clear?`<div style="font-size:11px;color:#5d6977;margin:3px 0">Doesn't flag:</div>`+clear:''}</div>`:''}
-  <div style="font-size:11px;color:#8a94a0">source: ${esc(v.source||'')} · id: ${esc(v.id)} · entry: ${esc(v.entry_id)}</div>`;
  let ops='';
  if(cfgAdmin&&v.status==='trial'){
   ops+=`<button class="act primary" data-op="accept">Accept</button>
@@ -391,20 +384,41 @@ function toggleCfgDetail(tr,v){
  }else if(cfgAdmin){
   ops+=`<button class="act" data-op="update">Update…</button>`;
  }
- dr.innerHTML=`<td colspan="6" style="background:#f7f9fa;border-top:1px solid #e3e9ee">
-  <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
-   <div style="flex:1;min-width:300px;font-size:12px">${detail}</div>
-   <div style="display:flex;flex-direction:column;gap:6px;min-width:130px">${ops}</div>
-  </div></td>`;
- tr.after(dr);
- dr.querySelectorAll('button[data-op]').forEach(b=>b.onclick=e=>{
-  e.stopPropagation();
+ const selfOk=v.self_test==='pass'||v.self_test===undefined;
+ list.innerHTML=`
+  <div class="controls" style="margin:0 0 14px">
+   <button class="act" id="cfg-back">← Back to rules</button>
+   <span style="flex:1"></span><span id="cfg-msg" class="msg"></span>
+  </div>
+  <h3 style="margin:0 0 2px;font-size:17px">${esc(v.id)} <span class="lvl ${confMapLvl(v)}" style="vertical-align:2px">${confMapLvlTxt(v)}</span>
+   ${v.status==='trial'?'<span class="lvl lvl-warn" style="vertical-align:2px">trial</span>':''}</h3>
+  <p style="margin:0 0 10px;font-size:13px"><b>What it flags:</b> ${esc(v.desc||'—')}</p>
+  <p style="margin:0 0 10px;font-size:13px"><b>Shown to users:</b> ${esc(v.note||'—')}</p>
+  <p style="margin:0 0 10px;font-size:12px;color:#5d6977">Type: ${esc(pluginTypeL(v))} · self-test: ${selfOk?'<span class="ok">✓ pass</span>':'<span class="bad">✗ '+esc((Array.isArray(v.self_test)?v.self_test.join('; '):String(v.self_test)).slice(0,160))+'</span>'} · source: ${esc(v.source||'')} · entry: ${esc(v.entry_id)}</p>
+  ${trig||clear?`<div style="margin-bottom:12px"><b style="font-size:13px">Examples</b>
+    ${trig?`<div style="font-size:11px;color:#5d6977;margin:4px 0 2px">Flags:</div><div style="font-size:12px">${trig}</div>`:''}
+    ${clear?`<div style="font-size:11px;color:#5d6977;margin:8px 0 2px">Doesn't flag:</div><div style="font-size:12px">${clear}</div>`:''}</div>`:''}
+  <div style="display:flex;gap:8px">${ops}</div>`;
+ $('#cfg-back').onclick=()=>{list.innerHTML=cfgDetailReturn;cfgDetailReturn=null;bindCfgControls();loadConfig();};
+ list.querySelectorAll('button[data-op]').forEach(b=>b.onclick=()=>{
   const op=b.dataset.op;
   if(op==='accept')ruleDecide(v,'accept');
   else if(op==='reject'){if(confirm(`Remove rule ${v.id} entirely? (this also pushes to GitHub)`))ruleDecide(v,'reject');}
   else if(op==='enhance')ruleEnhanceDialog(v);
   else if(op==='update')ruleUpdateDialog(v);
  });
+}
+const confMapLvl=v=>({high:'lvl-error',medium:'lvl-warn',low:'lvl-note'}[v.conf]||'');
+const confMapLvlTxt=v=>({high:'error',medium:'warn',low:'note'}[v.conf]||v.conf||'?');
+const pluginTypeL=v=>({regex_match:'regex',ks02_antara:'items (plugin)',sa01_dangling:'clause (plugin)'}[v.plugin]||v.plugin||'regex');
+// back 之后 controls 里的按钮事件要重绑（innerHTML 恢复不保事件）
+function bindCfgControls(){
+ document.querySelectorAll('#cfg-pills .wf-pill').forEach(pill=>pill.onclick=()=>{
+  document.querySelectorAll('#cfg-pills .wf-pill').forEach(x=>x.classList.toggle('wf-pill-active',x===pill));
+  cfgConfFilter=pill.dataset.conf;
+  loadConfig();
+ });
+ $('#btn-sync').onclick=cfgSync;
 }
 async function ruleDecide(v,decision){
  try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision});
@@ -442,21 +456,20 @@ function ruleUpdateDialog(v){
   .then(async res=>{$('#cfg-msg').innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`;await loadConfig();})
   .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
 }
-// pill filter 作用域：只认 cfg-pills 自己的
-document.querySelectorAll('#cfg-pills .wf-pill').forEach(pill=>pill.onclick=()=>{
- document.querySelectorAll('#cfg-pills .wf-pill').forEach(x=>x.classList.toggle('wf-pill-active',x===pill));
- cfgConfFilter=pill.dataset.conf;
- loadConfig();
-});
-$('#btn-sync').onclick=async()=>{
+// pill filter 作用域：只认 cfg-pills 自己的；btn-sync 提成具名函数供
+// 详情页 back 重绑（innerHTML 恢复不保事件）
+function cfgSync(){
  $('#cfg-msg').textContent='Fetching from GitHub…';
- try{const r=await fetch(API+'/api/sync',{method:'POST'}).then(async x=>{const j=await x.json();if(!x.ok&&!j.files)throw new Error(j.error);return j;});
-  const parts=Object.entries(r.files||{}).map(([f,v])=>`${f}: ${v.ok?'✓ '+(v.bytes||0)+' B':'✗ '+v.error}`);
-  const allOk=Object.values(r.files||{}).every(v=>v.ok);
-  $('#cfg-msg').innerHTML=allOk?`<span class="ok">✓ Synced from ${esc(r.repo)}@${esc(r.branch)} — ${parts.join(' · ')}</span>`:`<span class="bad">✗ ${parts.join(' · ')}</span>`;
-  await loadConfig();
- }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
-};
+ fetch(API+'/api/sync',{method:'POST'}).then(async x=>{const j=await x.json();if(!x.ok&&!j.files)throw new Error(j.error);return j;})
+  .then(async r=>{
+   const parts=Object.entries(r.files||{}).map(([f,v])=>`${f}: ${v.ok?'✓ '+(v.bytes||0)+' B':'✗ '+v.error}`);
+   const allOk=Object.values(r.files||{}).every(v=>v.ok);
+   $('#cfg-msg').innerHTML=allOk?`<span class="ok">✓ Synced from ${esc(r.repo)}@${esc(r.branch)} — ${parts.join(' · ')}</span>`:`<span class="bad">✗ ${parts.join(' · ')}</span>`;
+   await loadConfig();
+  })
+  .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
+}
+bindCfgControls();
 // 首次加载由 health 回调触发（admin 态确定后），不再急加载
 
 // ── Word lists tab：/api/config 里的三分类词表（带 ms mapping）+ overrides ──
