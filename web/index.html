@@ -63,6 +63,19 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 .cfg-toggle.on{background:#256b58;border-color:#256b58}
 .cfg-toggle.on::after{left:17px}
 .cfg-detail-row td{cursor:default}
+/* 模态弹窗（替代 prompt/confirm——原生对话框会阻塞整个页面且样式突兀） */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,28,23,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:modalFade .15s ease-out}
+.modal-box{background:#fff;border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.28);width:min(520px,calc(100vw - 40px));max-height:calc(100vh - 60px);overflow:auto;padding:20px 22px;animation:modalPop .18s cubic-bezier(.34,1.4,.64,1)}
+@keyframes modalFade{from{opacity:0}}
+@keyframes modalPop{from{opacity:0;transform:scale(.94) translateY(8px)}}
+.modal-title{font-size:15px;font-weight:700;margin:0 0 4px}
+.modal-sub{font-size:12px;color:#5d6977;margin:0 0 12px}
+.modal-box textarea,.modal-box select,.modal-box input[type=text]{width:100%;box-sizing:border-box;font:13px/1.5 system-ui;padding:8px 10px;border:1px solid #c4ced8;border-radius:7px;resize:vertical}
+.modal-box textarea:focus,.modal-box select:focus,.modal-box input[type=text]:focus{outline:none;border-color:#256b58}
+.modal-field{margin-bottom:12px}
+.modal-field label{display:block;font-size:11.5px;font-weight:600;color:#526273;margin-bottom:4px}
+.modal-err{font-size:12px;color:#a3312a;margin:0 0 10px;min-height:14px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 .wf-closed-toggle{
   font:600 12px system-ui;padding:5px 13px;border-radius:14px;cursor:pointer;
   border:1px solid #d7dee6;background:#fff;color:#526273;user-select:none;
@@ -302,6 +315,46 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
 
 async function request(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed.');return j;}
 
+// ── 模态弹窗（替代原生 prompt/confirm）──
+// openModal({title,sub,fields,submit,rows,onSubmit})：
+//   fields: [{name,label,type:'text'|'textarea'|'select',value,options,placeholder,hint}]
+//   返回 Promise<values|null>（null = 取消）；Enter 提交（textarea 里 Ctrl+Enter）、Esc/点遮罩取消
+function openModal({title,sub='',fields=[],submit='OK',danger=false,rows=8}){
+ return new Promise(resolve=>{
+  const overlay=document.createElement('div');overlay.className='modal-overlay';
+  const box=document.createElement('div');box.className='modal-box';
+  const f=(name,label,inner,hint='')=>`<div class="modal-field"><label>${esc(label)}</label>${inner}${hint?`<div style="font-size:11px;color:#8a95a1;margin-top:3px">${esc(hint)}</div>`:''}</div>`;
+  box.innerHTML=`<h3 class="modal-title">${esc(title)}</h3>${sub?`<p class="modal-sub">${esc(sub)}</p>`:''}
+   ${fields.map(fd=>f(fd.name,fd.label,
+      fd.type==='textarea'?`<textarea name="${fd.name}" rows="${fd.rows||rows}" placeholder="${esc(fd.placeholder||'')}">${esc(fd.value||'')}</textarea>`
+     :fd.type==='select'?`<select name="${fd.name}">${(fd.options||[]).map(o=>`<option value="${esc(o.value)}"${o.value===(fd.value??'')?' selected':''}>${esc(o.label)}</option>`).join('')}</select>`
+     :`<input type="text" name="${fd.name}" value="${esc(fd.value||'')}" placeholder="${esc(fd.placeholder||'')}">`,fd.hint||'')).join('')}
+   <p class="modal-err"></p>
+   <div class="modal-actions">
+    <button class="act" data-x="cancel">Cancel</button>
+    <button class="act ${danger?'':'primary'}" data-x="ok" ${danger?'style="background:#a3312a;color:#fff;border-color:#a3312a"':''}>${esc(submit)}</button>
+   </div>`;
+  overlay.appendChild(box);document.body.appendChild(overlay);
+  const first=box.querySelector('textarea,select,input');if(first)first.focus();
+  const close=val=>{overlay.remove();document.removeEventListener('keydown',onKey);resolve(val);};
+  const onKey=e=>{
+   if(e.key==='Escape')close(null);
+   else if(e.key==='Enter'&&(e.target.tagName!=='TEXTAREA'||e.ctrlKey||e.metaKey)){e.preventDefault();box.querySelector('[data-x=ok]').click();}
+  };
+  document.addEventListener('keydown',onKey);
+  overlay.onclick=e=>{if(e.target===overlay)close(null);};
+  box.querySelector('[data-x=cancel]').onclick=()=>close(null);
+  box.querySelector('[data-x=ok]').onclick=()=>{
+   const values={};fields.forEach(fd=>{values[fd.name]=box.querySelector(`[name="${fd.name}"]`).value;});
+   close(values);
+  };
+ });
+}
+// 确认弹窗：openConfirm({title,sub,confirmText}) → Promise<bool>
+function openConfirm({title,sub='',confirmText='Confirm'}){
+ return openModal({title,sub,fields:[],submit:confirmText,danger:true}).then(v=>v!==null);
+}
+
 // ── Check tab ──
 $('#btn-check').onclick=async()=>{
  const current=++generation,text=$('#input').value;if(!text.trim())return;
@@ -421,10 +474,14 @@ function showCfgDetail(v){
   setView('nl');
   list.querySelectorAll('.cfg-view-btn').forEach(b=>b.onclick=()=>setView(b.dataset.view));
  }
- list.querySelectorAll('button[data-op]').forEach(b=>b.onclick=()=>{
+ list.querySelectorAll('button[data-op]').forEach(b=>b.onclick=async()=>{
   const op=b.dataset.op;
   if(op==='accept')ruleDecide(v,'accept');
-  else if(op==='reject'){if(confirm(`Remove rule ${v.id} entirely? (this also pushes to GitHub)`))ruleDecide(v,'reject');}
+  else if(op==='reject'){
+   if(await openConfirm({title:`Remove ${v.id} entirely?`,
+     sub:'The rule is deleted from rules.json and the deletion pushes to GitHub.',confirmText:'Remove'}))
+    ruleDecide(v,'reject');
+  }
   else if(op==='enhance')ruleEnhanceDialog(v);
   else if(op==='update')ruleUpdateDialog(v);
  });
@@ -453,36 +510,48 @@ async function ruleDecide(v,decision){
 }
 // Enhance 对话框：自然语言描述哪里不对，LLM 重跑转译。可能从 Server Rules
 // 详情页或 Rule Book playground 发起——反馈写当下可见的 msg 元素。
-function ruleEnhanceDialog(v){
+async function ruleEnhanceDialog(v){
  const msgEl=$('#cfg-msg')||$('#prop-msg');
- const text=prompt(`What's wrong with rule ${v.id}? Describe it naturally — e.g. "it also flags 'X berlaku pada 2020' but dates are fine", or "it misses: Ali berasal dari Kelantan"`);
- if(text===null)return;
- if(!text.trim()){if(msgEl)msgEl.innerHTML='<span class="bad">✗ describe what\'s wrong first</span>';return;}
- go(text);
- async function go(){
-  if(msgEl)msgEl.textContent='Re-translating with your correction…';
-  try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,text});
-   if(res.needs_plugin){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
-   const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
-   if(msgEl)msgEl.innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
-   await loadConfig();
-  }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
- }
+ const values=await openModal({
+  title:`Enhance ${v.id}`,
+  sub:'Describe what the rule gets wrong, in your own words. The translation runs again and your sentences join the examples.',
+  fields:[{name:'text',label:'What is wrong / missing?',type:'textarea',rows:7,
+    placeholder:`e.g. it also flags 'X berlaku pada 2020' but dates are fine\nor: it misses — Ali berasal dari Kelantan`}],
+  submit:'Re-translate'});
+ if(values===null)return;
+ const text=values.text.trim();
+ if(!text){if(msgEl)msgEl.innerHTML='<span class="bad">✗ describe what\'s wrong first</span>';return;}
+ if(msgEl)msgEl.textContent='Re-translating with your correction…';
+ try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,text});
+  if(res.needs_plugin){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
+  const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
+  if(msgEl)msgEl.innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
+  await loadConfig();
+ }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
-// Update 对话框：非行为字段直改（conf/desc/note）
-function ruleUpdateDialog(v){
+// Update 对话框：非行为字段直改（conf/desc/note）——一个表单一次提交
+async function ruleUpdateDialog(v){
  const msgEl=$('#cfg-msg')||$('#prop-msg');
- const conf=prompt('Confidence level (high/medium/low — empty = unchanged):','');
- if(conf===null)return;
- const desc=prompt('Description (shown to reviewers — empty = unchanged):','');
- if(desc===null)return;
- const note=prompt('User note (shown when flagged — empty = unchanged):','');
- if(note===null)return;
- if(!conf&&!desc&&!note){if(msgEl)msgEl.innerHTML='<span class="bad">✗ nothing to update</span>';return;}
- request('/api/rules/update',{entry_id:v.entry_id,
-   conf:conf||undefined,desc:desc||undefined,note:note||undefined})
-  .then(async res=>{if(msgEl)msgEl.innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');await loadConfig();})
-  .catch(e=>{if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>'});
+ const values=await openModal({
+  title:`Update ${v.id}`,
+  sub:'Non-behaviour fields only — changes apply immediately and push to GitHub.',
+  fields:[
+   {name:'conf',label:'Confidence level',type:'select',value:v.conf,
+     options:[{value:'',label:'(unchanged)'},{value:'high',label:'high — error'},{value:'medium',label:'medium — warn'},{value:'low',label:'low — note'}]},
+   {name:'desc',label:'Description (shown to reviewers)',type:'textarea',rows:3,value:v.desc,placeholder:'(unchanged)'},
+   {name:'note',label:'User note (shown when flagged)',type:'textarea',rows:3,value:v.note,placeholder:'(unchanged)'}],
+  submit:'Save'});
+ if(values===null)return;
+ const conf=values.conf.trim(),desc=values.desc.trim(),note=values.note.trim();
+ const cur={conf:v.conf||'',desc:v.desc||'',note:v.note||''};
+ if((!conf||conf===cur.conf)&&(!desc||desc===cur.desc)&&(!note||note===cur.note)){
+  if(msgEl)msgEl.innerHTML='<span class="bad">✗ nothing to update</span>';return;
+ }
+ try{const res=await request('/api/rules/update',{entry_id:v.entry_id,
+   conf:conf&&conf!==cur.conf?conf:undefined,desc:desc&&desc!==cur.desc?desc:undefined,note:note&&note!==cur.note?note:undefined});
+  if(msgEl)msgEl.innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
+  await loadConfig();
+ }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
 // pill filter 作用域：只认 cfg-pills 自己的；btn-sync 提成具名函数供
 // 详情页 back 重绑（innerHTML 恢复不保事件）
@@ -627,7 +696,11 @@ $('#btn-prop-submit').onclick=async()=>{
    const op=b.dataset.op;
    const v={entry_id:e.entry_id,id:r.id};
    if(op==='accept')await ruleDecide(v,'accept');
-   else if(op==='reject'){if(!confirm(`Remove rule ${r.id} entirely? (this also pushes to GitHub)`))return;await ruleDecide(v,'reject');}
+   else if(op==='reject'){
+    if(!await openConfirm({title:`Remove ${r.id} entirely?`,
+      sub:'The rule is deleted from rules.json and the deletion pushes to GitHub.',confirmText:'Remove'}))return;
+    await ruleDecide(v,'reject');
+   }
    else if(op==='enhance'){ruleEnhanceDialog(v);return;}
    $('#prop-result').style.display='none';
    $('#prop-input').value='';
