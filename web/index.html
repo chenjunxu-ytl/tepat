@@ -588,16 +588,9 @@ $('#btn-prop-submit').onclick=async()=>{
 // key=value 逐行拆解成可编辑行（用户裁决 2026-10-09）；注释/空行在保存时
 // 原样保留（挂在下一个 key 前面——简单实现：收集在行对象里，序列化时回填）。
 const envRows = [];
-const ENV_KEYS_DOC = {
-  TEPAT_GH_TOKEN: 'GitHub PAT — falls back to %APPDATA%\\tepat\\gh_token',
-  TEPAT_GH_REPO: 'rules/proposals repo (default chenjunxu-ytl/tepat)',
-  TEPAT_GH_BRANCH: 'rules branch (default main)',
-  TEPAT_AUTO_SYNC: 'set 0 to disable the 5-minute GitHub auto-sync',
-  TEPAT_EVIDENCE_DB: 'path to evidence.sqlite (default data/evidence.sqlite)',
-  TEPAT_LLM_URL: 'rule translation LLM endpoint, e.g. https://api.z.ai/api/paas/v4/chat/completions',
-  TEPAT_LLM_KEY: 'API key for the rule-translation LLM',
-  TEPAT_LLM_MODEL: 'model id, e.g. glm-5.2 (thinking is disabled automatically)',
-};
+// key 说明由 server 提供（/api/env 的 key_docs——server 读哪些 key，哪里就
+// 有权威清单）；前端不 hardcode 任何 key 名或示例值。
+const ENV_KEYS_DOC = {};
 function envRowHtml(key, value, isNew, comments='') {
   const known = ENV_KEYS_DOC[key];
   return `
@@ -613,6 +606,7 @@ function envRowHtml(key, value, isNew, comments='') {
 async function loadEnv(){
  try{
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
+  Object.assign(ENV_KEYS_DOC, r.key_docs||{});
   const box=$('#env-rows');box.replaceChildren();envRows.length=0;
   // 拆解：KEY=value 行进 envRows；注释/空行作为前导文本挂在下一行前
   let pendingComments='';

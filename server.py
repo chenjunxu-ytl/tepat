@@ -59,6 +59,21 @@ def _env_path() -> str:
     return os.path.join(_appdata_dir(), ".env")
 
 
+# server 实际读取的 .env key 及其字段说明（权威清单——Env tab 的行内文档
+# 由 /api/env 的 key_docs 提供，前端不 hardcode key 名或示例值）。
+ENV_KEY_DOCS = {
+    "TEPAT_ADMIN_TOKEN": "admin machine token — grants review/push on this machine",
+    "TEPAT_GH_TOKEN": "GitHub PAT — falls back to the gh_token file beside this .env",
+    "TEPAT_GH_REPO": "rules/proposals repo",
+    "TEPAT_GH_BRANCH": "rules branch",
+    "TEPAT_AUTO_SYNC": "set 0 to disable the 5-minute GitHub auto-sync",
+    "TEPAT_EVIDENCE_DB": "path to evidence.sqlite",
+    "TEPAT_LLM_URL": "chat-completions endpoint for rule translation",
+    "TEPAT_LLM_KEY": "API key for the rule-translation endpoint",
+    "TEPAT_LLM_MODEL": "model id for rule translation",
+}
+
+
 def _load_dotenv() -> None:
     """启动时读 tepat 数据目录的 .env（KEY=VALUE 逐行），不覆盖已有环境变量。
     .env 在 .gitignore 里，绝不打包进 release。"""
@@ -1086,6 +1101,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/env":
             # Env tab（admin 专属）：读磁盘上的 .env 原文。非 admin 一律 403——
             # 里面有 admin token / PAT，普通用户机器上不存在也不该看。
+            # key_docs：server 实际读取的 key 的字段说明（权威清单在代码读取
+            # 处；前端不 hardcode key 名/示例值）。
             if not IS_ADMIN_MACHINE:
                 self._json(403, {"error": "admin machine required"})
                 return
@@ -1097,7 +1114,8 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError as e:
                     self._json(500, {"error": f"read failed: {e}"})
                     return
-            self._json(200, {"path": _env_path(), "exists": exists, "content": content})
+            self._json(200, {"path": _env_path(), "exists": exists, "content": content,
+                             "key_docs": ENV_KEY_DOCS})
         elif self.path == "/api/config":
             # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
             # + 解析态 + 逐条规则视图，web UI 的 Config 区消费。
