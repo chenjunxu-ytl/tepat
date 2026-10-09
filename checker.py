@@ -25,28 +25,35 @@ def utf16_offset(text, offset):
 # sents = [(start, end, sentence_text)]，add(category, level, start, end,
 # note, origin, suggestion='', ...) 与 scan 内部同签名——plugin 产出与
 # regex 命中同一格式，复用 flag/dedup/noflag 全套。
-# 插件签名稳定、代码在 exe 里（发版节奏）；词表类参数放 rule 条目里
-# （GitHub 热更新）。未注册的 plugin 名只在 config_warnings 里告警。
+# 插件签名稳定、代码在 exe 里（发版节奏）；词表类参数（"params" 字段）
+# 随 rules.json 走 GitHub 热更新——代码里不藏数据（用户裁决 2026-10-08）。
+# 未注册的 plugin 名只在 config_warnings 里告警。
 
-_PASSIVE_PREFIXES = ('di', 'ter')  # di- 被动；ter- 状态式被动（Kamus Dewan 认两种）
-_TEMPORAL_OPENERS = ('setelah', 'selepas', 'semasa', 'ketika', 'tatkala')
-
-_ANIMATE_SEED = {
-    'pelajar', 'guru', 'murid', 'orang', 'kanak-kanak', 'peserta', 'pengguna',
-    'pelanggan', 'pekerja', 'kakitangan', 'pensyarah', 'doktor', 'jururawat',
-    'ibu', 'bapa', 'ayah', 'anak', 'adik', 'abang', 'kakak', 'rakan', 'kawan',
-    'penduduk', 'penumpang', 'pemandu', 'pembeli', 'penjual', 'penerima',
+# params 默认值：规则条目缺字段时的兜底（老 rules.json 没带 params 也能跑）
+_DEFAULTS = {
+    'ks02_antara': {'window': 120},
+    'sa01_dangling': {
+        'temporal_openers': ['setelah', 'selepas', 'semasa', 'ketika', 'tatkala'],
+        'animate': ['pelajar', 'guru', 'murid', 'orang', 'kanak-kanak', 'peserta',
+                    'pengguna', 'pelanggan', 'pekerja', 'kakitangan', 'pensyarah',
+                    'doktor', 'jururawat', 'ibu', 'bapa', 'ayah', 'anak', 'adik',
+                    'abang', 'kakak', 'rakan', 'kawan', 'penduduk', 'penumpang',
+                    'pemandu', 'pembeli', 'penjual', 'penerima'],
+    },
 }
 
 
 def _plugin_ks02_antara(text, sents, rule, add):
     """KS-02 antara X dengan/dan：数并列项。2 项 + dan → error（该用 dengan）；
     ≥3 项 + dengan → warn（通常用 dan）。数法：antara 与 dan/dengan 之间按
-    逗号和 'dan' 切分并列项（最后一项前的 dan 是连接词不算项）。"""
+    逗号和 'dan' 切分并列项（最后一项前的 dan 是连接词不算项）。
+    params: window（antara 后扫描窗口字符数，默认 120）。"""
+    params = {**_DEFAULTS['ks02_antara'], **(rule.get('params') or {})}
+    window_n = int(params.get('window', 120))
     conf = {'high': 'error', 'medium': 'warning', 'low': 'info'}[rule.get('conf', 'medium')]
     for start, end, sent in sents:
         for m in re.finditer(r'\bantara\b', sent, re.IGNORECASE):
-            window = sent[m.end():m.end() + 120]
+            window = sent[m.end():m.end() + window_n]
             stop = re.search(r'[.;:\n]|, (yang|tetapi|namun) ', window, re.IGNORECASE)
             span_txt = window[:stop.start()] if stop else window
             cj = re.search(r'\b(dan|dengan)\b', span_txt, re.IGNORECASE)
@@ -62,17 +69,16 @@ def _plugin_ks02_antara(text, sents, rule, add):
             if re.search(r'\bdan\b', head, re.IGNORECASE):
                 continue
             n_items = head.count(',') + 2  # head + tail
-            w_s, w_e = start + m.start(), start + m.end() + cj.end() + (len(span_txt) - len(span_txt[cj.end():].lstrip(' ,')) if False else 0)
             # span 覆盖从 antara 到连接词
             e_off = start + m.end() + cj.end()
             if conj == 'dan' and n_items == 2:
-                add('grammar', conf, w_s, e_off,
+                add('grammar', conf, start + m.start(), e_off,
                     rule.get('note', 'antara dua item → dengan'),
                     rule.get('entry_id', rule['id']), suggestion='dengan',
                     evidence=[{'source': 'plugin', 'plugin': 'ks02_antara', 'items': n_items}],
                     confidence=rule.get('conf', 'medium'))
             elif conj == 'dengan' and n_items >= 3:
-                add('grammar', 'info', w_s, e_off,
+                add('grammar', 'info', start + m.start(), e_off,
                     rule.get('note_alt', 'antara ≥3 item biasanya dan'),
                     rule.get('entry_id', rule['id']),
                     evidence=[{'source': 'plugin', 'plugin': 'ks02_antara', 'items': n_items}],
@@ -80,21 +86,25 @@ def _plugin_ks02_antara(text, sents, rule, add):
 
 
 def _plugin_sa01_dangling(text, sents, rule, add):
-    """SA-01 dangling modifier：句首时间从句（setelah/selepas/semasa/ketika）
-    的动作发出者必须是主句主语。可判的确定形态：时间从句无主语（动词/分词
-    开头），主句却是 di- 被动——从句动作没有发出者可挂，错。"""
+    """SA-01 dangling modifier：句首时间从句（temporal_openers）的动作发出者
+    必须是主句主语。可判的确定形态：时间从句无主语（动词/分词开头），
+    主句却是 di- 被动——从句动作没有发出者可挂，错。
+    params: temporal_openers（触发词表）、animate（有生命名词表，
+    从句首词命中即视为有主语不判）。"""
+    params = {**_DEFAULTS['sa01_dangling'], **(rule.get('params') or {})}
+    openers = tuple(params.get('temporal_openers') or
+                    _DEFAULTS['sa01_dangling']['temporal_openers'])
+    animate = set(params.get('animate') or _DEFAULTS['sa01_dangling']['animate'])
     conf = {'high': 'error', 'medium': 'warning', 'low': 'info'}[rule.get('conf', 'medium')]
     for start, end, sent in sents:
-        m = re.match(rf"\s*({'|'.join(_TEMPORAL_OPENERS)})\s+(\S+)", sent, re.IGNORECASE)
+        m = re.match(rf"\s*({'|'.join(openers)})\s+(\S+)", sent, re.IGNORECASE)
         if not m:
             continue
-        head = sent[:m.end()].lower()
-        # 从句首词是名词/代词（有主语）→ 不适用本插件（Ali setelah makan...）
+        # 大写开头 = 专名主语（Setelah Ali makan, ...）→ 不判；
+        # 有生命名词表命中 = 从句有主语 → 不判
         first_word = m.group(2).lower().strip('.,;:()"\'')
-        if first_word in _ANIMATE_SEED or first_word not in FUNCTION_WORDS and not first_word.startswith(_PASSIVE_PREFIXES) and re.match(r'[A-Z]', m.group(2)):
-            # 大写开头 = 专名主语（Setelah Ali makan, ...）→ 不判
-            if re.match(r'[A-Z]', m.group(2)):
-                continue
+        if re.match(r'[A-Z]', m.group(2)) or first_word in animate:
+            continue
         comma = sent.find(',')
         if comma < 0 or comma > 90:
             continue

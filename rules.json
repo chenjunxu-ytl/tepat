@@ -50,7 +50,10 @@
    "note": "antara dua item → dengan; antara ≥3 item → dan",
    "desc": "antara X dengan Y for two items; antara X, Y, dan Z for three or more — count the items before choosing the connector",
    "status": "settled",
-   "source": "Bingka Ubi Rule Book KS-02 (item counting needs structure, plugin 2026-10-08)"
+   "source": "Bingka Ubi Rule Book KS-02 (item counting needs structure, plugin 2026-10-08)",
+   "params": {
+    "window": 120
+   }
   },
   {
    "id": "KS-03",
@@ -285,7 +288,46 @@
    "note": "setelah/selepas/semasa/ketika + klausa utama pasif = unsur penerang tergantung",
    "desc": "After a temporal opening clause (setelah/selepas/semasa/ketika), the main clause must be active with the same doer as its subject — a passive main clause leaves the opening clause dangling",
    "status": "settled",
-   "source": "Bingka Ubi Rule Book SA-01 (clause analysis, plugin 2026-10-08)"
+   "source": "Bingka Ubi Rule Book SA-01 (clause analysis, plugin 2026-10-08)",
+   "params": {
+    "temporal_openers": [
+     "setelah",
+     "selepas",
+     "semasa",
+     "ketika",
+     "tatkala"
+    ],
+    "animate": [
+     "pelajar",
+     "guru",
+     "murid",
+     "orang",
+     "kanak-kanak",
+     "peserta",
+     "pengguna",
+     "pelanggan",
+     "pekerja",
+     "kakitangan",
+     "pensyarah",
+     "doktor",
+     "jururawat",
+     "ibu",
+     "bapa",
+     "ayah",
+     "anak",
+     "adik",
+     "abang",
+     "kakak",
+     "rakan",
+     "kawan",
+     "penduduk",
+     "penumpang",
+     "pemandu",
+     "pembeli",
+     "penjual",
+     "penerima"
+    ]
+   }
   },
   {
    "id": "SA-02",
