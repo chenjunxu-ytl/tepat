@@ -1,16 +1,9 @@
 """Prepare checked Zip64 release assets from the existing portable runtime.
 
-Modes (user ruling 2026-10-02: the lightweight PRPM runtime is a first-class
-release asset, not an afterthought):
-
-  --mode core   PRPM-only runtime. No evidence.sqlite / rules.json /
-                indo_words.json in the zip; the app starts in the
-                grammar_module_not_installed capability state and serves
-                PRPM lookups. Expected zip size ~15-25 MB.
-  --mode full   PRPM runtime + the grammar data pack (previous behaviour).
-
-Both modes verify the same runtime integrity checks that apply to the files
-they actually ship.
+Single mode (2026-10-09): rules + word lists + PRPM. The legacy 2.3GB
+evidence corpus is not shipped — word/grammar checks run from APPDATA rule
+files plus PRPM lookups, and rules.json / indo_words.json ride along as
+first-start seeds. Expected zip size tens of MB.
 """
 from __future__ import annotations
 
@@ -21,12 +14,11 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-from evidence import EvidenceStore
-
 BASE = Path(__file__).resolve().parent.parent  # 项目根（本文件在 tools/）
 TAG = 'v0.2.0-preview'
 CHUNK = 4 * 1024 * 1024
-MODES = ('core', 'full')
+
+SEED_FILES = ('rules.json', 'indo_words.json')
 
 
 def git(root, *args):
@@ -38,7 +30,7 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def archive(path, entries, *, evidence_digest=None):
+def archive(path, entries):
     staging = path.with_suffix('.zip.part')
     print(f'Packing {path.name}', flush=True)
     with zipfile.ZipFile(staging, 'x', compression=zipfile.ZIP_DEFLATED,
@@ -48,35 +40,19 @@ def archive(path, entries, *, evidence_digest=None):
             if size > 100_000_000:
                 print(f'  {name}: {size:,} bytes', flush=True)
             with source.open('rb') as incoming, bundle.open(name, 'w', force_zip64=True) as outgoing:
-                copied = 0
-                next_report = size / 4
                 while block := incoming.read(CHUNK):
                     outgoing.write(block)
-                    copied += len(block)
-                    if size > 100_000_000 and copied >= next_report:
-                        print(f'  evidence {min(100, copied * 100 // size)}%', flush=True)
-                        next_report += size / 4
     with zipfile.ZipFile(staging) as bundle:
         assert set(bundle.namelist()) == {name for _, name in entries}
-        # Fully consume every entry to check decompression and CRC, including >2 GB.
+        # Fully consume every entry to check decompression and CRC.
         for entry in bundle.infolist():
             with bundle.open(entry) as stream:
-                value = hashlib.file_digest(stream, 'sha256').hexdigest()
-            if entry.filename.endswith('/data/evidence.sqlite'):
-                if value != evidence_digest:
-                    raise ValueError('Archived evidence hash differs from the completed database')
-    if staging.stat().st_size >= 2 * 1024**3:
-        raise ValueError('Asset exceeds GitHub release file limit; keep staging for inspection')
+                hashlib.file_digest(stream, 'sha256')
     staging.rename(path)
     print(f'Verified {path.name}: {path.stat().st_size:,} bytes', flush=True)
 
 
-GRAMMAR_FILES = ('rules.json', 'indo_words.json')
-GRAMMAR_APP_FILES = tuple(f'_internal/{name}' for name in GRAMMAR_FILES)
-GRAMMAR_ARCHIVE = '_internal/data/evidence.sqlite'
-
-
-def prepare(app_dir, output, mode: str):
+def prepare(app_dir, output):
     if git(BASE, 'status', '--porcelain'):
         raise ValueError('Commit checker changes before preparing a release')
     puzzle = BASE.parent / 'puzzle'
@@ -85,57 +61,34 @@ def prepare(app_dir, output, mode: str):
     extension = json.loads((BASE / 'extension/manifest.json').read_text(encoding='utf-8'))
     if extension.get('version_name') != TAG.removeprefix('v'):
         raise ValueError('Extension preview version differs from the release tag')
-    evidence = BASE / 'data/evidence.sqlite'
-    metadata = None
-    if mode == 'full':
-        store = EvidenceStore(evidence)
-        metadata = store.metadata
-        if metadata.get('build_scope') != 'full' or metadata.get('tokenizer_sha256') != digest(BASE / 'text_units.py'):
-            raise ValueError('Completed evidence and current tokenizer must match')
-        store.close_thread()
     exe = app_dir / 'tepat-v2.exe'
     if not exe.is_file() or not (app_dir / '_internal/python313.dll').is_file():
         raise ValueError('Windows portable runtime is missing')
-    # core 模式要求运行时确实是 core 构建（没带语法数据）——否则打出来的
-    # "轻量版"会带数据库，正是 v0.2.0-preview 600MB 事故的根因。
-    bundled_grammar = [rel for rel in (*GRAMMAR_APP_FILES, GRAMMAR_ARCHIVE)
-                       if (app_dir / rel).is_file()]
-    if mode == 'core' and bundled_grammar:
-        raise ValueError(
-            'app_dir contains grammar data but mode is core: '
-            + ', '.join(bundled_grammar)
-            + ' — rebuild with "build.bat core" first')
-    for relative in ('web/index.html', 'extension/results.js', *GRAMMAR_FILES):
+    # 语法数据（rules/indo_words）必须随运行时打包——它们现在是检查的本体。
+    for name in SEED_FILES:
+        if not (app_dir / '_internal' / name).is_file():
+            raise ValueError(f'{name} missing from the portable runtime — rebuild with build.bat')
+    for relative in ('web/index.html', 'extension/results.js', *SEED_FILES):
         source = BASE / relative
-        if not source.is_file():
-            continue  # core 构建可能没把语法文件拷到 app_dir
         packaged = app_dir / '_internal' / relative
-        if not packaged.is_file():
-            continue  # core 构建：语法数据不随 exe 打包，跳过
-        if digest(packaged) != digest(source):
+        if source.is_file() and packaged.is_file() and digest(packaged) != digest(source):
             raise ValueError(f'Portable resource differs from source: {relative}')
+    # 遗留证据库不允许混进发布（600MB 事故防线）。
+    if (app_dir / '_internal/data').is_dir():
+        raise ValueError('app_dir contains _internal/data (legacy evidence) — rebuild with build.bat')
 
     output.mkdir(parents=True, exist_ok=False)
     for name in ('INSTALL.md', 'RELEASE_NOTES.md'):
         (output / name).write_bytes((BASE / name).read_bytes())
     manifest = {
-        'tag': TAG, 'prerelease': True, 'mode': mode,
+        'tag': TAG, 'prerelease': True,
         'checker_commit': git(BASE, 'rev-parse', 'HEAD'),
         'corpus_tools_commit': git(puzzle, 'rev-parse', 'HEAD'),
         'extension_version': extension['version'],
         'executable_sha256': digest(exe),
-        'scope': 'Partial spelling/terminology/grammar signals; factuality not checked',
+        'scope': 'Rule-based word/grammar checks + PRPM lookups; factuality not checked',
+        'evidence_corpus': 'retired — not shipped (rules + PRPM only)',
     }
-    if mode == 'full':
-        manifest['evidence'] = {
-            'review_run': metadata['review_run'], 'schema_version': metadata['schema_version'],
-            'tokenizer_sha256': metadata['tokenizer_sha256'],
-            'bytes': evidence.stat().st_size, 'sha256': digest(evidence),
-            'lexicon_count': metadata['lexicon_count'], 'counts': metadata['counts'],
-            'gram_counts': metadata['gram_counts'],
-        }
-    else:
-        manifest['grammar_module'] = 'not bundled — PRPM-only runtime'
     (output / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     documents = [(output / name, name) for name in ('INSTALL.md', 'RELEASE_NOTES.md', 'release.json')]
 
@@ -144,37 +97,27 @@ def prepare(app_dir, output, mode: str):
         relative = source.relative_to(app_dir).as_posix()
         if not source.is_file() or source.name == 'blacklist.json':
             continue
-        # core: 语法数据不进 zip（runtime 目录里不该有，这里再防一道）
-        if mode == 'core' and (relative in GRAMMAR_APP_FILES or relative == GRAMMAR_ARCHIVE
-                               or relative.startswith('_internal/data/')):
-            continue
         runtime.append((source, 'tepat-v2/' + relative))
     runtime.append((exe, 'tepat-v2/tepat-v2.exe'))
-    if mode == 'full':
-        runtime += [(evidence, 'tepat-v2/' + GRAMMAR_ARCHIVE)]
-        runtime += [(BASE / name, 'tepat-v2/' + name) for name in GRAMMAR_FILES]
+    runtime += [(BASE / name, 'tepat-v2/' + name) for name in SEED_FILES]
     runtime += [(source, 'tepat-v2/' + name) for source, name in documents]
-    suffix = '' if mode == 'full' else '-prpm'
-    archive(output / f'tepat-{TAG}{suffix}-win64.zip', runtime,
-            evidence_digest=manifest.get('evidence', {}).get('sha256'))
+    archive(output / f'tepat-{TAG}-win64.zip', runtime)
 
     extension_files = git(BASE, 'ls-files', '--', 'extension').splitlines()
-    archive(output / f'tepat-{TAG}{suffix}-chrome.zip', [(BASE / name, name) for name in extension_files] + documents)
+    archive(output / f'tepat-{TAG}-chrome.zip', [(BASE / name, name) for name in extension_files] + documents)
     corpus_files = git(puzzle, 'ls-files', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json').splitlines()
-    archive(output / f'tepat-{TAG}{suffix}-corpus-tools.zip', [(puzzle / name, 'puzzle/' + name) for name in corpus_files] + documents)
+    archive(output / f'tepat-{TAG}-corpus-tools.zip', [(puzzle / name, 'puzzle/' + name) for name in corpus_files] + documents)
 
     assets = sorted(path for path in output.iterdir() if path.is_file())
     (output / 'SHA256SUMS').write_text(''.join(f'{digest(path)}  {path.name}\n' for path in assets), encoding='utf-8')
-    print(f'Release assets ready at {output} (mode={mode})', flush=True)
+    print(f'Release assets ready at {output}', flush=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=MODES, default='full',
-                        help='core = PRPM-only lightweight asset; full = PRPM + grammar data pack')
     parser.add_argument('--app-dir', type=Path, default=BASE / 'dist/tepat-v2')
     parser.add_argument('--output', type=Path, default=None,
-                        help='defaults to releases/%s[-core] per mode' % TAG)
+                        help='defaults to releases/%s' % TAG)
     args = parser.parse_args()
-    output = args.output or BASE / 'releases' / (TAG if args.mode == 'full' else f'{TAG}-core')
-    prepare(args.app_dir.resolve(), output.resolve(), args.mode)
+    output = args.output or BASE / 'releases' / TAG
+    prepare(args.app_dir.resolve(), output.resolve())

@@ -45,8 +45,11 @@ search; the preview has no autonomous research or semantic grammar model.
 ## Installation
 
 Use the Windows archive and keep its entire extracted folder together. The
-database is approximately 2.42 GB uncompressed. Install the Chrome archive as an
-unpacked extension and keep the local Windows service running. See `INSTALL.md`.
+runtime is tens of megabytes — word and grammar checks read the bundled rule
+files (seeded into `%APPDATA%\tepat` on first start) and PRPM lookups; the
+legacy 2.42 GB corpus database is retired and not shipped. Install the Chrome
+archive as an unpacked extension and keep the local Windows service running.
+See `INSTALL.md`.
 
 ## Next evaluation priorities
 
