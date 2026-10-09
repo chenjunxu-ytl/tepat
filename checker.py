@@ -115,9 +115,35 @@ def _plugin_sa01_dangling(text, sents, rule, add):
                 confidence=rule.get('conf', 'medium'))
 
 
+def _plugin_regex_match(text, sents, rule, add):
+    """regex_match：通用正则规则执行器（用户裁决 2026-10-09：所有规则统一
+    plugin 格式——regex 直判也是 plugin，pattern 随 rules.json 走 GitHub）。
+    行为与旧 regex 通道逐字段一致（exceptions/noflag/register/entry_id
+    origin），迁移零语义变化。
+    params: pattern（必需）、exceptions（可选：例外区间正则列表）、
+    suggestion（可选：替换建议）。"""
+    params = _plugin_params(rule)
+    rx = re.compile(params['pattern'], re.IGNORECASE)
+    exceptions = [re.compile(p, re.IGNORECASE) for p in params.get('exceptions', [])]
+    conf = rule.get('conf', 'medium')
+    level = {'high': 'error', 'medium': 'warning', 'low': 'info'}[conf]
+    for start, end, sent in sents:
+        exclusions = [m.span() for ex in exceptions for m in ex.finditer(sent)]
+        for m in rx.finditer(sent):
+            if any(a <= m.start() and m.end() <= b for a, b in exclusions):
+                continue
+            add(rule.get('category', 'grammar'), level, start + m.start(), start + m.end(),
+                rule.get('note', ''), rule.get('entry_id', rule['id']),
+                suggestion=params.get('suggestion', ''),
+                evidence=[{'source': 'manual_rule', 'rule': rule['id'],
+                           'basis': rule.get('source', 'manually maintained rule')}],
+                confidence=conf, highlight=conf != 'low', rule_id=rule['id'])
+
+
 RULE_PLUGINS = {
     'ks02_antara': _plugin_ks02_antara,
     'sa01_dangling': _plugin_sa01_dangling,
+    'regex_match': _plugin_regex_match,
 }
 
 
@@ -410,48 +436,41 @@ class Checker:
             raise ValueError('Maximum 30,000 characters per scan')
         started=time.monotonic()
         issues=[]; lexical=[]; sent_results=[]; rule_hits=[]; indo_hits=[]; cold=[]
-        def add(category, level, start, end, note, origin, *, suggestion='', evidence=None, confidence='medium', highlight=True):
+        def add(category, level, start, end, note, origin, *, suggestion='', evidence=None,
+                confidence='medium', highlight=True, rule_id=None):
             span=text[start:end]
             item={'id':hashlib.sha256(f'{origin}:{start}:{end}'.encode()).hexdigest()[:16],
                   'category':category,'level':level,'confidence':confidence,'span':span,
                   'start':utf16_offset(text,start),'end':utf16_offset(text,end),'note':note,
                   'origin':origin,'suggestion':suggestion,'evidence':evidence or [],'highlight':highlight}
             issues.append(item)
+            if rule_id:  # plugin 命中记入 rule_hits——同一对象引用：抑制/dedup
+                # 循环用 `is` 对照 issues 条目，浅拷贝会让删除永远失配
+                item['rule'] = rule_id
+                item['conf'] = confidence
+                rule_hits.append(item)
             return item
         # Rules always run, regardless of corpus/dictionary membership.
-        # noflag（Rule Book 语义，用户裁决 2026-10-08）：noflag:true 的条目是
-        # 例外区间——与它重叠的"其他条目"的 finding 被抑制（按 entry 区分，
-        # 不是按规则 ID；同一粗规则与其精化例外天然同 ID）。
-        noflag_spans=[]
-        for rule,rx,exceptions in self.rules:
-            if rule.get('register','any') not in {'any',register}:
-                continue
-            for start,end,sentence in sentences(text):
-                if rule.get('noflag'):
-                    for m in rx.finditer(sentence):
-                        noflag_spans.append((id(rule),start+m.start(),start+m.end()))
-        for rule,rx,exceptions in self.rules:
-            if rule.get('register','any') not in {'any',register} or rule.get('noflag'):
-                continue
-            for start,end,sentence in sentences(text):
-                exclusions=[m.span() for ex in exceptions for m in ex.finditer(sentence)]
-                for m in rx.finditer(sentence):
-                    if any(a<=m.start() and m.end()<=b for a,b in exclusions):
-                        continue
-                    s,e=start+m.start(),start+m.end()
-                    if any(rid is not id(rule) and s<x_e and x_s<e
-                           for rid,x_s,x_e in noflag_spans):
-                        continue
-                    conf=rule.get('conf','medium')
-                    item=add(rule.get('category','grammar'),{'high':'error','medium':'warning','low':'info'}[conf],
-                             s,e,rule['note'],rule.get('entry_id',rule['id']),
-                             evidence=[{'source':'manual_rule','rule':rule['id'],'basis':rule.get('source','Existing manually maintained rule')}],confidence=conf,highlight=conf!='low')
-                    rule_hits.append({**item,'rule':rule['id'],'conf':conf})
-        # plugin 规则（结构判断，用户裁决 2026-10-08）：regex 全部跑完后执行，
-        # 产出同格式命中；noflag 区间同样生效（例外压 plugin 命中）。
+        # 全部规则走 plugin 通道（regex 也由 regex_match 执行器跑，用户裁决
+        # 2026-10-09）。noflag 例外条目先跑：命中区间（按 entry 区分）压制
+        # "其他条目"的重叠 finding；例外条目自身不产出 finding。
         all_sentences=list(sentences(text))
+        noflag_spans=[]
         for rule,fn in self.plugin_rules:
-            if rule.get('register','any') not in {'any',register}:
+            if rule.get('register','any') not in {'any',register} or not rule.get('noflag'):
+                continue
+            before=len(issues)
+            try:
+                fn(text, all_sentences, rule, add)
+            except Exception as e:  # noqa: BLE001 — plugin 崩不能带垮整个 scan
+                self.config_warnings.append(f"plugin {rule.get('plugin')}: {e!r}")
+            # 命中只留作例外区间；issues/rule_hits 里的痕迹全部撤掉
+            for item in issues[before:]:
+                noflag_spans.append((id(rule),item['start'],item['end']))
+            del issues[before:]
+            del rule_hits[before:]
+        for rule,fn in self.plugin_rules:
+            if rule.get('register','any') not in {'any',register} or rule.get('noflag'):
                 continue
             before=len(rule_hits)
             try:
@@ -459,12 +478,12 @@ class Checker:
             except Exception as e:  # noqa: BLE001 — plugin 崩不能带垮整个 scan
                 self.config_warnings.append(f"plugin {rule.get('plugin')}: {e!r}")
                 continue
-            # noflag 抑制 + 计入 rule_hits（供 dedup/统计）
-            for h in rule_hits[before:]:
-                if any(h['start']<x_e and x_s<h['end'] for _rid,x_s,x_e in noflag_spans):
+            # noflag 例外区间抑制本条目的重叠命中（区分 entry：自己的例外自己不压）
+            for h in list(rule_hits[before:]):
+                if any(rid is not id(rule) and h['start']<x_e and x_s<h['end']
+                       for rid,x_s,x_e in noflag_spans):
                     issues[:] = [i for i in issues if i is not h]
-                    rule_hits[rule_hits.index(h)] = None
-            rule_hits = [h for h in rule_hits if h is not None]
+                    rule_hits.remove(h)
         # 同 ID 去重（Rule Book 并入后）：粗规则（origin 形如 KS-01-02）与精化版
         # （origin 就是规则 ID）命中重叠区间时，只留精化版。add() 已把粗规则条目
         # 塞进 issues——这里同步从 issues 里摘掉被精化版覆盖的粗条目。
@@ -477,7 +496,6 @@ class Checker:
         dropped_keys={(d['origin'],d['start'],d['end']) for d in dropped}
         issues[:]=[i for i in issues
                    if (i['origin'],i['start'],i['end']) not in dropped_keys]
-        all_sentences=list(sentences(text))
         for si,(start,end,sentence) in enumerate(all_sentences):
             stokens=tokens(sentence,start)
             for t in stokens:

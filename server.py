@@ -406,7 +406,183 @@ def _gh_create_issue(title: str, body: str, labels: list[str]) -> str:
     with _rq.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read()).get("html_url", "")
 
-# ── Accepted evidence database ──
+
+# ── LLM 规则转译（用户裁决 2026-10-09）────────────────────────────────────
+# 单次调用、无会话（架构裁决）：任务形状是结构化→结构化（人类例句 + PRPM
+# 释义 → rule JSON），不需要 harness/多轮。agent 不能从 0 创造规则——人类
+# 提供例句、人类发起 translate/enhance；LLM 只做"例句→规则规格"的翻译。
+# 产物默认 trial（conf 降半级），人审 accept/reject；行为规格（例句集）只增
+# 不减，每次纠正永久变成回归测试。API 配置走 .env（Env tab 可编辑）：
+#   TEPAT_LLM_URL   e.g. https://open.bigmodel.cn/api/paas/v4/chat/completions
+#   TEPAT_LLM_KEY   API key
+#   TEPAT_LLM_MODEL e.g. glm-4.7
+
+
+def _llm_config() -> tuple[str, str, str]:
+    url = (os.environ.get("TEPAT_LLM_URL") or "").strip().rstrip("/")
+    key = (os.environ.get("TEPAT_LLM_KEY") or "").strip()
+    model = (os.environ.get("TEPAT_LLM_MODEL") or "").strip()
+    if not url or not key or not model:
+        raise RuntimeError("LLM not configured — set TEPAT_LLM_URL / "
+                           "TEPAT_LLM_KEY / TEPAT_LLM_MODEL in .env (Env tab)")
+    return url, key, model
+
+
+_TRANSLATE_SYSTEM = """You translate Malay grammar-checker rule examples into a rule specification.
+Input: human-provided trigger sentences (must be flagged), clear sentences (must NOT be flagged), and PRPM dictionary definitions for key words.
+Output: ONE JSON object, no prose, in exactly this shape:
+{
+ "id": "<rule id given by server>",
+ "desc": "<one-sentence natural-language description of what the rule flags, for human reviewers>",
+ "note": "<short Malay note shown to the end user when flagged>",
+ "conf": "high|medium|low",
+ "plugin": "regex_match",
+ "params": {"pattern": "<python regex>", "exceptions": ["<regex>"], "suggestion": "<replacement text or empty>"},
+ "examples": {"trigger": ["<kept>"], "clear": ["<kept>"]}
+}
+Rules for the regex:
+- Python re syntax, case-insensitive matching is applied by the engine.
+- Every trigger sentence must match; NO clear sentence may match.
+- Use \\b word boundaries around words; keep the pattern as narrow as the examples justify.
+- exceptions patterns suppress matches inside their span — use them for legal contexts visible in clear examples.
+- If the distinction cannot be expressed by regex (counting items, clause analysis), set "plugin" to null and explain in "desc" starting with "NEEDS-PLUGIN:".
+Spelling/conf guidance:
+- conf high = structural error with no legal context (both trigger sentences are unambiguously wrong).
+- conf medium = usually wrong but context can make it legal.
+- conf low = broad reminder.
+- Suggestion must be standard DBP Malay when obvious; empty string otherwise."""
+
+
+def _llm_chat(payload: dict) -> dict:
+    """POST chat/completions。GLM 系关 thinking（转译不需要推理链，省时省
+    token，用户裁决 2026-10-09）；不认 thinking 参数的端点 400 时去掉重试。"""
+    import urllib.error as _ue
+    import urllib.request as _rq
+    url, key, model = _llm_config()
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    body = {"model": model, "messages": payload["messages"],
+            "temperature": 0.1, "max_tokens": 16000,
+            "thinking": {"type": "disabled"}}
+    req = _rq.Request(url, data=json.dumps(body).encode(), headers=headers)
+    try:
+        with _rq.urlopen(req, timeout=180) as resp:
+            return json.loads(resp.read())
+    except _ue.HTTPError as e:
+        if e.code == 400:  # OpenAI 系端点拒绝未知参数 thinking → 原样重试
+            req = _rq.Request(url, data=json.dumps(
+                {"model": model, "messages": payload["messages"],
+                 "temperature": 0.1, "max_tokens": 16000}).encode(), headers=headers)
+            try:
+                with _rq.urlopen(req, timeout=180) as resp:
+                    return json.loads(resp.read())
+            except _ue.HTTPError as e2:
+                raise RuntimeError(f"LLM API error {e2.code}: "
+                                   f"{e2.read().decode('utf-8', 'replace')[:200]}") from e2
+            except OSError as e2:
+                raise RuntimeError(f"LLM API unreachable: {e2}") from e2
+        raise RuntimeError(f"LLM API error {e.code}: "
+                           f"{e.read().decode('utf-8', 'replace')[:200]}") from e
+    except OSError as e:
+        raise RuntimeError(f"LLM API unreachable: {e}") from e
+
+
+def _llm_translate_rule(rule_id: str, triggers: list[str], clears: list[str],
+                        prpm_defs: dict[str, str], extra_note: str = "") -> dict:
+    """单次 LLM 调用：例句 + PRPM 释义 → rule spec（dict）。
+    输出 shape 严格校验，坏产物抛 ValueError（不落盘）。"""
+    url, key, model = _llm_config()
+    defs = "\n".join(f"- {w}: {d[:300]}" for w, d in prpm_defs.items()) or "- (none)"
+    user = f"""Rule id: {rule_id}
+Trigger sentences (must be flagged):
+{chr(10).join('- ' + t for t in triggers) or '- (none)'}
+
+Clear sentences (must NOT be flagged):
+{chr(10).join('- ' + c for c in clears) or '- (none)'}
+
+PRPM definitions:
+{defs}
+{f'{chr(10)}Reviewer note: {extra_note}' if extra_note else ''}
+Return the JSON object only."""
+    body = _llm_chat({"messages": [
+        {"role": "system", "content": _TRANSLATE_SYSTEM},
+        {"role": "user", "content": user}]})
+    choice = (body.get("choices") or [{}])[0]
+    content = choice.get("message", {}).get("content", "")
+    if not content and choice.get("finish_reason") == "length":
+        raise ValueError("LLM ran out of tokens before answering "
+                         "(reasoning model — raise max_tokens)")
+    m = re.search(r"\{.*\}", content, re.S)
+    if not m:
+        raise ValueError("LLM returned no JSON object")
+    try:
+        spec = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"LLM returned invalid JSON: {e}") from e
+    # shape 校验：plugin 产物必须是可执行形态
+    if not isinstance(spec, dict) or not spec.get("desc") or not spec.get("note"):
+        raise ValueError("LLM output missing desc/note")
+    if spec.get("conf") not in ("high", "medium", "low"):
+        raise ValueError("LLM output conf must be high/medium/low")
+    if spec.get("plugin") is None:  # NEEDS-PLUGIN 路径：合法，前端展示给人类决定
+        if not str(spec.get("desc", "")).startswith("NEEDS-PLUGIN:"):
+            raise ValueError("plugin null requires NEEDS-PLUGIN: desc")
+        return spec
+    if spec["plugin"] not in ("regex_match",):
+        raise ValueError(f"unknown plugin {spec['plugin']!r}")
+    params = spec.get("params") or {}
+    if not params.get("pattern"):
+        raise ValueError("regex_match requires params.pattern")
+    try:
+        re.compile(params["pattern"])
+    except re.error as e:
+        raise ValueError(f"LLM regex invalid: {e}") from e
+    # 例句自测：trigger 必中、clear 必不中（行为规格，人类免读 regex）
+    rx = re.compile(params["pattern"], re.IGNORECASE)
+    ex_ex = params.get("exceptions") or []
+    fails = []
+    for t in triggers:
+        if not rx.search(t):
+            fails.append(f"does not flag trigger: {t[:60]}")
+    for c in clears:
+        if rx.search(c) and not any(re.search(x, c, re.IGNORECASE) for x in ex_ex):
+            fails.append(f"flags clear sentence: {c[:60]}")
+    spec["_self_test"] = fails or "pass"
+    return spec
+
+
+def _rule_words_for_prpm(triggers: list[str], clears: list[str]) -> list[str]:
+    """例句里值得查 PRPM 的词：>3 字符、非功能词、去重、最多 8 个。"""
+    from checker import FUNCTION_WORDS
+    seen, out = set(), []
+    for sent in list(triggers) + list(clears):
+        for w in re.findall(r"[a-zA-Z]+", sent.lower()):
+            if len(w) > 3 and w not in FUNCTION_WORDS and w not in seen:
+                seen.add(w)
+                out.append(w)
+    return out[:8]
+
+
+_TRIAL_DOWNGRADE = {"high": "medium", "medium": "low", "low": "low"}
+
+
+def _spawn_trial_rule(spec: dict, triggers: list[str], clears: list[str],
+                      origin_note: str) -> dict:
+    """LLM 产物 → trial 规则条目（conf 降半级，原级记在 conf_trial，
+    人审 accept 恢复）。例句集合并进条目（行为规格随规则走 GitHub）。"""
+    conf = spec.get("conf", "medium")
+    entry = {
+        "id": spec["id"], "plugin": spec["plugin"],
+        "conf": _TRIAL_DOWNGRADE[conf], "conf_trial": conf,
+        "status": "trial",
+        "desc": spec["desc"], "note": spec["note"],
+        "source": origin_note,
+        "examples": {"trigger": triggers, "clear": clears},
+        "params": spec.get("params", {}),
+    }
+    if spec.get("_self_test") != "pass":
+        entry["self_test_failures"] = spec["_self_test"]
+    return entry
+
 
 _words: set[str] = set()
 
@@ -960,6 +1136,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "category": r.get("category"),
                                        "source": r.get("source"),
                                        "examples": r.get("examples", {}),
+                                       "self_test": r.get("self_test_failures", "pass"),
                                        "valid": ok, "error": err})
             # 词表文件视图（用户裁决 2026-10-08）：三分类 indo_only / casual /
             # overrides，词表条目带 ms mapping。新旧结构都读（旧 exe 拉新文件
@@ -1260,6 +1437,210 @@ class Handler(BaseHTTPRequestHandler):
                 _log(f"[rules] GitHub push failed: {e!r}")
             _log(f"[rules] {action} pushed={bool(pushed)}")
             self._json(200, {"ok": True, "action": action, "pushed": bool(pushed)})
+        elif self.path == "/api/rules/translate":
+            # LLM 转译入口（admin 发起，用户裁决 2026-10-09）：人类给例句
+            # （trigger/clear）+ 规则号，server 取 PRPM 释义喂给 LLM，产物以
+            # trial 落盘（conf 降半级）→ 热重载 → auto-push。agent 不从 0
+            # 创造规则：例句和发起动作都是人类给的。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            triggers = [str(t).strip()[:300] for t in
+                        (req.get("triggers") if isinstance(req.get("triggers"), list) else [])
+                        if str(t).strip()]
+            clears = [str(c).strip()[:300] for c in
+                      (req.get("clears") if isinstance(req.get("clears"), list) else [])
+                      if str(c).strip()]
+            extra_note = str(req.get("note") or "").strip()[:500]
+            if not triggers:
+                self._json(400, {"error": "at least one trigger sentence is required"})
+                return
+            if len(triggers) > 8 or len(clears) > 8:
+                self._json(400, {"error": "max 8 trigger and 8 clear sentences"})
+                return
+            rules_data = _load_rules_json()
+            if rules_data is None:
+                self._json(500, {"error": "rules.json not found or broken"})
+                return
+            rid = f"RB-{_next_rule_no(rules_data):03d}"
+            # PRPM enrichment：例句关键词的 DBP 释义（缓存优先，缺词不强求）
+            prpm_defs = {}
+            for w in _rule_words_for_prpm(triggers, clears):
+                try:
+                    r = prpm_lookup(w)
+                    if r.get("status") == "hit" and r.get("definition"):
+                        prpm_defs[w] = r["definition"][:300]
+                except Exception:  # noqa: BLE001 — 释义失败不挡转译
+                    continue
+            try:
+                spec = _llm_translate_rule(rid, triggers, clears, prpm_defs, extra_note)
+            except (RuntimeError, ValueError) as e:
+                self._json(502, {"error": f"translation failed: {e}"})
+                return
+            if spec.get("plugin") is None:
+                # NEEDS-PLUGIN：regex 表达不了，不落盘——人类决定 park/设计 plugin
+                self._json(200, {"ok": True, "id": rid, "needs_plugin": True,
+                                 "desc": spec.get("desc", ""),
+                                 "note": "regex cannot express this rule — human decides"})
+                return
+            entry = _spawn_trial_rule(spec, triggers, clears,
+                                      f"LLM-translated from human examples ({time.strftime('%Y-%m-%d')})")
+            rules_data.setdefault("rules", []).append(entry)
+            path = Path(_config_path("rules.json"))
+            path.write_text(json.dumps(rules_data, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8")
+            if _checker is not None:
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[rules] hot-reload after translate failed: {e!r}")
+            pushed = None
+            try:
+                pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
+                                       f"rules: add trial {rid} (LLM translation)")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[rules] GitHub push failed: {e!r}")
+            _log(f"[rules] translated {rid} trial pushed={bool(pushed)} "
+                 f"self_test={entry.get('self_test_failures', 'pass')}")
+            self._json(200, {"ok": True, "id": rid, "entry": entry,
+                             "pushed": bool(pushed)})
+        elif self.path == "/api/rules/enhance":
+            # Enhance（admin，用户裁决 2026-10-09）：trial 规则行为不对时，
+            # 人类补例句（新误报 = clear、新漏报 = trigger）重跑转译。
+            # 例句集只增不减——每次纠正永久变成回归测试。同 entry_id 的旧
+            # trial 被替换（保留原 id）。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            entry_id = str(req.get("entry_id") or "")
+            new_triggers = [str(t).strip()[:300] for t in
+                            (req.get("triggers") if isinstance(req.get("triggers"), list) else [])
+                            if str(t).strip()]
+            new_clears = [str(c).strip()[:300] for c in
+                          (req.get("clears") if isinstance(req.get("clears"), list) else [])
+                          if str(c).strip()]
+            note = str(req.get("note") or "").strip()[:500]
+            if not entry_id or (not new_triggers and not new_clears and not note):
+                self._json(400, {"error": "entry_id and at least one new example or note required"})
+                return
+            rules_data = _load_rules_json()
+            if rules_data is None:
+                self._json(500, {"error": "rules.json not found or broken"})
+                return
+            target = next((r for r in rules_data.get("rules", [])
+                           if r.get("entry_id") == entry_id), None)
+            if target is None and entry_id.startswith("idx:"):
+                try:
+                    target = rules_data["rules"][int(entry_id[4:])]
+                except (ValueError, IndexError):
+                    target = None
+            if target is None:
+                self._json(404, {"error": f"entry_id {entry_id} not found"})
+                return
+            if target.get("status") != "trial":
+                self._json(400, {"error": "only trial rules can be enhanced "
+                                          "(settled rules are updated via /api/rules/update)"})
+                return
+            ex = target.get("examples") or {}
+            triggers = list(dict.fromkeys((ex.get("trigger") or []) + new_triggers))[:12]
+            clears = list(dict.fromkeys((ex.get("clear") or []) + new_clears))[:12]
+            prpm_defs = {}
+            for w in _rule_words_for_prpm(triggers, clears):
+                try:
+                    r = prpm_lookup(w)
+                    if r.get("status") == "hit" and r.get("definition"):
+                        prpm_defs[w] = r["definition"][:300]
+                except Exception:  # noqa: BLE001
+                    continue
+            try:
+                spec = _llm_translate_rule(str(target["id"]), triggers, clears,
+                                           prpm_defs, note)
+            except (RuntimeError, ValueError) as e:
+                self._json(502, {"error": f"re-translation failed: {e}"})
+                return
+            if spec.get("plugin") is None:
+                self._json(200, {"ok": True, "needs_plugin": True,
+                                 "desc": spec.get("desc", ""),
+                                 "note": "regex cannot express this rule — human decides"})
+                return
+            fresh = _spawn_trial_rule(spec, triggers, clears, target.get("source", ""))
+            fresh["id"] = target["id"]
+            fresh["enhanced_from"] = entry_id
+            rules_data["rules"][rules_data["rules"].index(target)] = fresh
+            path = Path(_config_path("rules.json"))
+            path.write_text(json.dumps(rules_data, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8")
+            if _checker is not None:
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[rules] hot-reload after enhance failed: {e!r}")
+            pushed = None
+            try:
+                pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
+                                       f"rules: enhance trial {target['id']} (new examples)")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[rules] GitHub push failed: {e!r}")
+            _log(f"[rules] enhanced {target['id']} (+{len(new_triggers)}T/+{len(new_clears)}C) "
+                 f"self_test={fresh.get('self_test_failures', 'pass')}")
+            self._json(200, {"ok": True, "entry": fresh, "pushed": bool(pushed)})
+        elif self.path == "/api/rules/update":
+            # Update（admin，用户裁决 2026-10-09）：非行为字段直改——conf/
+            # desc/note。行为规格（pattern/例句）不走这里：行为错 = 补例句
+            # enhance。写盘 → 热重载 → auto-push。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            entry_id = str(req.get("entry_id") or "")
+            conf = req.get("conf")
+            desc = str(req.get("desc") or "").strip()
+            note = str(req.get("note") or "").strip()
+            if not entry_id:
+                self._json(400, {"error": "entry_id required"})
+                return
+            if conf is not None and conf not in ("high", "medium", "low"):
+                self._json(400, {"error": "conf must be high/medium/low"})
+                return
+            if not conf and not desc and not note:
+                self._json(400, {"error": "nothing to update (conf/desc/note)"})
+                return
+            rules_data = _load_rules_json()
+            if rules_data is None:
+                self._json(500, {"error": "rules.json not found or broken"})
+                return
+            target = next((r for r in rules_data.get("rules", [])
+                           if r.get("entry_id") == entry_id), None)
+            if target is None and entry_id.startswith("idx:"):
+                try:
+                    target = rules_data["rules"][int(entry_id[4:])]
+                except (ValueError, IndexError):
+                    target = None
+            if target is None:
+                self._json(404, {"error": f"entry_id {entry_id} not found"})
+                return
+            if conf:
+                target["conf"] = conf
+                target.pop("conf_trial", None)  # 手动定级后不再有"恢复原级"语义
+            if desc:
+                target["desc"] = desc
+            if note:
+                target["note"] = note
+            path = Path(_config_path("rules.json"))
+            path.write_text(json.dumps(rules_data, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8")
+            if _checker is not None:
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[rules] hot-reload after update failed: {e!r}")
+            pushed = None
+            try:
+                pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
+                                       f"rules: update {target.get('id')} fields")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[rules] GitHub push failed: {e!r}")
+            _log(f"[rules] updated {entry_id} fields={list(filter(None, ['conf' if conf else '', 'desc' if desc else '', 'note' if note else '']))}")
+            self._json(200, {"ok": True, "entry_id": entry_id, "pushed": bool(pushed)})
         elif self.path == "/api/sync":
             # 手动拉 GitHub 规则文件：全员可用（用户裁决 2026-10-08）——
             # 5 分钟自动同步本来就不分机器跑，手动触发没有理由限制；

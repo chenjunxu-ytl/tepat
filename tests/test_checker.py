@@ -120,7 +120,10 @@ class CheckerTests(unittest.TestCase):
 
     def test_config_bad_regex_is_reported_and_exception_applied(self):
         config=self.root/'rules.json'
-        config.write_text(json.dumps({'rules':[{'id':'bad','re':'[','note':'bad'},{'id':'custom','re':'buku','conf':'high','note':'test','exceptions':['buku itu']}]}),encoding='utf-8')
+        config.write_text(json.dumps({'rules':[
+            {'id':'bad','plugin':'regex_match','note':'bad','params':{'pattern':'['}},
+            {'id':'custom','plugin':'regex_match','conf':'high','note':'test',
+             'params':{'pattern':'buku','exceptions':['buku itu']}}]}),encoding='utf-8')
         c=Checker(self.store,config,BASE/'indo_words.json')
         r=c.scan('buku itu. buku ini.')
         self.assertTrue(r['config_warnings'])

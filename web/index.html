@@ -55,6 +55,14 @@ details{margin-top:10px}summary{cursor:pointer;color:#456078}
 .wf-pill:hover{border-color:#256b58;color:#256b58;transform:translateY(-1px)}
 .wf-pill-active{background:#256b58;color:#fff;border-color:#256b58;transform:none}
 .wf-pill-active:hover{color:#fff}
+/* Server Rules：行点击展开 + 动态 toggle 开关 */
+.cfg-row{cursor:pointer}
+.cfg-row:hover{background:#f2f6f5}
+.cfg-toggle{width:34px;height:19px;border-radius:10px;border:1px solid #c4ccd4;background:#dde3e8;position:relative;cursor:pointer;transition:background .25s,border-color .25s;padding:0}
+.cfg-toggle::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .25s}
+.cfg-toggle.on{background:#256b58;border-color:#256b58}
+.cfg-toggle.on::after{left:17px}
+.cfg-detail-row td{cursor:default}
 .wf-closed-toggle{
   font:600 12px system-ui;padding:5px 13px;border-radius:14px;cursor:pointer;
   border:1px solid #d7dee6;background:#fff;color:#526273;user-select:none;
@@ -218,10 +226,22 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-serverrules">
  <h2>Server rules</h2>
- <p class="sub">Rules the local scan service applies (source of truth: the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code>). <b>Levels</b> follow the Rule Book: <span class="lvl lvl-error">error</span> structural, no legal context · <span class="lvl lvl-warn">warn</span> context needed, review before acting · <span class="lvl lvl-note">note</span> broad reminder. Toggle a rule off to silence it locally; a GitHub sync restores the repo state.</p>
+ <p class="sub">All rules run as plugins (regex or structural) — the source of truth is the <b>GitHub repo</b>; <b>↻ Fetch from GitHub</b> pulls <code>main</code>. Trial rules come from the LLM translation of human examples; they flag at half a level until accepted. Click a row to see its description, examples and review actions.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 10px"><span id="cfg-badge" class="sub" style="margin:0"></span><span style="flex:1"></span><button class="act primary" id="btn-sync">↻ Fetch from GitHub</button><span id="cfg-msg" class="msg"></span></div>
-  <table id="cfg-rules"><thead><tr><th>Rule</th><th>What it flags</th><th>Example — flags / doesn't</th><th>Level</th><th>On</th></tr></thead><tbody></tbody></table>
+  <div class="controls" style="margin:0 0 10px">
+   <div class="wf-pills" id="cfg-pills">
+    <button class="wf-pill wf-pill-active" data-conf="">All</button>
+    <button class="wf-pill" data-conf="high">Error</button>
+    <button class="wf-pill" data-conf="medium">Warn</button>
+    <button class="wf-pill" data-conf="low">Note</button>
+   </div>
+   <span style="flex:1"></span>
+   <span id="cfg-badge" class="sub" style="margin:0"></span>
+   <button class="act primary" id="btn-translate">✦ New rule from examples</button>
+   <button class="act primary" id="btn-sync">↻ Fetch from GitHub</button>
+   <span id="cfg-msg" class="msg"></span>
+  </div>
+  <table id="cfg-rules"><thead><tr><th>No.</th><th>Level</th><th>Type</th><th>What it flags</th><th>Status</th><th>On</th></tr></thead><tbody></tbody></table>
  </div>
 </section>
 
@@ -305,74 +325,158 @@ $('#output').onclick=async e=>{
 
 // ── Server Rules tab ──
 let cfgAdmin=false;  // health 探测时写入；trial 规则的 Accept/Reject 只给 admin
+let cfgConfFilter='';  // pill filter: '' | high | medium | low
 async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
-  const views=r.rule_views||[];
-  const active=views.filter(v=>v.enabled!==false).length;
-  const trials=views.filter(v=>v.status==='trial').length;
+  const all=r.rule_views||[];
+  const views=cfgConfFilter?all.filter(v=>v.conf===cfgConfFilter):all;
+  const active=all.filter(v=>v.enabled!==false).length;
+  const trials=all.filter(v=>v.status==='trial').length;
   $('#cfg-badge').textContent=r.loaded
-    ?`${active} of ${views.length} rules on${trials?` · ${trials} awaiting review`:''}`
+    ?`${active} of ${all.length} on${trials?` · ${trials} awaiting review`:''}`
     :'grammar module not loaded (add data/evidence.sqlite to enable server-side rules)';
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
   const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
-  for(const v of views){
+  const pluginType={regex_match:'regex',ks02_antara:'items',sa01_dangling:'clause'};
+  all.forEach((v,i)=>{
+    if(cfgConfFilter&&v.conf!==cfgConfFilter)return;
     const tr=document.createElement('tr');
+    tr.className='cfg-row';tr.dataset.entry=v.entry_id;
     if(v.enabled===false)tr.style.opacity='.45';
     if(v.status==='trial')tr.style.background='#fffbeb';
-    const [lvl,cls]=confMap[v.conf]||[v.conf,''];
-    const ex=v.examples||{};
-    const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
-    const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
-    // 自然语言描述优先（人审视图，用户裁决 2026-10-08）；regex/plugin 细节不展示
-    const desc=v.desc||v.note||'';
-    tr.innerHTML=`<td><b>${esc(v.id)}</b>
-        ${v.plugin?`<div class="lvl lvl-note" style="margin-top:3px">plugin</div>`:''}
-        ${v.status==='trial'?'<div class="lvl lvl-warn" style="margin-top:3px">trial</div>':''}
-        ${v.category?`<div style="font-size:11px;color:#5d6977">${esc(v.category)}</div>`:''}</td>
-      <td style="font-size:12px">${esc(desc)}${v.valid?'':'<div class="bad">✗ '+esc(v.error||'')+'</div>'}</td>
-      <td style="font-size:12px">${trig||clear?'<div style="font-size:11px;color:#5d6977;margin-bottom:3px">Flags:</div>'+trig+'<div style="font-size:11px;color:#5d6977;margin:3px 0">Doesn\'t flag:</div>'+clear:'<i style="font-size:11px;color:#8a94a0">no examples yet</i>'}</td>
+    const [lvl,cls]=confMap[v.conf]||[v.conf||'?',''];
+    const type=pluginType[v.plugin]||v.plugin||(v.conf?'regex':'?');
+    const selfOk=v.self_test==='pass'||v.self_test===undefined;
+    tr.innerHTML=`<td class="cfg-no">${i+1}</td>
       <td><span class="lvl ${cls}">${lvl}</span></td>
+      <td style="font-size:11px;color:#5d6977">${esc(type)}${v.plugin&&v.plugin!=='regex_match'?'<div class="lvl lvl-note" style="margin-top:3px;font-size:10px">plugin</div>':''}</td>
+      <td style="font-size:12px;max-width:420px">${esc(v.desc||v.note||'')}${v.valid===false?'<div class="bad">✗ '+esc(v.error||'')+'</div>':''}${selfOk?'':'<div class="bad">✗ self-test: '+esc(String(v.self_test).slice(0,120))+'</div>'}</td>
+      <td>${v.status==='trial'?'<span class="lvl lvl-warn">trial</span>':'<span style="font-size:11px;color:#5d6977">settled</span>'}</td>
       <td></td>`;
-    const ops=document.createElement('div');
-    ops.style.cssText='display:flex;flex-direction:column;gap:5px;align-items:flex-start';
-    const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=v.enabled!==false;
-    toggle.title='on/off (local — GitHub sync restores repo state)';
-    toggle.onchange=async()=>{
-      try{
-        await request('/api/config/rule',{entry_id:v.entry_id,enabled:toggle.checked});
-        await loadConfig();
-      }catch(e){toggle.checked=!toggle.checked;$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+    // 行点击 = 展开 desc 详情（Enhance/Update/Accept/Reject 都在展开区）
+    tr.onclick=e=>{if(e.target.closest('input,button,select,textarea'))return;toggleCfgDetail(tr,v);};
+    // 动态 toggle：On/Off 开关（本地静音，GitHub sync 恢复 repo 态）
+    const tg=document.createElement('button');
+    tg.className='cfg-toggle'+(v.enabled!==false?' on':'');
+    tg.title='on/off (local — GitHub sync restores repo state)';
+    tg.onclick=async e=>{
+      e.stopPropagation();
+      tg.classList.toggle('on');
+      try{await request('/api/config/rule',{entry_id:v.entry_id,enabled:tg.classList.contains('on')});await loadConfig();}
+      catch(err){tg.classList.toggle('on');$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(err.message)+'</span>';}
     };
-    ops.appendChild(toggle);
-    if(cfgAdmin&&v.status==='trial'){
-      const accept=document.createElement('button');accept.className='act primary';accept.textContent='Accept';
-      accept.style.cssText='font-size:11.5px;padding:3px 10px';
-      accept.onclick=async()=>{
-        accept.disabled=true;accept.textContent='…';
-        try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision:'accept'});
-          $('#cfg-msg').innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
-          await loadConfig();
-        }catch(e){accept.disabled=false;accept.textContent='Accept';$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
-      };
-      const reject=document.createElement('button');reject.className='act';reject.textContent='Reject';
-      reject.style.cssText='font-size:11.5px;padding:3px 10px';
-      reject.onclick=async()=>{
-        if(!confirm(`Remove rule ${v.id} entirely? (this also pushes to GitHub)`))return;
-        reject.disabled=true;reject.textContent='…';
-        try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision:'reject'});
-          $('#cfg-msg').innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
-          await loadConfig();
-        }catch(e){reject.disabled=false;reject.textContent='Reject';$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
-      };
-      ops.appendChild(accept);ops.appendChild(reject);
-    }
-    tr.lastElementChild.appendChild(ops);
+    tr.lastElementChild.appendChild(tg);
     tb.appendChild(tr);
-  }
-  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="5" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
+  });
+  for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="6" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
  }catch(e){$('#cfg-badge').textContent='config unavailable';}
 }
+// 展开行：desc 详情 + 例句 + 审阅操作（一次只开一行）
+function toggleCfgDetail(tr,v){
+ const existing=tr.parentNode?.querySelector('.cfg-detail-row');
+ if(existing&&existing.dataset.entry===v.entry_id){existing.remove();return;}
+ if(existing)existing.remove();
+ const dr=document.createElement('tr');
+ dr.className='cfg-detail-row';dr.dataset.entry=v.entry_id;
+ const ex=v.examples||{};
+ const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
+ const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
+ const detail=`
+  <div style="margin-bottom:6px"><b>What it flags:</b> ${esc(v.desc||'—')}</div>
+  <div style="margin-bottom:6px"><b>User note:</b> ${esc(v.note||'—')}</div>
+  ${trig||clear?`<div style="margin-bottom:6px"><b>Examples:</b>${trig?`<div style="font-size:11px;color:#5d6977;margin:3px 0">Flags:</div>`+trig:''}${clear?`<div style="font-size:11px;color:#5d6977;margin:3px 0">Doesn't flag:</div>`+clear:''}</div>`:''}
+  <div style="font-size:11px;color:#8a94a0">source: ${esc(v.source||'')} · id: ${esc(v.id)} · entry: ${esc(v.entry_id)}</div>`;
+ let ops='';
+ if(cfgAdmin&&v.status==='trial'){
+  ops+=`<button class="act primary" data-op="accept">Accept</button>
+        <button class="act" data-op="enhance">Enhance…</button>
+        <button class="act" data-op="reject">Reject</button>`;
+ }else if(cfgAdmin){
+  ops+=`<button class="act" data-op="update">Update…</button>`;
+ }
+ dr.innerHTML=`<td colspan="6" style="background:#f7f9fa;border-top:1px solid #e3e9ee">
+  <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+   <div style="flex:1;min-width:300px;font-size:12px">${detail}</div>
+   <div style="display:flex;flex-direction:column;gap:6px;min-width:130px">${ops}</div>
+  </div></td>`;
+ tr.after(dr);
+ dr.querySelectorAll('button[data-op]').forEach(b=>b.onclick=e=>{
+  e.stopPropagation();
+  const op=b.dataset.op;
+  if(op==='accept')ruleDecide(v,'accept');
+  else if(op==='reject'){if(confirm(`Remove rule ${v.id} entirely? (this also pushes to GitHub)`))ruleDecide(v,'reject');}
+  else if(op==='enhance')ruleEnhanceDialog(v);
+  else if(op==='update')ruleUpdateDialog(v);
+ });
+}
+async function ruleDecide(v,decision){
+ try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision});
+  $('#cfg-msg').innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
+  await loadConfig();
+ }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+}
+// Enhance 对话框：补例句（误报→clear，漏报→trigger）重跑 LLM 转译
+function ruleEnhanceDialog(v){
+ const w=prompt('New CLEAR sentences (false positives — comma-separated, will NOT be flagged):');
+ if(w===null)return;
+ const t=prompt('New TRIGGER sentences (missed cases — WILL be flagged, comma-separated):');
+ if(t===null)return;
+ const note=prompt('Note for the translator (optional):','')||'';
+ const clears=w.split(',').map(s=>s.trim()).filter(Boolean);
+ const triggers=t.split(',').map(s=>s.trim()).filter(Boolean);
+ if(!clears.length&&!triggers.length){$('#cfg-msg').innerHTML='<span class="bad">✗ no examples given</span>';return;}
+ go(triggers,clears);
+ async function go(){
+  $('#cfg-msg').textContent='Re-translating with enriched examples…';
+  try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,triggers,clears,note});
+   if(res.needs_plugin){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
+   const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
+   $('#cfg-msg').innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`;
+   await loadConfig();
+  }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+ }
+}
+// Update 对话框：非行为字段直改（conf/desc/note）
+function ruleUpdateDialog(v){
+ const conf=prompt('Confidence level (high/medium/low — empty = unchanged):','');
+ if(conf===null)return;
+ const desc=prompt('Description (shown to reviewers — empty = unchanged):','');
+ if(desc===null)return;
+ const note=prompt('User note (shown when flagged — empty = unchanged):','');
+ if(note===null)return;
+ if(!conf&&!desc&&!note){$('#cfg-msg').innerHTML='<span class="bad">✗ nothing to update</span>';return;}
+ request('/api/rules/update',{entry_id:v.entry_id,
+   conf:conf||undefined,desc:desc||undefined,note:note||undefined})
+  .then(async res=>{$('#cfg-msg').innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`;await loadConfig();})
+  .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
+}
+// pill filter 作用域：只认 cfg-pills 自己的
+document.querySelectorAll('#cfg-pills .wf-pill').forEach(pill=>pill.onclick=()=>{
+ document.querySelectorAll('#cfg-pills .wf-pill').forEach(x=>x.classList.toggle('wf-pill-active',x===pill));
+ cfgConfFilter=pill.dataset.conf;
+ loadConfig();
+});
+// New rule from examples：人类例句 → LMM 转译 → trial
+$('#btn-translate').onclick=()=>{
+ if(!cfgAdmin){$('#cfg-msg').innerHTML='<span class="bad">✗ admin machine required</span>';return;}
+ const t=prompt('TRIGGER sentences — must be flagged (comma-separated):');
+ if(t===null)return;
+ const triggers=t.split(',').map(s=>s.trim()).filter(Boolean);
+ if(!triggers.length){$('#cfg-msg').innerHTML='<span class="bad">✗ at least one trigger sentence required</span>';return;}
+ const c=prompt('CLEAR sentences — must NOT be flagged (comma-separated, optional):','');
+ const clears=c.split(',').map(s=>s.trim()).filter(Boolean);
+ const note=prompt('Note for the translator (optional):','')||'';
+ $('#cfg-msg').textContent='Translating examples (PRPM + LLM)…';
+ request('/api/rules/translate',{triggers,clears,note})
+  .then(async res=>{
+   if(res.needs_plugin){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(res.desc)+' — parked for human decision</span>';return;}
+   const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
+   $('#cfg-msg').innerHTML=`<span class="ok">✓ trial rule ${esc(res.id)} created${res.pushed?' · pushed':''}${st}</span>`;
+   await loadConfig();
+  })
+  .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
+};
 $('#btn-sync').onclick=async()=>{
  $('#cfg-msg').textContent='Fetching from GitHub…';
  try{const r=await fetch(API+'/api/sync',{method:'POST'}).then(async x=>{const j=await x.json();if(!x.ok&&!j.files)throw new Error(j.error);return j;});

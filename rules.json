@@ -1,11 +1,12 @@
 {
  "meta": {
-  "version": 3,
-  "updated": "2026-10-08",
-  "source": "rules.json + Rule Book pack merged (single source of truth, 用户裁决 2026-10-08)",
+  "version": 4,
+  "updated": "2026-10-09",
+  "source": "rules.json — all rules in plugin format (regex_match executor, 用户裁决 2026-10-09)",
   "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict. noflag: true entries are exception ranges suppressing overlapping findings from other rule IDs (Rule Book semantics).",
   "plugins": [
    "ks02_antara",
+   "regex_match",
    "sa01_dangling"
   ]
  },
@@ -13,35 +14,44 @@
   {
    "id": "KS-01",
    "conf": "medium",
-   "re": "\\bdari (segi|sudut|aspek|perspektif)\\b",
    "note": "Semak dari segi/sudut/aspek/perspektif; pertimbangkan daripada.",
    "entry_id": "KS-01-01",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KS-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bdari (segi|sudut|aspek|perspektif)\\b"
+   }
   },
   {
    "id": "KS-01",
    "conf": "medium",
-   "re": "\\b(?:lebih|kurang) [^\\n]{0,40}?\\bdari\\b",
    "note": "Semak dari/daripada dalam perbandingan lebih.",
    "entry_id": "KS-01-02",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KS-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(?:lebih|kurang) [^\\n]{0,40}?\\bdari\\b"
+   }
   },
   {
    "id": "KS-01",
    "conf": "medium",
-   "re": "\\bberasal\\s+dari\\b",
    "note": "Semak pemilihan dari/daripada mengikut makna selepas berasal.",
    "entry_id": "KS-01-03",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KS-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bberasal\\s+dari\\b"
+   }
   },
   {
    "id": "KS-02",
@@ -58,51 +68,62 @@
   {
    "id": "KS-03",
    "conf": "low",
-   "re": "\\bberbanding\\b",
    "note": "Semak pasangan berbanding dengan.",
    "entry_id": "KS-03-05",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KS-03 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bberbanding\\b"
+   }
   },
   {
    "id": "KS-05",
    "conf": "medium",
-   "re": "\\bdalam (tahun|masa|waktu|hari)\\b",
    "note": "Semak dalam/pada apabila merujuk tahun, masa, waktu atau hari.",
    "entry_id": "KS-05-06",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KS-05 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bdalam (tahun|masa|waktu|hari)\\b"
+   }
   },
   {
    "id": "KP-01",
    "conf": "low",
-   "re": "\\b(ialah|adalah)\\b",
    "note": "Semak kesesuaian ialah/adalah dengan jenis predikat.",
    "entry_id": "KP-01-07",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KP-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(ialah|adalah)\\b"
+   }
   },
   {
    "id": "PI-01",
    "conf": "low",
-   "re": "\\b(guna|pakai|cari|tanya)\\b",
    "note": "Kata kerja tanpa awalan mungkin sesuai dalam perbualan; semak laras formal.",
    "entry_id": "PI-01-08",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / PI-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(guna|pakai|cari|tanya)\\b"
+   }
   },
   {
    "id": "KL-01",
    "conf": "high",
-   "re": "\\b(ialah|adalah)\\s+(ialah|adalah)\\b",
    "note": "Dua kata pemeri bersebelahan; semak pengulangan.",
    "entry_id": "KL-01-10",
    "category": "grammar",
@@ -117,169 +138,230 @@
      "Ali ialah seorang doktor.",
      "Ali ialah doktor dan Abu adalah ketua."
     ]
+   },
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(ialah|adalah)\\s+(ialah|adalah)\\b"
    }
   },
   {
    "id": "KL-01",
    "conf": "medium",
-   "re": "\\b(walau bagaimanapun|tetapi|namun)\\b[^\\n.]{0,10}\\b(tetapi|namun|walau bagaimanapun)\\b",
    "note": "Semak pengulangan penanda hubungan; klausa berasingan mungkin sah.",
    "entry_id": "KL-01-11",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KL-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(walau bagaimanapun|tetapi|namun)\\b[^\\n.]{0,10}\\b(tetapi|namun|walau bagaimanapun)\\b"
+   }
   },
   {
    "id": "KL-02",
    "conf": "medium",
-   "re": "\\b(kebanyakan|sebahagian|sesetengah|beberapa)\\b[^\\n]{0,30}\\b(kita|mereka)\\b",
    "note": "Semak rujukan jamak selepas kebanyakan/sebahagian/sesetengah/beberapa.",
    "entry_id": "KL-02-12",
    "category": "grammar",
    "register": "formal",
    "source": "Anna rule_book / KL-02 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(kebanyakan|sebahagian|sesetengah|beberapa)\\b[^\\n]{0,30}\\b(kita|mereka)\\b"
+   }
   },
   {
    "id": "IS-02",
    "conf": "medium",
-   "re": "\\bkomprehensif\\b|\\bkomprehensiv\\b",
    "note": "Semak makna komprehensif mengikut konteks; menyeluruh mungkin sesuai.",
    "entry_id": "IS-02-13",
    "category": "terminology",
    "register": "formal",
    "source": "Anna rule_book / IS-02 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bkomprehensif\\b|\\bkomprehensiv\\b"
+   }
   },
   {
    "id": "IS-03",
    "conf": "medium",
-   "re": "\\byang mana\\b",
    "note": "Jika digunakan sebagai penghubung relatif, semak binaan yang mana; soalan memerlukan konteks.",
    "entry_id": "IS-03-14",
    "category": "terminology",
    "register": "formal",
    "source": "Anna rule_book / IS-03 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\byang mana\\b"
+   }
   },
   {
    "id": "IS-03",
    "conf": "medium",
-   "re": "\\bdi mana\\b",
    "note": "Semak di mana jika digunakan sebagai penghubung bukan tempat; soalan/tempat perlu konteks.",
    "entry_id": "IS-03-15",
    "category": "terminology",
    "register": "formal",
    "source": "Anna rule_book / IS-03 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bdi mana\\b"
+   }
   },
   {
    "id": "IS-04",
    "conf": "medium",
-   "re": "\\bmembuat penyelidikan\\b|\\bmelakukan penambahbaikan\\b",
    "note": "Semak pilihan kata kerja bersama penyelidikan atau penambahbaikan.",
    "entry_id": "IS-04-16",
    "category": "terminology",
    "register": "formal",
    "source": "Anna rule_book / IS-04 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bmembuat penyelidikan\\b|\\bmelakukan penambahbaikan\\b"
+   }
   },
   {
    "id": "EJ-01",
    "conf": "medium",
-   "re": "\\b(prarontal|prefrontal|sirkadian|intravena)\\b",
    "note": "Semak ejaan istilah pinjaman ini dalam PRPM dan konteks bidang.",
    "entry_id": "EJ-01-17",
    "category": "spelling",
    "register": "formal",
    "source": "Anna rule_book / EJ-01 (inherited manual rule; inspect context)",
-   "exceptions": []
+   "exceptions": [],
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(prarontal|prefrontal|sirkadian|intravena)\\b"
+   }
   },
   {
    "id": "KS-01",
    "conf": "high",
-   "re": "\\b(?:lebih|kurang)\\s+[^.,;\\n]{0,40}?\\bdari\\b(?!\\s+(segi|sudut|aspek|perspektif)\\b)",
    "note": "lebih … dari → lebih … daripada (perbandingan = KABOS)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(?:lebih|kurang)\\s+[^.,;\\n]{0,40}?\\bdari\\b(?!\\s+(segi|sudut|aspek|perspektif)\\b)"
+   }
   },
   {
    "id": "KS-01",
    "conf": "low",
-   "re": "\\bdari\\s+(segi|sudut|aspek|perspektif)\\b",
    "note": "dari segi/sudut/aspek/perspektif adalah kekecualian tetap (jangan tukar)",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
-   "noflag": true
+   "noflag": true,
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bdari\\s+(segi|sudut|aspek|perspektif)\\b"
+   }
   },
   {
    "id": "KS-03",
    "conf": "high",
-   "re": "\\b(?:lebih|kurang)\\s+[^.,;\\n]{0,40}?\\bberbanding(\\s+dengan)?\\b",
    "note": "lebih … berbanding (dengan) → lebih … daripada",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(?:lebih|kurang)\\s+[^.,;\\n]{0,40}?\\bberbanding(\\s+dengan)?\\b"
+   }
   },
   {
    "id": "KS-03",
    "conf": "medium",
-   "re": "\\bberbanding\\b(?!\\s+dengan\\b)(?!\\s+daripada\\b)",
    "note": "berbanding tanpa dengan — tidak lengkap (tiada lebih/kurang)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bberbanding\\b(?!\\s+dengan\\b)(?!\\s+daripada\\b)"
+   }
   },
   {
    "id": "KS-04",
    "conf": "medium",
-   "re": "\\b(habis|faedah|ruang|peluang|habis guna)\\s+kepada\\b",
    "note": "habis/faedah/ruang + kepada → bagi (beneficiary, bukan penerima)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(habis|faedah|ruang|peluang|habis guna)\\s+kepada\\b"
+   }
   },
   {
    "id": "KS-05",
    "conf": "high",
-   "re": "\\bpada\\s+(jangka\\s+masa|tempoh|masa\\s+panjang)\\b",
    "note": "pada + jangka masa → dalam (tempoh)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bpada\\s+(jangka\\s+masa|tempoh|masa\\s+panjang)\\b"
+   }
   },
   {
    "id": "KS-05",
    "conf": "high",
-   "re": "\\bdalam\\s+(bulan|tahun|minggu|hari)\\s+[A-Z\\d]",
    "note": "dalam + titik masa spesifik → pada (bulan/tahun/tarikh)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bdalam\\s+(bulan|tahun|minggu|hari)\\s+[A-Z\\d]"
+   }
   },
   {
    "id": "KS-05",
    "conf": "high",
-   "re": "\\bdi\\s+(saat|masa|ketika|waktu)\\s",
    "note": "di + saat/masa → pada (masa, bukan tempat)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bdi\\s+(saat|masa|ketika|waktu)\\s"
+   }
   },
   {
    "id": "KP-01",
    "conf": "medium",
-   "re": "\\bAdalah\\s+(dimaklumkan|diserahkan|dinyatakan|dijelaskan|diharapkan)\\b",
    "note": "adalah + frasa kerja (Adalah dimaklumkan/diserahkan…) — buang pemeri",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bAdalah\\s+(dimaklumkan|diserahkan|dinyatakan|dijelaskan|diharapkan)\\b"
+   }
   },
   {
    "id": "KP-01",
    "conf": "high",
-   "re": "\\b(adalah|ialah)\\s+merupakan\\b",
    "note": "adalah merupakan — kembar kata pemeri (lihat KL-01)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(adalah|ialah)\\s+merupakan\\b"
+   }
   },
   {
    "id": "PI-01",
    "conf": "high",
-   "re": "\\bmensetujui\\b",
    "note": "mensetujui → menyetujui / bersetuju dengan (realisasi meN- salah)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bmensetujui\\b"
+   }
   },
   {
    "id": "PI-02",
    "conf": "medium",
-   "re": "\\bmemberikan\\s+(pelajar|guru|murid|orang|kanak-kanak|peserta|pengguna|ibu|bapa|rakan)\\b",
    "note": "memberikan + objek hidup (pelajar/guru/orang…) → memberi",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bmemberikan\\s+(pelajar|guru|murid|orang|kanak-kanak|peserta|pengguna|ibu|bapa|rakan)\\b"
+   }
   },
   {
    "id": "SA-01",
@@ -332,153 +414,216 @@
   {
    "id": "SA-02",
    "conf": "medium",
-   "re": "\\b(bergotong-royong|menyanyi|bermain)[^.\\n]{0,20},\\s+(?!ber|men|mem|me|di)[a-z]+\\s+[a-z]+\\s+dan\\s+(ber|men|mem|me)",
    "note": "selaras frasa: kata nama terus dalam siri kata kerja (bergotong-royong, X, menyanyi)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(bergotong-royong|menyanyi|bermain)[^.\\n]{0,20},\\s+(?!ber|men|mem|me|di)[a-z]+\\s+[a-z]+\\s+dan\\s+(ber|men|mem|me)"
+   }
   },
   {
    "id": "KL-01",
    "conf": "high",
-   "re": "\\b(walau bagaimanapun|tetapi|namun)[^.\\n]{0,40}\\b(tetapi|namun|walau bagaimanapun)\\b",
    "note": "kembar kata hubung: tetapi…namun / walau bagaimanapun…tetapi",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(walau bagaimanapun|tetapi|namun)[^.\\n]{0,40}\\b(tetapi|namun|walau bagaimanapun)\\b"
+   }
   },
   {
    "id": "KL-01",
    "conf": "high",
-   "re": "\\b(ialah\\s+ialah|adalah\\s+adalah)\\b",
    "note": "ialah ialah / adalah adalah (ganda botoh)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(ialah\\s+ialah|adalah\\s+adalah)\\b"
+   }
   },
   {
    "id": "KL-02",
    "conf": "high",
-   "re": "\\b(sebahagian|beberapa|sesetengah|semua|para)\\s+[^.,\\n]{0,20}?([a-z]+)-\\2\\b",
    "note": "penanda jamak + kata ganda nama: Sebahagian/beberapa/para … X-X",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(sebahagian|beberapa|sesetengah|semua|para)\\s+[^.,\\n]{0,20}?([a-z]+)-\\2\\b"
+   }
   },
   {
    "id": "IS-01",
    "conf": "high",
-   "re": "\\bkerana\\s+fakta\\s+bahawa\\b",
    "note": "kerana fakta bahawa → kerana (kalque 'due to the fact that')",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bkerana\\s+fakta\\s+bahawa\\b"
+   }
   },
   {
    "id": "IS-01",
    "conf": "high",
-   "re": "\\badalah\\s+kerana\\b",
    "note": "adalah kerana → ialah kerana / kerana",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\badalah\\s+kerana\\b"
+   }
   },
   {
    "id": "IS-02",
    "conf": "medium",
-   "re": "\\btali\\s+pikat\\b",
    "note": "tali pikat → tali anjing/cawak (pikat = memikat burung) [LR-02]",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\btali\\s+pikat\\b"
+   }
   },
   {
    "id": "IS-02",
    "conf": "medium",
-   "re": "\\bbunyi\\s+amaran\\b",
    "note": "bunyi amaran (nada peranti) → bunyi isyarat [LR-04]",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bbunyi\\s+amaran\\b"
+   }
   },
   {
    "id": "IS-02",
    "conf": "medium",
-   "re": "\\b(nasihat|komen|pendapat|audi)\\s+yang\\s+tidak\\s+diundang\\b",
    "note": "nasihat tidak diundang → tidak diminta [LR-05]",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(nasihat|komen|pendapat|audi)\\s+yang\\s+tidak\\s+diundang\\b"
+   }
   },
   {
    "id": "IS-03",
    "conf": "high",
-   "re": "\\b[yY]ang\\s+mana\\b(?!\\s+(satu|antara|lebih))",
    "note": "yang mana sebagai konjungsi relatif → yang (kalque 'which')",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b[yY]ang\\s+mana\\b(?!\\s+(satu|antara|lebih))"
+   }
   },
   {
    "id": "IS-03",
    "conf": "high",
-   "re": "\\b[dD]i\\s+mana\\b(?!\\s+(berada|lokasi|kedudukan|tempat))",
    "note": "di mana sebagai konjungsi (bukan tempat) → susun semula",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b[dD]i\\s+mana\\b(?!\\s+(berada|lokasi|kedudukan|tempat))"
+   }
   },
   {
    "id": "IS-04",
    "conf": "high",
-   "re": "\\bmenggapai\\s+untung\\b",
    "note": "menggapai untung → meraih/memperoleh untung",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bmenggapai\\s+untung\\b"
+   }
   },
   {
    "id": "IS-04",
    "conf": "high",
-   "re": "\\bterima\\s+kasih\\s+di\\s+atas\\b",
    "note": "terima kasih di atas → terima kasih atas (di atas = spatial)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bterima\\s+kasih\\s+di\\s+atas\\b"
+   }
   },
   {
    "id": "IS-04",
    "conf": "high",
-   "re": "\\b(menyambungkan|menghubungkan)\\s+[^.\\n]{0,30}\\s+kepada\\s+(port|peranti|kabel|bank|router|wifi)\\b",
    "note": "menyambungkan X kepada Y (bukan hidup) → dengan [LR-06]",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(menyambungkan|menghubungkan)\\s+[^.\\n]{0,30}\\s+kepada\\s+(port|peranti|kabel|bank|router|wifi)\\b"
+   }
   },
   {
    "id": "EJ-01",
    "conf": "high",
-   "re": "\\bfrekuensy\\b",
    "note": "frekuensy → frekuensi",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bfrekuensy\\b"
+   }
   },
   {
    "id": "EJ-01",
    "conf": "high",
-   "re": "\\bmembantuh\\b",
    "note": "membantuh → membantu",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bmembantuh\\b"
+   }
   },
   {
    "id": "LR-03",
    "conf": "high",
-   "re": "\\b[Jj]angan\\s+lepas\\s+(anjing|kucing|burung|ikan|kanak)\\b",
    "note": "lepas + objek langsung → lepaskan (PI-01)",
-   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)"
+   "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b[Jj]angan\\s+lepas\\s+(anjing|kucing|burung|ikan|kanak)\\b"
+   }
   },
   {
    "id": "NF-2",
    "conf": "low",
-   "re": "\\bantara\\s+[^.\\n]{0,25},[^.\\n]{0,25},[^.\\n]{0,25}\\s+dan\\b",
    "note": "antara + 3+ item + dan adalah betul",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
-   "noflag": true
+   "noflag": true,
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\bantara\\s+[^.\\n]{0,25},[^.\\n]{0,25},[^.\\n]{0,25}\\s+dan\\b"
+   }
   },
   {
    "id": "NF-4",
    "conf": "low",
-   "re": "\\b(guna|pakai|cari|bili|tanya)\\b",
    "note": "gugur meN- pada kata kerja aktif (guna/pakai/cari) — jangan tanda",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
-   "noflag": true
+   "noflag": true,
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(guna|pakai|cari|bili|tanya)\\b"
+   }
   },
   {
    "id": "LR-01",
    "conf": "low",
-   "re": "(?s)\\bsatu\\s+(slogan|cadangan|idea)\\b",
    "note": "minta satu, beri beberapa opsyen — jangan tanda",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
-   "noflag": true
+   "noflag": true,
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "(?s)\\bsatu\\s+(slogan|cadangan|idea)\\b"
+   }
   },
   {
    "id": "LR-07",
    "conf": "low",
-   "re": "\\b(dengan)\\s+(sensor|kamera|kopi|lauk|sambal)\\b",
    "note": "dengan = beserta (kamera dengan sensor) — jangan tanda",
    "source": "Rule Book pack (Binga Ubi settled 2026-10-02)",
-   "noflag": true
+   "noflag": true,
+   "plugin": "regex_match",
+   "params": {
+    "pattern": "\\b(dengan)\\s+(sensor|kamera|kopi|lauk|sambal)\\b"
+   }
   }
  ],
  "ms_id_suffix_map": [
