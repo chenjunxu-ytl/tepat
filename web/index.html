@@ -166,9 +166,7 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    </button>
    <span id="env-msg" class="msg"></span>
  </span></h2>
- <p class="sub">Admin machine only. Each key of the <code>.env</code> next to the server executable, as its own row — edit values, add or remove keys. Saved to disk as <code>KEY=value</code> lines (a <code>.env.bak</code> of the previous version is kept). Changes apply on the next restart; nothing is hot-applied.</p>
  <div class="card">
-  <p class="sub" id="env-path" style="margin:0 0 6px"></p>
   <div id="env-rows"></div>
  </div>
 </section>
@@ -503,9 +501,6 @@ function envRowHtml(key, value, isNew, comments='') {
 async function loadEnv(){
  try{
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  // 不展示本机绝对路径（开源项目）：只说明文件在 tepat 数据目录下
-  $('#env-path').textContent=r.exists?'Loaded from the tepat data directory (.env)'
-                                     :'No .env yet — it will be created in the tepat data directory when you save';
   const box=$('#env-rows');box.replaceChildren();envRows.length=0;
   // 拆解：KEY=value 行进 envRows；注释/空行作为前导文本挂在下一行前
   let pendingComments='';
