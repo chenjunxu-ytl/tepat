@@ -17,84 +17,85 @@
    "changes": "Move nine shared SMS abbreviations into register_words; move five ambiguous/shared chat or unit forms into context_words. Remaining Indonesian labels retain original research status and are not freshly verified."
   },
   "suggestions_note": "Candidates from the original research word-pair tables. Suggestions are validated against local DBP attestation at runtime and are never applied automatically.",
-  "note": "Three lists: indo_only = Indonesian-only words; casual = informal Malay needing the standard form in formal writing. ms = DBP-standard equivalent, empty = no single equivalent. ms mappings are maintained in the repo file (research 2026-10-08); puzzle source remains the word-set truth.",
+  "note": "Three lists: indo_only = Indonesian-only words; casual = informal Malay needing the standard form in formal writing. ms = DBP-standard equivalent, empty = no single equivalent. ms mappings are maintained in the repo file (research 2026-10-08); puzzle source remains the word-set truth. Merged mapping agent results 2026-10-09: 52 applied, 141 added, 7 removed as shared words, 42 skipped (DBP-attested shared words).",
   "generated_source_sha256": {
    "indo_blacklist.md": "f3d6c973051b5f6af66acb9ff53a641f0c93586c601be6b0b42efa8a5550e99b",
    "indo_blacklist.json": "ba0853e966308c14c88ca094346df180e67e8efa1e88dbddd0a850f78cd56ec0"
-  }
+  },
+  "updated": "2026-10-09"
  },
  "indo_only": {
   "abis": {
-   "ms": ""
+   "ms": "habis"
   },
   "agustus": {
    "ms": "Ogos"
   },
   "aing": {
-   "ms": ""
+   "ms": "aku"
   },
   "aj": {
-   "ms": ""
+   "ms": "sahaja"
   },
   "aja": {
    "ms": ""
   },
   "ajah": {
-   "ms": ""
+   "ms": "sahaja"
   },
   "aktualisasi": {
-   "ms": ""
+   "ms": "realisasi"
   },
   "ama": {
-   "ms": ""
+   "ms": "dengan"
   },
   "ambilin": {
-   "ms": ""
+   "ms": "ambilkan"
   },
   "anget": {
-   "ms": ""
+   "ms": "hangat"
   },
   "anjay": {
-   "ms": ""
+   "ms": "wah"
   },
   "anjg": {
-   "ms": ""
+   "ms": "alamak"
   },
   "anuan": {
-   "ms": ""
+   "ms": "anu"
   },
   "apain": {
-   "ms": ""
+   "ms": "buat apa"
   },
   "apaname": {
-   "ms": ""
+   "ms": "apa namanya"
   },
   "aq": {
-   "ms": ""
+   "ms": "aku"
   },
   "argumentasi": {
-   "ms": ""
+   "ms": "penghujahan"
   },
   "arti": {
    "ms": "erti"
   },
   "ato": {
-   "ms": ""
+   "ms": "atau"
   },
   "atuh": {
    "ms": ""
   },
   "atw": {
-   "ms": ""
+   "ms": "atau"
   },
   "autentisitas": {
-   "ms": ""
+   "ms": "keaslian"
   },
   "baek": {
-   "ms": ""
+   "ms": "baik"
   },
   "bahenol": {
-   "ms": ""
+   "ms": "montok"
   },
   "bakil": {
    "ms": ""
@@ -103,46 +104,46 @@
    "ms": ""
   },
   "bandara": {
-   "ms": ""
+   "ms": "lapangan terbang"
   },
   "bangke": {
-   "ms": ""
+   "ms": "bangkai"
   },
   "bantuin": {
-   "ms": ""
+   "ms": "bantu"
   },
   "banyakin": {
-   "ms": ""
+   "ms": "memperbanyak"
   },
   "baper": {
-   "ms": ""
+   "ms": "bawa perasaan"
   },
   "baterai": {
-   "ms": ""
+   "ms": "bateri"
   },
   "bawain": {
-   "ms": ""
+   "ms": "membawa"
   },
   "beb": {
-   "ms": ""
+   "ms": "sayang"
   },
   "becanda": {
-   "ms": ""
+   "ms": "bergurau"
   },
   "begituan": {
-   "ms": ""
+   "ms": "begitulah"
   },
   "bego": {
-   "ms": ""
+   "ms": "bodoh"
   },
   "bemo": {
    "ms": ""
   },
   "bener": {
-   "ms": ""
+   "ms": "benar"
   },
   "bener2": {
-   "ms": ""
+   "ms": "betul-betul"
   },
   "beneran": {
    "ms": ""
@@ -169,7 +170,7 @@
    "ms": ""
   },
   "bokap": {
-   "ms": ""
+   "ms": "ayah"
   },
   "bokep": {
    "ms": ""
@@ -181,7 +182,7 @@
    "ms": ""
   },
   "brengsek": {
-   "ms": ""
+   "ms": "bejat"
   },
   "bruer": {
    "ms": ""
@@ -244,7 +245,7 @@
    "ms": ""
   },
   "curhat": {
-   "ms": ""
+   "ms": "luahan hati"
   },
   "cuy": {
    "ms": ""
@@ -295,7 +296,7 @@
    "ms": ""
   },
   "elu": {
-   "ms": ""
+   "ms": "awak"
   },
   "ember": {
    "ms": ""
@@ -361,7 +362,7 @@
    "ms": ""
   },
   "gk": {
-   "ms": ""
+   "ms": "tidak"
   },
   "gmn": {
    "ms": ""
@@ -376,19 +377,19 @@
    "ms": ""
   },
   "gt": {
-   "ms": ""
+   "ms": "begitu"
   },
   "gth": {
    "ms": ""
   },
   "gue": {
-   "ms": ""
+   "ms": "aku"
   },
   "gule": {
    "ms": ""
   },
   "gw": {
-   "ms": ""
+   "ms": "aku"
   },
   "gwa": {
    "ms": ""
@@ -436,7 +437,7 @@
    "ms": ""
   },
   "jancuk": {
-   "ms": ""
+   "ms": "sial"
   },
   "jayus": {
    "ms": ""
@@ -553,7 +554,7 @@
    "ms": ""
   },
   "macem": {
-   "ms": ""
+   "ms": "macam"
   },
   "macem-macem": {
    "ms": ""
@@ -568,10 +569,10 @@
    "ms": ""
   },
   "makasih": {
-   "ms": ""
+   "ms": "terima kasih"
   },
   "mantul": {
-   "ms": ""
+   "ms": "mantap"
   },
   "maturitas": {
    "ms": ""
@@ -655,7 +656,7 @@
    "ms": ""
   },
   "ngasih": {
-   "ms": ""
+   "ms": "memberi"
   },
   "ngebut": {
    "ms": ""
@@ -676,7 +677,7 @@
    "ms": ""
   },
   "nggak": {
-   "ms": ""
+   "ms": "tidak"
   },
   "nggaknya": {
    "ms": ""
@@ -703,7 +704,7 @@
    "ms": ""
   },
   "nyari": {
-   "ms": ""
+   "ms": "mencari"
   },
   "nye": {
    "ms": ""
@@ -787,7 +788,7 @@
    "ms": ""
   },
   "sampe": {
-   "ms": ""
+   "ms": "sampai"
   },
   "sampeyan": {
    "ms": ""
@@ -799,7 +800,7 @@
    "ms": ""
   },
   "sebel": {
-   "ms": ""
+   "ms": "sebal"
   },
   "segituan": {
    "ms": ""
@@ -895,12 +896,435 @@
    "ms": ""
   },
   "yah": {
-   "ms": ""
+   "ms": "aduh"
   },
   "yaitu": {
    "ms": "iaitu"
   },
   "yaudah": {
+   "ms": "baiklah"
+  },
+  "bgl": {
+   "ms": ""
+  },
+  "bikin": {
+   "ms": "buat"
+  },
+  "bkn": {
+   "ms": "bukan"
+  },
+  "bohay": {
+   "ms": "montok"
+  },
+  "bokis": {
+   "ms": "bohong"
+  },
+  "boncos": {
+   "ms": "rugi"
+  },
+  "brainstorming": {
+   "ms": "pemerahan otak"
+  },
+  "bucin": {
+   "ms": ""
+  },
+  "bukuin": {
+   "ms": "tempah"
+  },
+  "buming": {
+   "ms": "terkenal"
+  },
+  "buset": {
+   "ms": "alamak"
+  },
+  "cager": {
+   "ms": ""
+  },
+  "can": {
+   "ms": ""
+  },
+  "ce": {
+   "ms": "cik"
+  },
+  "cekik": {
+   "ms": ""
+  },
+  "cemen": {
+   "ms": "kedekut"
+  },
+  "cendol": {
+   "ms": ""
+  },
+  "cenut": {
+   "ms": ""
+  },
+  "cepek": {
+   "ms": ""
+  },
+  "cewek": {
+   "ms": "perempuan"
+  },
+  "cheater": {
+   "ms": "penipu"
+  },
+  "comberan": {
+   "ms": "longkang"
+  },
+  "cowok": {
+   "ms": "lelaki"
+  },
+  "cp": {
+   "ms": "calon pasangan"
+  },
+  "dalem": {
+   "ms": "dalam"
+  },
+  "daptar": {
+   "ms": "daftar"
+  },
+  "debat": {
+   "ms": ""
+  },
+  "demiin": {
+   "ms": ""
+  },
+  "dendeng": {
+   "ms": ""
+  },
+  "dipi": {
+   "ms": "wang muka"
+  },
+  "doi": {
+   "ms": "dia"
+  },
+  "dpt": {
+   "ms": "dapat"
+  },
+  "emang": {
+   "ms": "memang"
+  },
+  "emangnya": {
+   "ms": "memang"
+  },
+  "enjoy": {
+   "ms": "bersantai"
+  },
+  "gatel": {
+   "ms": "gatal"
+  },
+  "geblek": {
+   "ms": "bodoh"
+  },
+  "geje": {
+   "ms": "tidak jelas"
+  },
+  "gengsi": {
+   "ms": ""
+  },
+  "githu": {
+   "ms": "begitu"
+  },
+  "gluk": {
+   "ms": ""
+  },
+  "goblok": {
+   "ms": "bodoh"
+  },
+  "gombal": {
+   "ms": "merayu"
+  },
+  "gpp": {
+   "ms": "tak apa"
+  },
+  "gretongan": {
+   "ms": "percuma"
+  },
+  "gubrek": {
+   "ms": ""
+  },
+  "gunain": {
+   "ms": "gunakan"
+  },
+  "haiya": {
+   "ms": "aduh"
+  },
+  "hbs": {
+   "ms": "habis"
+  },
+  "hlh": {
+   "ms": ""
+  },
+  "humoris": {
+   "ms": "pelawak"
+  },
+  "iye": {
+   "ms": "ya"
+  },
+  "jago": {
+   "ms": "jaguh"
+  },
+  "jg": {
+   "ms": "juga"
+  },
+  "jutek": {
+   "ms": "masam muka"
+  },
+  "kagak": {
+   "ms": "tidak"
+  },
+  "kantuk": {
+   "ms": ""
+  },
+  "katro": {
+   "ms": ""
+  },
+  "kek": {
+   "ms": "seperti"
+  },
+  "kepake": {
+   "ms": "digunakan"
+  },
+  "kerasa": {
+   "ms": "terasa"
+  },
+  "keurus": {
+   "ms": "terurus"
+  },
+  "kl": {
+   "ms": "kalau"
+  },
+  "kmana": {
+   "ms": "ke mana"
+  },
+  "kompor": {
+   "ms": "dapur"
+  },
+  "kp": {
+   "ms": "bila"
+  },
+  "ksh": {
+   "ms": "beri"
+  },
+  "lagayan": {
+   "ms": ""
+  },
+  "lbh": {
+   "ms": "lebih"
+  },
+  "lee": {
+   "ms": ""
+  },
+  "loper": {
+   "ms": "penghantar surat"
+  },
+  "masa iya": {
+   "ms": "mana mungkin"
+  },
+  "masuk": {
+   "ms": ""
+  },
+  "matre": {
+   "ms": "materialistik"
+  },
+  "mbak": {
+   "ms": "kakak"
+  },
+  "mending": {
+   "ms": "lebih baik"
+  },
+  "met": {
+   "ms": "selamat"
+  },
+  "ml": {
+   "ms": "malam"
+  },
+  "mlihat": {
+   "ms": "melihat"
+  },
+  "monggo": {
+   "ms": "sila"
+  },
+  "mudik": {
+   "ms": ""
+  },
+  "mukbang": {
+   "ms": ""
+  },
+  "nanya": {
+   "ms": "bertanya"
+  },
+  "nantiin": {
+   "ms": "menanti"
+  },
+  "nda": {
+   "ms": "tidak"
+  },
+  "ngadiem": {
+   "ms": "diam"
+  },
+  "ngaku": {
+   "ms": "mengaku"
+  },
+  "ngambek": {
+   "ms": "merajuk"
+  },
+  "ngampus": {
+   "ms": "pergi ke kampus"
+  },
+  "ngarang": {
+   "ms": "mengarang"
+  },
+  "ngarti": {
+   "ms": "mengerti"
+  },
+  "ngocep": {
+   "ms": "mengoceh"
+  },
+  "ngorbit": {
+   "ms": "mengorbit"
+  },
+  "ngestalk": {
+   "ms": "mengintip"
+  },
+  "ngledek": {
+   "ms": "mengejek"
+  },
+  "ongkir": {
+   "ms": "caj penghantaran"
+  },
+  "pdhl": {
+   "ms": "padahal"
+  },
+  "pempek": {
+   "ms": ""
+  },
+  "pengen": {
+   "ms": "mahu"
+  },
+  "ppl": {
+   "ms": "orang ramai"
+  },
+  "praktek": {
+   "ms": "praktik"
+  },
+  "prei": {
+   "ms": "cuti"
+  },
+  "pulsa": {
+   "ms": "kredit telefon"
+  },
+  "sabi": {
+   "ms": "bagus"
+  },
+  "sange": {
+   "ms": "berahi"
+  },
+  "selow": {
+   "ms": "perlahan"
+  },
+  "semahal": {
+   "ms": ""
+  },
+  "sebangku": {
+   "ms": "rakan sekelas"
+  },
+  "setres": {
+   "ms": "stres"
+  },
+  "sibuk": {
+   "ms": ""
+  },
+  "sinyal": {
+   "ms": "isyarat"
+  },
+  "sirik": {
+   "ms": "iri hati"
+  },
+  "skg": {
+   "ms": "sekarang"
+  },
+  "skil": {
+   "ms": "kemahiran"
+  },
+  "sori": {
+   "ms": "maaf"
+  },
+  "sorry": {
+   "ms": "maaf"
+  },
+  "spt": {
+   "ms": "seperti"
+  },
+  "stres": {
+   "ms": ""
+  },
+  "syukurin": {
+   "ms": "bersyukur"
+  },
+  "tael": {
+   "ms": ""
+  },
+  "tekor": {
+   "ms": "rugi"
+  },
+  "telat": {
+   "ms": "terlambat"
+  },
+  "tempe": {
+   "ms": ""
+  },
+  "tenang": {
+   "ms": ""
+  },
+  "terima kasih": {
+   "ms": ""
+  },
+  "tmn": {
+   "ms": "teman"
+  },
+  "tobat": {
+   "ms": "taubat"
+  },
+  "togel": {
+   "ms": "judi nombor"
+  },
+  "toh": {
+   "ms": ""
+  },
+  "toked": {
+   "ms": "buah dada"
+  },
+  "tos": {
+   "ms": "berjabat tangan"
+  },
+  "trs": {
+   "ms": "terus"
+  },
+  "udah": {
+   "ms": "sudah"
+  },
+  "ujan": {
+   "ms": "hujan"
+  },
+  "ulang tahun": {
+   "ms": ""
+  },
+  "unggah": {
+   "ms": "muat naik"
+  },
+  "value": {
+   "ms": "nilai"
+  },
+  "woles": {
+   "ms": "santai"
+  },
+  "ybs": {
+   "ms": "yang bersangkutan"
+  },
+  "yuk": {
+   "ms": ""
+  },
+  "zigma": {
    "ms": ""
   }
  },
