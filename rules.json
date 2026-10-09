@@ -10,7 +10,39 @@
    "sa01_dangling"
   ]
  },
- "rules": [],
+ "rules": [
+  {
+   "id": "RB-001",
+   "entry_id": "RB-001",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags Malay degree-word order: an adjective followed by 'sangat' (e.g. 'murah sangat') instead of the standard 'sangat' before the adjective (e.g. 'sangat murah').",
+   "note": "Dalam bahasa Melayu standard, 'sangat' diletakkan sebelum kata sifat: 'sangat murah', bukan 'murah sangat'.",
+   "source": "LLM-translated from human description (2026-10-09)",
+   "examples": {
+    "trigger": [
+     "Barang ini murah sangat.",
+     "Harga dia mahal sangat.",
+     "Filem itu menarik sangat."
+    ],
+    "clear": [
+     "Barang ini sangat murah.",
+     "Harga dia sangat mahal.",
+     "Dia sangat-sangat ingin pergi."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(\\w+)\\s+sangat\\b(?!\\s+\\w)",
+    "exceptions": [
+     "\\bsangat[\\s-]+sangat\\b",
+     "\\bpaling\\s+\\w+\\s+sangat\\b"
+    ],
+    "suggestion": "sangat \\1"
+   }
+  }
+ ],
  "ms_id_suffix_map": [
   [
    "ken",
