@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent  # 项目根（本文件在 tools/）
-TAG = 'v0.2.0-preview'
+TAG = 'v0.3.0'
 CHUNK = 4 * 1024 * 1024
 
 
@@ -57,8 +57,8 @@ def prepare(app_dir, output):
     if git(puzzle, 'status', '--porcelain', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json'):
         raise ValueError('Commit the corpus tools and policy sources first')
     extension = json.loads((BASE / 'extension/manifest.json').read_text(encoding='utf-8'))
-    if extension.get('version_name') != TAG.removeprefix('v'):
-        raise ValueError('Extension preview version differs from the release tag')
+    if extension.get('version') != TAG.removeprefix('v'):
+        raise ValueError('Extension version differs from the release tag')
     exe = app_dir / 'tepat-v2.exe'
     if not exe.is_file() or not (app_dir / '_internal/python313.dll').is_file():
         raise ValueError('Windows portable runtime is missing')
@@ -79,7 +79,7 @@ def prepare(app_dir, output):
     for name in ('INSTALL.md', 'RELEASE_NOTES.md'):
         (output / name).write_bytes((BASE / name).read_bytes())
     manifest = {
-        'tag': TAG, 'prerelease': True,
+        'tag': TAG, 'prerelease': False,
         'checker_commit': git(BASE, 'rev-parse', 'HEAD'),
         'corpus_tools_commit': git(puzzle, 'rev-parse', 'HEAD'),
         'extension_version': extension['version'],

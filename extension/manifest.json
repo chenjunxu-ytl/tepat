@@ -1,8 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tepat — Pemeriksa Bahasa Melayu",
-  "version": "0.2.0",
-  "version_name": "0.2.0-preview",
+  "version": "0.3.0",
   "description": "Sorot perkataan/struktur mencurigakan dalam Bahasa Melayu. Semakan kewujudan kata + PRPM + peraturan tatabahasa. Perlu Tepat.exe berjalan di localhost.",
   "permissions": [
     "storage",

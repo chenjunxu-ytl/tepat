@@ -1,4 +1,4 @@
-# Tepat 0.2.0-preview
+# Tepat 0.3.0
 
 This preview is intended for evaluation. Word and grammar checks run from the
 bundled rule files plus PRPM lookups; flags always need context review, and
@@ -6,7 +6,7 @@ factuality has no automated check.
 
 ## Windows app
 
-1. Download `tepat-v0.2.0-preview-win64.zip` and extract the whole archive.
+1. Download `tepat-v0.3.0-all-in-one.zip` (recommended — runtime + extension in one archive) or `tepat-v0.3.0-win64.zip` for the runtime alone, and extract the whole archive.
 2. Open `tepat-v2/tepat-v2.exe`. Keep the `_internal` folder beside the executable.
 3. Open http://127.0.0.1:8377 if the browser does not open automatically.
 4. Enter Malay text, choose formal or informal register, and select **Semak**.
@@ -21,7 +21,7 @@ use **Keluar** to exit.
 
 ## Chrome extension
 
-1. Download and extract `tepat-v0.2.0-preview-chrome.zip`.
+1. Download and extract `tepat-v0.3.0-chrome.zip`.
 2. Open `chrome://extensions`, enable **Developer mode**, then **Load unpacked**.
 3. Select the extracted `extension` folder that contains `manifest.json`.
 4. Keep the Windows app running. Refresh a normal webpage, select Malay text,
