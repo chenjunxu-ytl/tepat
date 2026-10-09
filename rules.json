@@ -15,9 +15,8 @@
    "id": "RB-001",
    "entry_id": "RB-001",
    "plugin": "regex_match",
-   "conf": "medium",
-   "conf_trial": "high",
-   "status": "trial",
+   "conf": "high",
+   "status": "settled",
    "desc": "Flags the informal pattern 'adjective + sangat' (e.g., 'murah sangat') which should be 'sangat + adjective' in formal Malay.",
    "note": "Dalam bahasa formal, 'sangat' patut diletakkan sebelum kata sifat, cth: 'sangat murah', bukan 'murah sangat'.",
    "source": "LLM-translated from human description (2026-10-09)",
@@ -41,7 +40,8 @@
     ],
     "suggestion": "sangat \\1"
    },
-   "self_test_failures": []
+   "self_test_failures": [],
+   "enabled": true
   }
  ],
  "ms_id_suffix_map": [
