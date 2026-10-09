@@ -383,8 +383,11 @@ async function loadConfig(){
   const views=cfgConfFilter?all.filter(v=>v.conf===cfgConfFilter):all;
   const active=all.filter(v=>v.enabled!==false).length;
   const trials=all.filter(v=>v.status==='trial').length;
-  $('#cfg-badge').textContent=`${active} of ${all.length} on${trials?` · ${trials} awaiting review`:''}`;
-  const tb=$('#cfg-rules tbody');tb.replaceChildren();
+  // 详情视图打开时列表 DOM（badge/table）不在——只刷新数据，别碰不存在的元素
+  const badge=$('#cfg-badge'),tb=$('#cfg-rules tbody');
+  if(badge)badge.textContent=`${active} of ${all.length} on${trials?` · ${trials} awaiting review`:''}`;
+  if(!tb)return;
+  tb.replaceChildren();
   const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
   const pluginType={regex_match:'regex',ks02_antara:'items',sa01_dangling:'clause'};
   all.forEach((v,i)=>{
@@ -412,13 +415,13 @@ async function loadConfig(){
       e.stopPropagation();
       tg.classList.toggle('on');
       try{await request('/api/config/rule',{entry_id:v.entry_id,enabled:tg.classList.contains('on')});await loadConfig();}
-      catch(err){tg.classList.toggle('on');$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(err.message)+'</span>';}
+      catch(err){tg.classList.toggle('on');const m=$('#cfg-msg');if(m)m.innerHTML='<span class="bad">✗ '+esc(err.message)+'</span>';}
     };
     tr.lastElementChild.appendChild(tg);
     tb.appendChild(tr);
   });
   for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="7" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
- }catch(e){$('#cfg-badge').textContent='config unavailable';}
+ }catch(e){const b=$('#cfg-badge');if(b)b.textContent='config unavailable';}
 }
 // 详情视图：点 Details 才进（不是 list 里展开）。返回列表 = ✕ 或浏览器 back。
 let cfgDetailReturn=null;
@@ -556,15 +559,16 @@ async function ruleUpdateDialog(v){
 // pill filter 作用域：只认 cfg-pills 自己的；btn-sync 提成具名函数供
 // 详情页 back 重绑（innerHTML 恢复不保事件）
 function cfgSync(){
- $('#cfg-msg').textContent='Fetching from GitHub…';
+ const msg=$('#cfg-msg');if(msg)msg.textContent='Fetching from GitHub…';
  fetch(API+'/api/sync',{method:'POST'}).then(async x=>{const j=await x.json();if(!x.ok&&!j.files)throw new Error(j.error);return j;})
   .then(async r=>{
    const parts=Object.entries(r.files||{}).map(([f,v])=>`${f}: ${v.ok?'✓ '+(v.bytes||0)+' B':'✗ '+v.error}`);
    const allOk=Object.values(r.files||{}).every(v=>v.ok);
-   $('#cfg-msg').innerHTML=allOk?`<span class="ok">✓ Synced from ${esc(r.repo)}@${esc(r.branch)} — ${parts.join(' · ')}</span>`:`<span class="bad">✗ ${parts.join(' · ')}</span>`;
+   const m=$('#cfg-msg');
+   if(m)m.innerHTML=allOk?`<span class="ok">✓ Synced from ${esc(r.repo)}@${esc(r.branch)} — ${parts.join(' · ')}</span>`:`<span class="bad">✗ ${parts.join(' · ')}</span>`;
    await loadConfig();
   })
-  .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
+  .catch(e=>{const m=$('#cfg-msg');if(m)m.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';});
 }
 bindCfgControls();
 // 首次加载由 health 回调触发（admin 态确定后），不再急加载
