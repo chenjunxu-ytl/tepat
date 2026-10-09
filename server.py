@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Tepat: source-aware Malay checker, manual rules and contextual usage evidence.
+"""Tepat: Malay checker driven by APPDATA rules (Rule Book products) and PRPM.
 
-Uses data/evidence.sqlite built from the accepted cleaning run. Indonesian and
-register reminders run independently. No automatic correction or factual verdict.
-PRPM remains an on-demand dictionary lookup with hit/miss/unreachable states.
+word/grammar checks read rules.json (RB-* rules, LLM-translated from human
+descriptions) and indo_words.json from %APPDATA%\\tepat; word existence comes
+from PRPM lookups (cached in sqlite). data/evidence.sqlite is legacy — when
+present it still upgrades scans with spelling/context channels, but nothing
+requires it (2026-10-09 user decision: corpus evidence retired).
 """
 import argparse
 import base64
@@ -708,6 +710,11 @@ def word_exists(w: str) -> bool:
 # 分词器——不依赖任何数据库。全页 Scan words 走这里；有 evidence 时
 # spelling/cold 通道仍由 /api/scan 提供（面板查询用）。
 def scan_words_lightweight(text: str, register: str = "formal") -> dict:
+    """无 evidence.sqlite 的完整扫描降级通道（2026-10-09 用户裁决：evidence
+    语料库抓不准且巨大，弃用——word/grammar 检查全部依赖 APPDATA 的规则
+    文件（rules.json RB-* / indo_words.json）+ PRPM API）。
+    覆盖：词表信号（indo/casual）+ 规则（regex_match plugin 直判）。
+    不覆盖（随 evidence 一起退役）：spelling 冷词、bigram 语境、词根还原。"""
     from text_units import tokens, sentences
     try:
         indo = json.loads(Path(_config_path("indo_words.json")).read_text(encoding="utf-8"))
@@ -726,9 +733,44 @@ def scan_words_lightweight(text: str, register: str = "formal") -> dict:
                            for w, v in indo.get("register_words", {}).items()})
         casual_map.update({w: "" for w in indo.get("context_words", {})})
     issues = []
-    # 句界跟踪：句首大写不是专名（checker 的 named 语义）——只有非句首的
+    # 规则通道（rules.json，与 checker 的 regex_match 同口径）：admin 的
+    # RB-* 规则在无 evidence 模式下照常工作。
+    try:
+        rules_data = json.loads(Path(_config_path("rules.json")).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        rules_data = {}
+    all_sents = list(sentences(text[:30000]))
+    for rule in rules_data.get("rules", []):
+        if (not isinstance(rule, dict) or rule.get("enabled") is False
+                or rule.get("plugin") != "regex_match"
+                or rule.get("register", "any") not in {"any", register}
+                or rule.get("noflag")):
+            continue
+        params = rule.get("params") or {}
+        pattern = params.get("pattern")
+        if not pattern:
+            continue
+        try:
+            rx = re.compile(pattern, re.IGNORECASE)
+            exceptions = [re.compile(x, re.IGNORECASE) for x in params.get("exceptions", [])]
+        except re.error:
+            continue
+        level = {"high": "error", "medium": "warning", "low": "info"}[rule.get("conf", "medium")]
+        for start, _end, sent in all_sents:
+            excl = [m.span() for ex in exceptions for m in ex.finditer(sent)]
+            for m in rx.finditer(sent):
+                if any(a <= m.start() and m.end() <= b for a, b in excl):
+                    continue
+                issues.append({"category": rule.get("category", "grammar"),
+                               "level": level, "confidence": rule.get("conf", "medium"),
+                               "start": utf16_offset(text, start + m.start()),
+                               "end": utf16_offset(text, start + m.end()),
+                               "span": sent[m.start():m.end()],
+                               "note": rule.get("note", ""),
+                               "origin": rule.get("entry_id", rule["id"]),
+                               "suggestion": params.get("suggestion", "")})
+    # 词表通道：句首大写不是专名（checker 的 named 语义）——只有非句首的
     # 大写词才算专有名词跳过。
-    from text_units import sentences
     sent_starts = {s for s, _e, _t in sentences(text[:30000])}
     for t in tokens(text[:30000]):
         named = t.raw[:1].isupper() and t.start not in sent_starts
@@ -749,7 +791,8 @@ def scan_words_lightweight(text: str, register: str = "formal") -> dict:
                            "bentuk standard dalam penulisan formal." if ms else
                            "Penggunaan ini memerlukan konteks.",
                            "origin": f"casual:{t.word}", "suggestion": ms})
-    return {"engine": "wordlists-v1", "register": register,
+    issues.sort(key=lambda i: (i["start"], i["end"]))
+    return {"engine": "wordlists-rules-v2", "register": register,
             "issues": issues, "total_words": len(issues)}
 
 
@@ -1369,13 +1412,22 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "bad json"})
             return
         if self.path == "/api/scan":
+            # 无 evidence 时降级为词表+规则通道（2026-10-09 用户裁决：evidence
+            # 语料库退役，word/grammar 检查全部走 APPDATA 规则 + PRPM）。
             text = str(req.get("text") or "")
-            try:
-                self._json(200, scan(text, str(req.get("register") or "formal")))
-            except ValueError as e:
-                self._json(400, {"error": str(e)})
-            except (RuntimeError, sqlite3.Error):
-                self._json(503, {"error": "Evidence unavailable; scan was not completed"})
+            register = str(req.get("register") or "formal")
+            if _checker is not None:
+                try:
+                    self._json(200, scan(text, register))
+                except ValueError as e:
+                    self._json(400, {"error": str(e)})
+                except (RuntimeError, sqlite3.Error):
+                    self._json(503, {"error": "Evidence unavailable; scan was not completed"})
+            else:
+                try:
+                    self._json(200, scan_words_lightweight(text, register))
+                except ValueError as e:
+                    self._json(400, {"error": str(e)})
         elif self.path == "/api/scan-words":
             # 词级全页扫描：不依赖 evidence.sqlite（词表信号即可用）。
             # 有 evidence 时升级用完整 scan 的词级类别。
@@ -2111,17 +2163,17 @@ def main() -> int:
         _log(f"[tepat] port {args.port} already serving — exiting WITHOUT opening UI")
         return 0
 
-    # core 运行时没有 evidence.sqlite：保持 PRPM-only 服务（轻量版是一等资产）。
-    # 语法数据是可后补的升级包，不是启动前提；放回 data/ 后重启即恢复完整检查。
+    # evidence.sqlite 是遗留升级包（2026-10-09 用户裁决：语料证据退役）——
+    # 没有它服务完整：词表 + RB 规则 + PRPM 就是全部检查通道；有它则额外
+    # 提供 spelling/context 通道。不存在属正常形态。
     if os.path.exists(EVIDENCE_PATH):
         _log("[main] loading words and rules...")
         try:
             load_words()
         except Exception as e:  # noqa: BLE001
-            _log(f"[main] evidence load failed ({e!r}) — serving PRPM-only")
+            _log(f"[main] evidence load failed ({e!r}) — serving rules+PRPM only")
     else:
-        _log("[main] no evidence.sqlite — PRPM-only core mode; "
-             "drop data/evidence.sqlite beside the runtime to enable the grammar module")
+        _log("[main] no evidence.sqlite — rules+PRPM mode (legacy corpus channels off)")
 
     class _ExclusiveServer(ThreadingHTTPServer):
         # Windows 默认允许同端口双重 bind（无 SO_EXCLUSIVEADDRUSE），

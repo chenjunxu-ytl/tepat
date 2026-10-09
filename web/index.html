@@ -270,8 +270,8 @@ for(const b of document.querySelectorAll('aside .nav')) b.onclick=()=>showTab(b.
 // ── health / status ──
 fetch(API+'/api/health').then(r=>r.json()).then(h=>{
  $('#status').innerHTML = h.grammar
-  ? `Grammar + PRPM · ${h.words.toLocaleString()} DBP forms`
-  : 'PRPM lookup only';
+  ? `Rules + PRPM · legacy corpus channels on (${h.words.toLocaleString()} forms)`
+  : 'Rules + PRPM';
  const src=$('#sources');
  if(h.grammar){
   for(const [source,count] of Object.entries(h.source_counts||{})){const tr=document.createElement('tr');for(const v of [source,count.candidate_records,count.unique_sentences]){const td=document.createElement('td');td.textContent=typeof v==='number'?v.toLocaleString():v;td.className=v===source?'bmc-tag':'';tr.appendChild(td);}src.appendChild(tr);}
