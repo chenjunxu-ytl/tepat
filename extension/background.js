@@ -23,12 +23,20 @@ chrome.runtime.onInstalled.addListener(() => {
       title: 'Grammar Check',
       contexts: ['selection']
     });
+    // 右键 flag（用户裁决 2026-10-09）：选中任意内容（不限字数）直接报告
+    // 问题——不是面板里的 word flag，选项全量渲染，不按 chip 状态过滤。
+    chrome.contextMenus.create({
+      id: 'bmc-flag',
+      parentId: 'bmc-root',
+      title: 'Flag',
+      contexts: ['selection']
+    });
   });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
-  const type = { 'bmc-prpm': 'context-prpm', 'bmc-check': 'context-check' }[info.menuItemId];
+  const type = { 'bmc-prpm': 'context-prpm', 'bmc-check': 'context-check', 'bmc-flag': 'context-flag' }[info.menuItemId];
   if (!type) return;
   try {
     await chrome.tabs.sendMessage(tab.id, { type, text: info.selectionText || '' });

@@ -1932,7 +1932,9 @@ class Handler(BaseHTTPRequestHandler):
             # 词级 flag（用户裁决 2026-10-08）：免 token 反馈通道。
             # scope 区分 prpm（PRPM 面板）/ grammar（规则命中）/ general
             # （popup ⚑ 页面级主观问题）；kind 由用户在小弹窗选。
-            word = str(req.get("word") or "").strip().lower()[:80]
+            # 右键 flag（2026-10-09 用户裁决）：选中内容不限字数——多词短语
+            # 也可 flag，长度上限放宽到 300（title 上限 120 截断保护）。
+            word = str(req.get("word") or "").strip().lower()[:300]
             kind = str(req.get("kind") or "").strip()
             scope = str(req.get("scope") or "prpm").strip()
             rule_id = str(req.get("rule") or "").strip()[:40]
@@ -1967,11 +1969,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "kind must be underflag/mismeaning/overflag"})
                 return
             note = str(req.get("note") or "").strip()[:500]
-            # 状态/定义以 server 自己的查询结果为准（不信任前端传值）
-            result = prpm_lookup(word)
-            status = result.get("status", "unknown")
-            definition = result.get("definition", "")
-            root = result.get("root", "")
+            # 状态/定义以 server 自己的查询结果为准（不信任前端传值）。
+            # 多词短语（右键 flag 任意长度选中）不是单个词——不查 PRPM，
+            # status 记 "phrase"。
+            if re.search(r"\s", word):
+                status, definition, root = "phrase", "", ""
+            else:
+                result = prpm_lookup(word)
+                status = result.get("status", "unknown")
+                definition = result.get("definition", "")
+                root = result.get("root", "")
             try:
                 gh_url = _gh_open_word_flag(word, scope, kind, status, definition,
                                             (f"{note} | root: {root}" if root else note),

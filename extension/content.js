@@ -1147,6 +1147,67 @@ const safeStorageSet = (obj) => new Promise((res) => {
     anchor.after(dlg);
   }
 
+  // 右键 flag 弹窗（用户裁决 2026-10-09）：面板外的独立入口，选中任意内容
+  // （不限字数）都能 flag。不同于面板里的 word flag——这里不按 chip 当前
+  // 状态筛选项，直接渲染全部 word-flag 条件让用户选。单词走 prpm scope
+  // （照查 PRPM 状态），多词走 grammar scope（短语级问题）。
+  function openSelectionFlagDialog(text) {
+    document.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
+    const clean = sanitizeText(text || '').trim();
+    if (!clean) return;
+    const isSingle = !/\s/.test(clean);
+    const scope = isSingle ? 'prpm' : 'grammar';
+    const dlg = document.createElement('div');
+    dlg.className = 'bmc-flag-dialog';
+    const shown = clean.length > 60 ? clean.slice(0, 60) + '…' : clean;
+    dlg.innerHTML = `
+      <div class="bmc-flag-title">⚑ Flag "${esc(shown)}"</div>
+      <div class="bmc-flag-sub">${isSingle ? 'word flag' : 'phrase flag (no length limit)'}</div>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="underflag"> Under-flagged — should have been flagged but wasn't</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="mismeaning"> Wrong meaning — the shown suggestion/meaning is wrong</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="overflag"> Over-flagged — this text is fine (false alarm)</label>
+      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="other"> Other problem</label>
+      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="Explanation (optional)"></textarea>
+      <div class="bmc-flag-row">
+        <button class="bmc-flag-go" disabled>Submit</button>
+        <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
+      </div>`;
+    // 独立浮层（不依赖面板）：固定在视口中间偏上，可拖不需要
+    dlg.style.position = 'fixed';
+    dlg.style.left = '50%';
+    dlg.style.top = '18%';
+    dlg.style.transform = 'translateX(-50%)';
+    dlg.style.zIndex = '2147483647';
+    dlg.style.width = 'min(400px, calc(100vw - 32px))';
+    document.documentElement.appendChild(dlg);
+    const go = dlg.querySelector('.bmc-flag-go');
+    dlg.querySelectorAll('input[name="bmc-selfk"]').forEach(r =>
+      r.addEventListener('change', () => go.disabled = false));
+    dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+    go.onclick = async () => {
+      const kind = dlg.querySelector('input[name="bmc-selfk"]:checked')?.value;
+      const note = dlg.querySelector('.bmc-flag-note').value.trim();
+      if (!kind) return;
+      go.disabled = true; go.textContent = 'Submitting…';
+      try {
+        const r = await fetch(`${API}/api/flag`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word: clean, kind, note, scope })
+        }).then(x => x.json());
+        if (!r.ok) throw new Error(r.error || 'flag failed');
+        dlg.remove();
+        showToast(`✓ Flagged — issue opened`, 4000);
+      } catch (err) {
+        go.disabled = false; go.textContent = `✗ ${err.message}`;
+      }
+    };
+    // Esc 关闭
+    const onKey = e => { if (e.key === 'Escape') { dlg.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+    dlg.querySelector('input[name="bmc-selfk"]')?.focus();
+  }
+
   // ── 消息监听与快捷键 ──
   chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
     if (m.type === 'context-prpm') {
@@ -1154,6 +1215,9 @@ const safeStorageSet = (obj) => new Promise((res) => {
       sendResponse({ ok: true });
     } else if (m.type === 'context-check') {
       runCheck(m.text || '');
+      sendResponse({ ok: true });
+    } else if (m.type === 'context-flag') {
+      openSelectionFlagDialog(m.text || '');
       sendResponse({ ok: true });
     } else if (m.type === 'check-selection') {
       const text = getPageSelection();
