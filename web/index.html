@@ -127,13 +127,11 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-rulebook">
  <h2>Rule Book</h2>
- <p class="sub">The rule playground: give example sentences and the LLM translates them into a rule — no regex needed. You provide the knowledge (what's wrong, what's right); the machine only does the typing. Everything lands as a <b>trial</b> rule (half level) on the Server Rules tab, where you accept, enhance or reject it.</p>
+ <p class="sub">The rule playground: write example sentences, the LLM turns them into a rule — no regex needed. You provide the knowledge; the machine only does the typing. Everything lands as a <b>trial</b> rule (half level) on the Server Rules tab, where you accept, enhance or reject it.</p>
  <div class="card">
   <h3 style="margin:0 0 4px;font-size:16px">New rule from examples</h3>
-  <p class="sub" style="margin:0 0 10px">Sentences that <b>should be flagged</b> (wrong) and sentences that <b>must not be flagged</b> (right) — one per line. Key words are looked up in PRPM automatically before translation.</p>
-  <textarea id="prop-triggers" placeholder="Should be flagged — one sentence per line, e.g.&#10;Harga buku itu lebih murah dari harga asal.&#10;Beliau berasal dari Kedah." style="min-height:84px;margin-top:8px"></textarea>
-  <textarea id="prop-clears" placeholder="Must NOT be flagged — one sentence per line, e.g.&#10;Harga buku itu lebih murah daripada harga asal.&#10;Air sungai itu berasal dari gunung." style="min-height:84px;margin-top:8px"></textarea>
-  <textarea id="prop-note" placeholder="Note for the translator (optional) — what's wrong and why, e.g. 'lebih' marks comparison, which takes daripada" style="min-height:54px;margin-top:8px"></textarea>
+  <p class="sub" style="margin:0 0 10px">One sentence per line. <code>✗</code> = wrong, should be flagged; <code>✓</code> = right, must not be flagged (no prefix counts as ✗). Key words are looked up in PRPM automatically before translation.</p>
+  <textarea id="prop-input" placeholder="✗ Harga buku itu lebih murah dari harga asal.&#10;✓ Harga buku itu lebih murah daripada harga asal.&#10;✓ Air sungai itu berasal dari gunung.&#10;Beliau berasal dari Kedah." style="min-height:140px;margin-top:8px"></textarea>
   <div class="controls"><button class="act primary" id="btn-prop-submit">✦ Translate into a rule</button><span id="prop-msg" class="msg"></span></div>
   <div id="prop-result" style="display:none;margin-top:12px;border-top:1px solid #e3e9ee;padding-top:12px"></div>
  </div>
@@ -552,15 +550,19 @@ loadWordLists();
 
 // ── Rule Book playground：例句 → LLM 转译 → trial 规则 ──
 // 人类提供知识（例句），机器只做转译；产物进 Server Rules 的 trial 队列。
+// 单 textarea：✗ 前缀 = trigger（默认），✓ 前缀 = clear。
 $('#btn-prop-submit').onclick=async()=>{
- const lines=v=>v.split('\n').map(s=>s.trim()).filter(Boolean);
- const triggers=lines($('#prop-triggers').value), clears=lines($('#prop-clears').value);
- const note=$('#prop-note').value.trim();
- if(!triggers.length){$('#prop-msg').innerHTML='<span class="bad">✗ at least one "should be flagged" sentence is required</span>';return;}
+ const triggers=[],clears=[];
+ for(let line of $('#prop-input').value.split('\n')){
+  line=line.trim();if(!line)continue;
+  if(line.startsWith('✓')){const s=line.slice(1).trim();if(s)clears.push(s);}
+  else{const s=line.replace(/^✗/,'').trim();if(s)triggers.push(s);}
+ }
+ if(!triggers.length){$('#prop-msg').innerHTML='<span class="bad">✗ at least one ✗ sentence is required</span>';return;}
  const btn=$('#btn-prop-submit');btn.disabled=true;btn.textContent='Translating… (PRPM + LLM)';
  $('#prop-msg').textContent='';$('#prop-result').style.display='none';
  try{
-  const r=await request('/api/rules/translate',{triggers,clears,note});
+  const r=await request('/api/rules/translate',{triggers,clears});
   if(r.needs_plugin){
    $('#prop-msg').innerHTML='<span class="bad">✗ The LLM could not express this as a regex:</span>';
    $('#prop-result').style.display='';
@@ -575,9 +577,9 @@ $('#btn-prop-submit').onclick=async()=>{
    <div style="margin-bottom:6px;font-size:13px"><b>What it flags:</b> ${esc(e.desc||'')}</div>
    <div style="margin-bottom:6px;font-size:13px"><b>Shown to users:</b> ${esc(e.note||'')}</div>
    <div style="margin-bottom:6px"><span class="lvl ${st?'lvl-warn':'lvl-note'}">${st?'self-test ✗':'self-test ✓'}</span>
-    ${st?`<span class="bad" style="font-size:12px"> ${esc(String(st).join('; ').slice(0,160))}</span>`:'<span class="sub" style="font-size:12px"> every trigger matched, no clear sentence flagged</span>'}</div>
+    ${st?`<span class="bad" style="font-size:12px"> ${esc((Array.isArray(st)?st.join('; '):String(st)).slice(0,160))}</span>`:'<span class="sub" style="font-size:12px"> every trigger matched, no clear sentence flagged</span>'}</div>
    <p class="sub" style="margin:0">Trial rules flag at half level. Review it on the <a href="#" onclick="showTab('serverrules');return false" style="color:#256b58">Server Rules</a> tab — accept, enhance with more examples, or reject.</p>`;
-  $('#prop-triggers').value='';$('#prop-clears').value='';$('#prop-note').value='';
+  $('#prop-input').value='';
   if(typeof loadConfig==='function')loadConfig();  // Server Rules 表即时带上新 trial
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  finally{btn.disabled=false;btn.textContent='✦ Translate into a rule';}
