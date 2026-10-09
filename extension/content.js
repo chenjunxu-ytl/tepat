@@ -1106,21 +1106,18 @@ const safeStorageSet = (obj) => new Promise((res) => {
   }
 
   // ── Flag 窗口（用户裁决 2026-10-09）：三种形态统一面板 ──
-  //   word    右键选中单词：查 PRPM 状态（scope=prpm，审核台 Word flags tab）
-  //   grammar 右键选中短语：不限字数（scope=grammar，Grammar flags tab）
-  //   general 右上角 ⚑：页面级主观问题，可不选字（scope=general，General
-  //           flags tab）；有选中内容时预填到 target 一并提交
-  // 面板复用 checker 的 bmc-panel 体系：头部可拖、点外关闭（pin 保持）、
+  //   word    右键选中单词（默认）：查 PRPM 状态（scope=prpm，审核台 Word flags tab）
+  //   grammar 右键选中短语（默认）：不限字数（scope=grammar，Grammar flags tab）
+  //   general 右上角 ⚑（默认）：页面级主观问题，可不选字（General flags tab）
+  // 三形态只是默认值——面板顶部 toggle 让用户随时改报 word / grammar /
+  // general（比如右键了一个词但想报 general）。有选中内容时 target 一并
+  // 提交。面板复用 checker 的 bmc-panel 体系：头部可拖、点外关闭（pin 保持）、
   // Esc 关闭、z-index 最高。提交开 GitHub Issue，title [flag:scope:kind]
   // 与审核台 /api/flags/list 的解析正则严格对齐。
-  function openFlagPanel(scope, selection = '') {
+  function openFlagPanel(initialScope, selection = '') {
     const clean = sanitizeText(selection || '').trim();
-    const meta = {
-      word:    { title: 'Flag a word', sub: 'Word-level report — PRPM status is attached automatically' },
-      grammar: { title: 'Flag a phrase', sub: 'Phrase-level report — any length' },
-      general: { title: 'Report an issue', sub: 'Page-level problem, not tied to a word or rule' },
-    }[scope];
-    if (!meta) return;
+    // 默认 scope 按入口形态推导；用户可在面板里改
+    let scope = initialScope;
 
     removeUI();
     panel = document.createElement('div');
@@ -1130,7 +1127,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       <div class="bmc-head">
         <div class="bmc-head-title">
           <span class="bmc-brand-dot"></span>
-          <span class="bmc-title-text">⚑ ${esc(meta.title)}</span>
+          <span class="bmc-title-text">⚑ Flag</span>
         </div>
         <div class="bmc-head-controls">
           <button class="bmc-head-btn bmc-pin-btn" title="Pin this window (won't close on outside click)"></button>
@@ -1168,18 +1165,32 @@ const safeStorageSet = (obj) => new Promise((res) => {
       ['other',      'Other problem'],
     ];
     body.innerHTML = `
-      <div class="bmc-flag-sub" style="margin:2px 0 8px">${esc(meta.sub)}</div>
+      <div class="bmc-flag-scopes">
+        <button class="bmc-pill-btn bmc-flag-scope-btn" data-scope="word">Word</button>
+        <button class="bmc-pill-btn bmc-flag-scope-btn" data-scope="grammar">Grammar</button>
+        <button class="bmc-pill-btn bmc-flag-scope-btn" data-scope="general">General</button>
+      </div>
       ${clean ? `
         <div class="bmc-flag-target">${esc(shown)}</div>` : ''}
       ${kinds.map(([v, label]) => `
         <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="${v}"> ${esc(label)}</label>`).join('')}
-      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="${scope === 'general' ? 'What happened? (required for general reports)' : 'Explanation (optional)'}"></textarea>
+      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="Explanation (optional)"></textarea>
       <div class="bmc-flag-row">
         <button class="bmc-flag-go" disabled>Submit</button>
         <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
       </div>`;
-    const go = body.querySelector('.bmc-flag-go');
+    const scopeBtns = [...body.querySelectorAll('.bmc-flag-scope-btn')];
     const noteEl = body.querySelector('.bmc-flag-note');
+    const setScope = s => {
+      scope = s;
+      scopeBtns.forEach(b => b.classList.toggle('bmc-pill-on', b.dataset.scope === s));
+      noteEl.placeholder = s === 'general'
+        ? 'What happened? (required for general reports)'
+        : 'Explanation (optional)';
+    };
+    scopeBtns.forEach(b => b.onclick = () => setScope(b.dataset.scope));
+    setScope(initialScope);
+    const go = body.querySelector('.bmc-flag-go');
     body.querySelectorAll('input[name="bmc-fk"]').forEach(r =>
       r.addEventListener('change', () => go.disabled = false));
     body.querySelector('[data-act="cancel"]').onclick = removeUI;

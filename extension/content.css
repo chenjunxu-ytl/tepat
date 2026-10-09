@@ -813,6 +813,10 @@
    body 内边距收紧、宽度略窄于 checker 面板 */
 .bmc-flag-panel{ width: 360px; }
 .bmc-flag-body{ padding: 14px 16px 16px; }
+.bmc-flag-scopes{ display: flex; gap: 6px; margin: 0 0 10px; }
+.bmc-flag-scope-btn{ background: #f1f5f9; color: #475569; }
+.bmc-flag-scope-btn.bmc-pill-on{ background: #2563eb; color: #fff; }
+.bmc-flag-scope-btn{ flex: 1; padding: 5px 0; font: 600 12px system-ui; }
 .bmc-flag-target{
   font-size: 12.5px; color: #0f172a; background: #f1f5f9;
   border: 1px solid #e2e8f0; border-radius: 7px; padding: 7px 9px;
