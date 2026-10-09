@@ -15,32 +15,37 @@
    "id": "RB-001",
    "entry_id": "RB-001",
    "plugin": "regex_match",
-   "conf": "medium",
-   "conf_trial": "high",
+   "conf": "low",
+   "conf_trial": "medium",
    "status": "trial",
-   "desc": "Flags Malay degree-word order: an adjective followed by 'sangat' (e.g. 'murah sangat') instead of the standard 'sangat' before the adjective (e.g. 'sangat murah').",
-   "note": "Dalam bahasa Melayu standard, 'sangat' diletakkan sebelum kata sifat: 'sangat murah', bukan 'murah sangat'.",
+   "desc": "Flags the informal pattern 'adjective + sangat' (e.g., 'murah sangat') which should be 'sangat + adjective' in formal Malay.",
+   "note": "Dalam bahasa formal, 'sangat' patut diletakkan sebelum kata sifat, cth: 'sangat murah', bukan 'murah sangat'.",
    "source": "LLM-translated from human description (2026-10-09)",
    "examples": {
     "trigger": [
-     "Barang ini murah sangat.",
-     "Harga dia mahal sangat.",
-     "Filem itu menarik sangat."
+     "Harga ini murah sangat.",
+     "Makanan di situ sedap sangat.",
+     "Baju itu murah sangat."
     ],
     "clear": [
-     "Barang ini sangat murah.",
-     "Harga dia sangat mahal.",
-     "Dia sangat-sangat ingin pergi."
+     "Harga ini sangat murah.",
+     "Makanan di situ sangat sedap.",
+     "Baju itu sangat murah."
     ]
    },
    "params": {
-    "pattern": "\\b(\\w+)\\s+sangat\\b(?!\\s+\\w)",
+    "pattern": "\\b(\\w+)\\s+sangat\\b",
     "exceptions": [
-     "\\bsangat[\\s-]+sangat\\b",
-     "\\bpaling\\s+\\w+\\s+sangat\\b"
+     "\\b(sangat|amat|terlalu|paling|agak|kurang|lebih|paling)\\s+sangat\\b",
+     "\\bsangat\\s+sangat\\b"
     ],
-    "suggestion": "sangat \\1"
-   }
+    "suggestion": ""
+   },
+   "self_test_failures": [
+    "flags clear sentence: Harga ini sangat murah.",
+    "flags clear sentence: Makanan di situ sangat sedap.",
+    "flags clear sentence: Baju itu sangat murah."
+   ]
   }
  ],
  "ms_id_suffix_map": [
