@@ -6,5 +6,13 @@
   "source_issue": 22,
   "decided_at": 1791427626,
   "decided_by": "admin"
+ },
+ "air": {
+  "status": "hit",
+  "definition": "water",
+  "flag_kind": "underflag",
+  "source_issue": 31,
+  "decided_at": 1791536584,
+  "decided_by": "admin"
  }
 }
