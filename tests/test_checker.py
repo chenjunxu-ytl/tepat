@@ -27,7 +27,18 @@ class CheckerTests(unittest.TestCase):
         cls.temp=tempfile.TemporaryDirectory();cls.root=Path(cls.temp.name)
         fixture(cls.root);build(cls.root,cls.root/'evidence.sqlite',verify=False)
         cls.store=EvidenceStore(cls.root/'evidence.sqlite')
-        cls.checker=Checker(cls.store,BASE/'rules.json',BASE/'indo_words.json')
+        # repo 根目录不再有 rules.json/indo_words.json（单份原则：APPDATA +
+        # GitHub）。词表类测试需要真实词表 → 从 GitHub 拉到 fixture root；
+        # 规则类用例在各自测试里注入临时规则。拉不到（离线）则用空表降级。
+        import urllib.request
+        root_url='https://raw.githubusercontent.com/chenjunxu-ytl/tepat/main/'
+        for name in ('indo_words.json','rules.json','blacklist.json'):
+            dst=cls.root/name
+            try:
+                dst.write_bytes(urllib.request.urlopen(root_url+name,timeout=15).read())
+            except OSError:
+                dst.write_text(json.dumps({'rules':[],'indo_only':{},'casual':{}}),encoding='utf-8')
+        cls.checker=Checker(cls.store,cls.root/'rules.json',cls.root/'indo_words.json')
 
     @classmethod
     def tearDownClass(cls):
@@ -62,7 +73,7 @@ class CheckerTests(unittest.TestCase):
         config.write_text(json.dumps({'rules':[
             {'id':'KL-TEST','plugin':'regex_match','conf':'high','note':'pemeri kembar',
              'params':{'pattern':r'\b(ialah\s+ialah|adalah\s+adalah|ialah\s+adalah|adalah\s+ialah)\b'}}]}),encoding='utf-8')
-        c=Checker(self.store,config,BASE/'indo_words.json')
+        c=Checker(self.store,config,self.root/'indo_words.json')
         r=c.scan('Ali ialah adalah doktor.')
         self.assertTrue(any(h['conf']=='high' for h in r['rule_hits']))
         r=c.scan('Ali ialah doktor dan Abu adalah ketua.')
@@ -88,7 +99,7 @@ class CheckerTests(unittest.TestCase):
         config.write_text(json.dumps({'rules':[
             {'id':'RB-REMIND','plugin':'regex_match','conf':'low','note':'pemeri reminder',
              'params':{'pattern':r'\bialah\b'}}]}),encoding='utf-8')
-        c=Checker(self.store,config,BASE/'indo_words.json')
+        c=Checker(self.store,config,self.root/'indo_words.json')
         r=c.scan('Ali ialah doktor.')
         reminders=[i for i in r['rule_hits'] if i['conf']=='low']
         self.assertTrue(reminders)
@@ -103,7 +114,7 @@ class CheckerTests(unittest.TestCase):
         config.write_text(json.dumps({'rules':[
             {'id':'RB-BOUND','plugin':'regex_match','conf':'high','note':'boundary',
              'params':{'pattern':r'\b(ialah\s+ialah|adalah\s+adalah)\b'}}]}),encoding='utf-8')
-        c=Checker(self.store,config,BASE/'indo_words.json')
+        c=Checker(self.store,config,self.root/'indo_words.json')
         r=c.scan('Ali ialah doktor. Abu adalah ketua.')
         self.assertFalse(any(h['conf']=='high' for h in r['rule_hits']))
 
@@ -140,7 +151,7 @@ class CheckerTests(unittest.TestCase):
             {'id':'bad','plugin':'regex_match','note':'bad','params':{'pattern':'['}},
             {'id':'custom','plugin':'regex_match','conf':'high','note':'test',
              'params':{'pattern':'buku','exceptions':['buku itu']}}]}),encoding='utf-8')
-        c=Checker(self.store,config,BASE/'indo_words.json')
+        c=Checker(self.store,config,self.root/'indo_words.json')
         r=c.scan('buku itu. buku ini.')
         self.assertTrue(r['config_warnings'])
         self.assertEqual(len(r['rule_hits']),1)

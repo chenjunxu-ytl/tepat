@@ -12,9 +12,10 @@ factuality has no automated check.
 4. Enter Malay text, choose formal or informal register, and select **Semak**.
 
 The extracted app needs well under 100 MB. Checks read the rule files in
-`%APPDATA%\tepat` (seeded from the bundled copies on first start) and the local
-PRPM cache; word existence is verified against DBP's PRPM service on demand.
-The Windows executable is unsigned. Close an older Tepat service using port
+`%APPDATA%\tepat` — the single live copy, fetched from the GitHub repo on
+first launch (and every 5 minutes after) — plus the local PRPM cache; word
+existence is verified against DBP's PRPM service on demand. The Windows
+executable is unsigned. Close an older Tepat service using port
 8377 before starting this one. The app remains available in the system tray;
 use **Keluar** to exit.
 
@@ -51,8 +52,9 @@ words, the built-in LLM translation produces a trial rule, and you accept,
 enhance or reject it on the Server Rules tab. Rules sync through the GitHub
 repo, so every machine running Tepat stays current.
 
-`rules.json` and `indo_words.json` in `%APPDATA%\tepat` are the live copies;
-the files beside the executable only seed the first start. `SHA256SUMS` records
+`rules.json` and `indo_words.json` in `%APPDATA%\tepat` are the single live
+copy — fetched from GitHub on first launch, written by admin decisions, never
+duplicated beside the executable. `SHA256SUMS` records
 the release asset hashes. The corpus-tools archive contains the cleaning code
 and maintained Indonesian policy sources; raw corpora and private evaluation
 reports are excluded from that archive.

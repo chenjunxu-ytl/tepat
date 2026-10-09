@@ -672,7 +672,10 @@ _checker: Checker | None = None
 
 
 def _seed_to_appdata(name: str, src: str) -> None:
-    """源码/exe 目录的配置文件复制到 APPDATA 作初始值（只补缺，不覆盖）。"""
+    """源码/exe 目录的配置文件复制到 APPDATA 作初始值（只补缺，不覆盖）。
+    2026-10-09 起 repo 根目录不再放 rules.json/indo_words.json（与 APPDATA
+    双份是冗余）——GitHub 是初始分发渠道，首次启动的 sync 立即拉取。此
+    函数只剩 exe 附带文件（若有）和 word-overrides 的兼容 seed 作用。"""
     import shutil
     dst = os.path.join(_appdata_dir(), name)
     if not os.path.isfile(dst) and os.path.isfile(src):
@@ -681,8 +684,9 @@ def _seed_to_appdata(name: str, src: str) -> None:
 
 def _config_path(name: str) -> str:
     """运行时配置位置（用户裁决 2026-10-08）：全部规则文件统一
-    %APPDATA%\\tepat\\（与 prpm_cache.sqlite 同位）。源码/exe 目录的同名
-    文件只作首次 seed；repo 同步、admin 决议、hot-reload 都读写 APPDATA。"""
+    %APPDATA%\\tepat\\（与 prpm_cache.sqlite 同位）。repo 同步、admin 决议、
+    hot-reload 都读写 APPDATA；GitHub 是唯一的初始分发渠道（首次启动的
+    sync 立即执行一次，不等 5 分钟周期）。"""
     _seed_to_appdata(name, os.path.join(_ROOT, name))
     return os.path.join(_appdata_dir(), name)
 
@@ -692,7 +696,7 @@ def load_words() -> int:
     store = EvidenceStore(EVIDENCE_PATH)
     _checker = Checker(store, _config_path("rules.json"), _config_path("indo_words.json"))
     _words = store.lexicon  # compatibility: health word count now counts DBP attestation
-    # 同步基线初始化：启动时刻的文件 mtime 视为"与 GitHub 一致"。启动后本地
+    # 同步基线初始化：启动时刻的文件内容视为"与 GitHub 一致"。启动后本地
     # 写盘（translate/enhance/accept）会领先基线；push 成功刷新基线；push
     # 失败则 auto-sync 跳过该文件（本地领先保护，2026-10-09 Step2 根因）。
     for name in GH_SYNC_FILES:
@@ -2209,6 +2213,15 @@ def main() -> int:
     auto_sync = os.environ.get("TEPAT_AUTO_SYNC", "1") != "0"
 
     def _rules_sync_thread():
+        # 首次启动立即 fetch 一次：GitHub 是规则文件的唯一初始分发渠道
+        # （repo/exe 不再 seed，用户裁决 2026-10-09），新机器/空 APPDATA 场景
+        # 不该等满 5 分钟才拿到规则。之后按周期轮询。
+        try:
+            results = _gh_sync_rules()
+            ok = sum(1 for v in results.values() if v.get("ok"))
+            _log(f"[auto-sync] initial fetch {ok}/{len(results)} files from GitHub")
+        except Exception as e:  # noqa: BLE001
+            _log(f"[auto-sync] initial fetch failed: {e!r}")
         while not stop_event.is_set():
             for _ in range(20):  # 20 × 15s = 5min，可被退出打断
                 if stop_event.is_set():

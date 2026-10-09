@@ -1,9 +1,9 @@
 """Prepare checked Zip64 release assets from the existing portable runtime.
 
-Single mode (2026-10-09): rules + word lists + PRPM. The legacy 2.3GB
-evidence corpus is not shipped — word/grammar checks run from APPDATA rule
-files plus PRPM lookups, and rules.json / indo_words.json ride along as
-first-start seeds. Expected zip size tens of MB.
+Single mode (2026-10-09): runtime + web + extension assets. Rule and word-list
+data live only in %APPDATA%\\tepat; the first launch fetches rules.json /
+indo_words.json / word-overrides.json from the GitHub repo immediately, so no
+policy data ships in the zip and there is no duplicate copy beside the exe.
 """
 from __future__ import annotations
 
@@ -17,8 +17,6 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent  # 项目根（本文件在 tools/）
 TAG = 'v0.2.0-preview'
 CHUNK = 4 * 1024 * 1024
-
-SEED_FILES = ('rules.json', 'indo_words.json')
 
 
 def git(root, *args):
@@ -64,16 +62,16 @@ def prepare(app_dir, output):
     exe = app_dir / 'tepat-v2.exe'
     if not exe.is_file() or not (app_dir / '_internal/python313.dll').is_file():
         raise ValueError('Windows portable runtime is missing')
-    # 语法数据（rules/indo_words）必须随运行时打包——它们现在是检查的本体。
-    for name in SEED_FILES:
-        if not (app_dir / '_internal' / name).is_file():
-            raise ValueError(f'{name} missing from the portable runtime — rebuild with build.bat')
-    for relative in ('web/index.html', 'extension/results.js', *SEED_FILES):
+    for relative in ('web/index.html', 'extension/results.js'):
         source = BASE / relative
         packaged = app_dir / '_internal' / relative
         if source.is_file() and packaged.is_file() and digest(packaged) != digest(source):
             raise ValueError(f'Portable resource differs from source: {relative}')
-    # 遗留证据库不允许混进发布（600MB 事故防线）。
+    # 政策数据不允许混进发布（单份原则：APPDATA + GitHub），旧构建残留也拒绝。
+    for name in ('rules.json', 'indo_words.json'):
+        if (app_dir / name).is_file() or (app_dir / '_internal' / name).is_file():
+            raise ValueError(f'{name} beside/below the runtime is redundant '
+                             f'(APPDATA + GitHub are the single source) — rebuild with build.bat')
     if (app_dir / '_internal/data').is_dir():
         raise ValueError('app_dir contains _internal/data (legacy evidence) — rebuild with build.bat')
 
@@ -87,7 +85,7 @@ def prepare(app_dir, output):
         'extension_version': extension['version'],
         'executable_sha256': digest(exe),
         'scope': 'Rule-based word/grammar checks + PRPM lookups; factuality not checked',
-        'evidence_corpus': 'retired — not shipped (rules + PRPM only)',
+        'policy_data': 'not bundled — fetched from the GitHub repo on first launch',
     }
     (output / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     documents = [(output / name, name) for name in ('INSTALL.md', 'RELEASE_NOTES.md', 'release.json')]
@@ -99,7 +97,6 @@ def prepare(app_dir, output):
             continue
         runtime.append((source, 'tepat-v2/' + relative))
     runtime.append((exe, 'tepat-v2/tepat-v2.exe'))
-    runtime += [(BASE / name, 'tepat-v2/' + name) for name in SEED_FILES]
     runtime += [(source, 'tepat-v2/' + name) for source, name in documents]
     archive(output / f'tepat-{TAG}-win64.zip', runtime)
 
