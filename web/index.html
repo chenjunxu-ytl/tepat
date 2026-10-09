@@ -127,16 +127,15 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-rulebook">
  <h2>Rule Book</h2>
- <p class="sub">Community rules, checked by the server on every scan (single rule source together with Server Rules). Anyone can submit a proposal for review; accepting happens on the admin machine. Rule IDs are assigned automatically (RB-001, RB-002, …).</p>
+ <p class="sub">The rule playground: give example sentences and the LLM translates them into a rule — no regex needed. You provide the knowledge (what's wrong, what's right); the machine only does the typing. Everything lands as a <b>trial</b> rule (half level) on the Server Rules tab, where you accept, enhance or reject it.</p>
  <div class="card">
-  <h3 style="margin:0 0 4px;font-size:16px">Propose a new rule</h3>
-  <p class="sub" style="margin:0 0 10px">Give examples, the way the Rule Book does: phrases that <b>should be flagged</b> (Salah) and phrases that <b>must not be flagged</b> (Betul). The pattern is derived from your examples — no regex knowledge needed. The rule number is assigned for you.</p>
-  <div class="controls" style="margin:0">
-   <select id="prop-conf"><option value="warn">warn (needs context)</option><option value="error">error</option><option value="note">note</option><option value="exception">exception</option></select></div>
-  <textarea id="prop-triggers" placeholder="Should be flagged — one phrase per line, e.g.&#10;lebih murah dari harga asal&#10;berasal dari Malaysia" style="min-height:84px;margin-top:8px"></textarea>
-  <textarea id="prop-clears" placeholder="Must NOT be flagged — one phrase per line, e.g.&#10;lebih murah daripada harga asal&#10;dari segi ekonomi" style="min-height:84px;margin-top:8px"></textarea>
-  <textarea id="prop-note" placeholder="Why — what's wrong and what to use instead, e.g. 'lebih' marks comparison, which takes daripada (KS-01)'" style="min-height:54px;margin-top:8px"></textarea>
-  <div class="controls"><button class="act primary" id="btn-prop-submit">Submit proposal</button><span id="prop-msg" class="msg"></span></div>
+  <h3 style="margin:0 0 4px;font-size:16px">New rule from examples</h3>
+  <p class="sub" style="margin:0 0 10px">Sentences that <b>should be flagged</b> (wrong) and sentences that <b>must not be flagged</b> (right) — one per line. Key words are looked up in PRPM automatically before translation.</p>
+  <textarea id="prop-triggers" placeholder="Should be flagged — one sentence per line, e.g.&#10;Harga buku itu lebih murah dari harga asal.&#10;Beliau berasal dari Kedah." style="min-height:84px;margin-top:8px"></textarea>
+  <textarea id="prop-clears" placeholder="Must NOT be flagged — one sentence per line, e.g.&#10;Harga buku itu lebih murah daripada harga asal.&#10;Air sungai itu berasal dari gunung." style="min-height:84px;margin-top:8px"></textarea>
+  <textarea id="prop-note" placeholder="Note for the translator (optional) — what's wrong and why, e.g. 'lebih' marks comparison, which takes daripada" style="min-height:54px;margin-top:8px"></textarea>
+  <div class="controls"><button class="act primary" id="btn-prop-submit">✦ Translate into a rule</button><span id="prop-msg" class="msg"></span></div>
+  <div id="prop-result" style="display:none;margin-top:12px;border-top:1px solid #e3e9ee;padding-top:12px"></div>
  </div>
 </section>
 
@@ -237,7 +236,6 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    </div>
    <span style="flex:1"></span>
    <span id="cfg-badge" class="sub" style="margin:0"></span>
-   <button class="act primary" id="btn-translate">✦ New rule from examples</button>
    <button class="act primary" id="btn-sync">↻ Fetch from GitHub</button>
    <span id="cfg-msg" class="msg"></span>
   </div>
@@ -457,26 +455,6 @@ document.querySelectorAll('#cfg-pills .wf-pill').forEach(pill=>pill.onclick=()=>
  cfgConfFilter=pill.dataset.conf;
  loadConfig();
 });
-// New rule from examples：人类例句 → LMM 转译 → trial
-$('#btn-translate').onclick=()=>{
- if(!cfgAdmin){$('#cfg-msg').innerHTML='<span class="bad">✗ admin machine required</span>';return;}
- const t=prompt('TRIGGER sentences — must be flagged (comma-separated):');
- if(t===null)return;
- const triggers=t.split(',').map(s=>s.trim()).filter(Boolean);
- if(!triggers.length){$('#cfg-msg').innerHTML='<span class="bad">✗ at least one trigger sentence required</span>';return;}
- const c=prompt('CLEAR sentences — must NOT be flagged (comma-separated, optional):','');
- const clears=c.split(',').map(s=>s.trim()).filter(Boolean);
- const note=prompt('Note for the translator (optional):','')||'';
- $('#cfg-msg').textContent='Translating examples (PRPM + LLM)…';
- request('/api/rules/translate',{triggers,clears,note})
-  .then(async res=>{
-   if(res.needs_plugin){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(res.desc)+' — parked for human decision</span>';return;}
-   const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
-   $('#cfg-msg').innerHTML=`<span class="ok">✓ trial rule ${esc(res.id)} created${res.pushed?' · pushed':''}${st}</span>`;
-   await loadConfig();
-  })
-  .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
-};
 $('#btn-sync').onclick=async()=>{
  $('#cfg-msg').textContent='Fetching from GitHub…';
  try{const r=await fetch(API+'/api/sync',{method:'POST'}).then(async x=>{const j=await x.json();if(!x.ok&&!j.files)throw new Error(j.error);return j;});
@@ -572,20 +550,37 @@ $('#wl-add-word').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wl-add-g
 $('#wl-add-ms').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wl-add-go').click();});
 loadWordLists();
 
-// ── proposals（普通用户提交申请；admin 查看 + 批准）──
+// ── Rule Book playground：例句 → LLM 转译 → trial 规则 ──
+// 人类提供知识（例句），机器只做转译；产物进 Server Rules 的 trial 队列。
 $('#btn-prop-submit').onclick=async()=>{
- $('#prop-msg').textContent='Submitting…';
  const lines=v=>v.split('\n').map(s=>s.trim()).filter(Boolean);
+ const triggers=lines($('#prop-triggers').value), clears=lines($('#prop-clears').value);
+ const note=$('#prop-note').value.trim();
+ if(!triggers.length){$('#prop-msg').innerHTML='<span class="bad">✗ at least one "should be flagged" sentence is required</span>';return;}
+ const btn=$('#btn-prop-submit');btn.disabled=true;btn.textContent='Translating… (PRPM + LLM)';
+ $('#prop-msg').textContent='';$('#prop-result').style.display='none';
  try{
-  const r=await request('/api/proposals',{rule:{conf:$('#prop-conf').value,triggers:lines($('#prop-triggers').value),clears:lines($('#prop-clears').value),note:$('#prop-note').value}});
-  let msg=`✓ Submitted as <b>${esc(r.id)}</b>.`;
-  if(r.self_test&&r.self_test!=='pass')msg+=` <span class="bad">Check: ${esc(r.self_test.join('; '))}</span>`;
-  if(!r.regex_valid)msg+=` <span class="bad">(${esc(r.regex_error)})</span>`;
-  if(r.github_issue)msg+=` <a href="${esc(r.github_issue)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>`;
-  else if(r.github_error)msg+=` <span class="sub">(local only — GitHub sync failed)</span>`;
-  $('#prop-msg').innerHTML=`<span class="ok">${msg}</span>`;
+  const r=await request('/api/rules/translate',{triggers,clears,note});
+  if(r.needs_plugin){
+   $('#prop-msg').innerHTML='<span class="bad">✗ The LLM could not express this as a regex:</span>';
+   $('#prop-result').style.display='';
+   $('#prop-result').innerHTML=`<p style="margin:0 0 6px;font-size:13px">${esc(r.desc)}</p>
+    <p class="sub" style="margin:0">This needs a structural plugin (counting items, clause analysis…). Park it, or take it to the coding agent to design a plugin function.</p>`;
+   return;
+  }
+  const e=r.entry||{}, st=e.self_test_failures;
+  $('#prop-msg').innerHTML=`<span class="ok">✓ <b>${esc(r.id)}</b> created as a trial rule${r.pushed?' · pushed to GitHub':''}.</span>`;
+  $('#prop-result').style.display='';
+  $('#prop-result').innerHTML=`
+   <div style="margin-bottom:6px;font-size:13px"><b>What it flags:</b> ${esc(e.desc||'')}</div>
+   <div style="margin-bottom:6px;font-size:13px"><b>Shown to users:</b> ${esc(e.note||'')}</div>
+   <div style="margin-bottom:6px"><span class="lvl ${st?'lvl-warn':'lvl-note'}">${st?'self-test ✗':'self-test ✓'}</span>
+    ${st?`<span class="bad" style="font-size:12px"> ${esc(String(st).join('; ').slice(0,160))}</span>`:'<span class="sub" style="font-size:12px"> every trigger matched, no clear sentence flagged</span>'}</div>
+   <p class="sub" style="margin:0">Trial rules flag at half level. Review it on the <a href="#" onclick="showTab('serverrules');return false" style="color:#256b58">Server Rules</a> tab — accept, enhance with more examples, or reject.</p>`;
   $('#prop-triggers').value='';$('#prop-clears').value='';$('#prop-note').value='';
+  if(typeof loadConfig==='function')loadConfig();  // Server Rules 表即时带上新 trial
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+ finally{btn.disabled=false;btn.textContent='✦ Translate into a rule';}
 };
 // ── Env tab（admin 专属：读写磁盘 .env，重启后生效）──
 // key=value 逐行拆解成可编辑行（用户裁决 2026-10-09）；注释/空行在保存时
@@ -597,6 +592,9 @@ const ENV_KEYS_DOC = {
   TEPAT_GH_BRANCH: 'rules branch (default main)',
   TEPAT_AUTO_SYNC: 'set 0 to disable the 5-minute GitHub auto-sync',
   TEPAT_EVIDENCE_DB: 'path to evidence.sqlite (default data/evidence.sqlite)',
+  TEPAT_LLM_URL: 'rule translation LLM endpoint, e.g. https://api.z.ai/api/paas/v4/chat/completions',
+  TEPAT_LLM_KEY: 'API key for the rule-translation LLM',
+  TEPAT_LLM_MODEL: 'model id, e.g. glm-5.2 (thinking is disabled automatically)',
 };
 function envRowHtml(key, value, isNew, comments='') {
   const known = ENV_KEYS_DOC[key];
