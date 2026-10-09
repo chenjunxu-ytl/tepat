@@ -105,11 +105,15 @@ def prepare(app_dir, output):
 
     # all-in-one（用户裁决 2026-10-09）：exe 运行时 + extension 一步到位——
     # 用户解压即得完整 Tepat（跑 exe + 加载扩展），不用分别下两个 zip。
-    bundle = [(source, 'tepat/' + name) for source, name in
-              [(path, path.relative_to(BASE).as_posix()) for path in
-               (BASE / name for name in extension_files) if path.is_file()]]
+    # 布局：tepat/extension/...（chrome://extensions 直接 Load unpacked 选它）、
+    # tepat/tepat-v2/...（运行时）、文档在 tepat/ 根。
+    bundle = [(BASE / name, 'tepat/extension/' + name.split('/', 1)[1])
+              for name in extension_files]
     for source, name in runtime:
+        if name.startswith('tepat-v2/'):
+            continue  # 文档留在根，别跟进子目录
         bundle.append((source, name.replace('tepat-v2/', 'tepat/tepat-v2/', 1)))
+    bundle += [(source, 'tepat/' + name) for source, name in documents]
     archive(output / f'tepat-{TAG}-all-in-one.zip', bundle)
 
     corpus_files = git(puzzle, 'ls-files', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json').splitlines()
