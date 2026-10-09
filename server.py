@@ -1930,13 +1930,17 @@ class Handler(BaseHTTPRequestHandler):
                              "github_error": gh_error})
         elif self.path == "/api/flag":
             # 词级 flag（用户裁决 2026-10-08）：免 token 反馈通道。
-            # scope 区分 prpm（PRPM 面板）/ grammar（规则命中）/ general
-            # （popup ⚑ 页面级主观问题）；kind 由用户在小弹窗选。
-            # 右键 flag（2026-10-09 用户裁决）：选中内容不限字数——多词短语
+            # scope 区分 prpm（词）/ grammar（短语/规则命中）/ general
+            # （页面级主观问题）；kind 由用户在 flag 面板选。
+            # 右键 flag（用户裁决 2026-10-09）：选中内容不限字数——多词短语
             # 也可 flag，长度上限放宽到 300（title 上限 120 截断保护）。
+            # 前端 flag 面板发 scope=word（单词右键）——归一成 prpm，
+            # 审核台 flags/list 的 [flag:prpm:...] 匹配不受影响。
             word = str(req.get("word") or "").strip().lower()[:300]
             kind = str(req.get("kind") or "").strip()
             scope = str(req.get("scope") or "prpm").strip()
+            if scope == "word":
+                scope = "prpm"
             rule_id = str(req.get("rule") or "").strip()[:40]
             if scope == "general":
                 # general 不绑词/规则：note 是主体，不查 PRPM
@@ -1962,12 +1966,12 @@ class Handler(BaseHTTPRequestHandler):
             if not word:
                 self._json(400, {"error": "word required"})
                 return
-            if scope == "grammar" and not rule_id:
-                self._json(400, {"error": "rule id required for grammar flags"})
-                return
             if kind not in FLAG_KINDS:
                 self._json(400, {"error": "kind must be underflag/mismeaning/overflag"})
                 return
+            # grammar scope（2026-10-09 右键短语 flag）：rule_id 可选——面板里
+            # 规则命中自带 rule，右键短语 flag 不绑规则，title 占位符退化为
+            # 短语本身。flags/list 的 [flag:grammar:kind] 匹配不受影响。
             note = str(req.get("note") or "").strip()[:500]
             # 状态/定义以 server 自己的查询结果为准（不信任前端传值）。
             # 多词短语（右键 flag 任意长度选中）不是单个词——不查 PRPM，

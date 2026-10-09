@@ -809,6 +809,17 @@
   border: 1px solid #cbd5e1; background: #fff; color: #475569; cursor: pointer;
 }
 
+/* flag 面板（右键 Flag / ⚑ general，2026-10-09）：复用 bmc-panel 骨架，
+   body 内边距收紧、宽度略窄于 checker 面板 */
+.bmc-flag-panel{ width: 360px; }
+.bmc-flag-body{ padding: 14px 16px 16px; }
+.bmc-flag-target{
+  font-size: 12.5px; color: #0f172a; background: #f1f5f9;
+  border: 1px solid #e2e8f0; border-radius: 7px; padding: 7px 9px;
+  margin: 0 0 8px; max-height: 72px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+
 /* chips 悬浮 flag 层：fixed 定位，hover 的 chip 右上角外飘 */
 .bmc-flag-float{
   position: fixed; z-index: 99999;

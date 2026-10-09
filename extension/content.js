@@ -1063,48 +1063,6 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }, 50);
   }
 
-  // general flag 弹窗（用户裁决 2026-10-08）：popup ⚑ 入口，报告本页的主观
-  // 问题（假阳性/漏报/建议）——不属于某个词或某条规则。scope=general，
-  // Issue title 占位符 [flag:general:kind]，与词/规则级 flag 靠前缀区分。
-  function openGeneralFlagDialog() {
-    document.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
-    const dlg = document.createElement('div');
-    dlg.className = 'bmc-flag-dialog';
-    dlg.innerHTML = `
-      <div class="bmc-flag-title">⚑ Report an issue on this page</div>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-genk" value="overflag"> Something was flagged that shouldn't be</label>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-genk" value="underflag"> A problem was missed</label>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-genk" value="other"> Other / suggestion</label>
-      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="What happened? (a short description helps)"></textarea>
-      <div class="bmc-flag-row">
-        <button class="bmc-flag-go" disabled>Submit</button>
-        <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
-      </div>`;
-    document.body.appendChild(dlg);
-    const go = dlg.querySelector('.bmc-flag-go');
-    dlg.querySelectorAll('input[name="bmc-genk"]').forEach(r =>
-      r.addEventListener('change', () => go.disabled = false));
-    dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
-    go.onclick = async () => {
-      const kind = dlg.querySelector('input[name="bmc-genk"]:checked')?.value;
-      const note = dlg.querySelector('.bmc-flag-note').value.trim();
-      if (!kind) return;
-      go.disabled = true; go.textContent = 'Submitting…';
-      try {
-        const r = await fetch(`${API}/api/flag`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: 'page', kind, note, scope: 'general' })
-        }).then(x => x.json());
-        if (!r.ok) throw new Error(r.error || 'flag failed');
-        dlg.remove();
-        showToast(`✓ Reported — issue opened`, 4000);
-      } catch (err) {
-        go.disabled = false; go.textContent = `✗ ${err.message}`;
-      }
-    };
-  }
-
   // grammar flag 弹窗：三 kind + optional note + submit → Issue [flag:grammar:kind]
   function openGrammarFlagDialog(rule, span, anchor) {
     document.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
@@ -1147,65 +1105,115 @@ const safeStorageSet = (obj) => new Promise((res) => {
     anchor.after(dlg);
   }
 
-  // 右键 flag 弹窗（用户裁决 2026-10-09）：面板外的独立入口，选中任意内容
-  // （不限字数）都能 flag。不同于面板里的 word flag——这里不按 chip 当前
-  // 状态筛选项，直接渲染全部 word-flag 条件让用户选。单词走 prpm scope
-  // （照查 PRPM 状态），多词走 grammar scope（短语级问题）。
-  function openSelectionFlagDialog(text) {
-    document.querySelectorAll('.bmc-flag-dialog').forEach(d => d.remove());
-    const clean = sanitizeText(text || '').trim();
-    if (!clean) return;
-    const isSingle = !/\s/.test(clean);
-    const scope = isSingle ? 'prpm' : 'grammar';
-    const dlg = document.createElement('div');
-    dlg.className = 'bmc-flag-dialog';
-    const shown = clean.length > 60 ? clean.slice(0, 60) + '…' : clean;
-    dlg.innerHTML = `
-      <div class="bmc-flag-title">⚑ Flag "${esc(shown)}"</div>
-      <div class="bmc-flag-sub">${isSingle ? 'word flag' : 'phrase flag (no length limit)'}</div>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="underflag"> Under-flagged — should have been flagged but wasn't</label>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="mismeaning"> Wrong meaning — the shown suggestion/meaning is wrong</label>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="overflag"> Over-flagged — this text is fine (false alarm)</label>
-      <label class="bmc-flag-opt"><input type="radio" name="bmc-selfk" value="other"> Other problem</label>
-      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="Explanation (optional)"></textarea>
+  // ── Flag 窗口（用户裁决 2026-10-09）：三种形态统一面板 ──
+  //   word    右键选中单词：查 PRPM 状态（scope=prpm，审核台 Word flags tab）
+  //   grammar 右键选中短语：不限字数（scope=grammar，Grammar flags tab）
+  //   general 右上角 ⚑：页面级主观问题，可不选字（scope=general，General
+  //           flags tab）；有选中内容时预填到 target 一并提交
+  // 面板复用 checker 的 bmc-panel 体系：头部可拖、点外关闭（pin 保持）、
+  // Esc 关闭、z-index 最高。提交开 GitHub Issue，title [flag:scope:kind]
+  // 与审核台 /api/flags/list 的解析正则严格对齐。
+  function openFlagPanel(scope, selection = '') {
+    const clean = sanitizeText(selection || '').trim();
+    const meta = {
+      word:    { title: 'Flag a word', sub: 'Word-level report — PRPM status is attached automatically' },
+      grammar: { title: 'Flag a phrase', sub: 'Phrase-level report — any length' },
+      general: { title: 'Report an issue', sub: 'Page-level problem, not tied to a word or rule' },
+    }[scope];
+    if (!meta) return;
+
+    removeUI();
+    panel = document.createElement('div');
+    panel.className = 'bmc-panel bmc-flag-panel';
+    panel.innerHTML = `
+      <div class="bmc-drag-pill"></div>
+      <div class="bmc-head">
+        <div class="bmc-head-title">
+          <span class="bmc-brand-dot"></span>
+          <span class="bmc-title-text">⚑ ${esc(meta.title)}</span>
+        </div>
+        <div class="bmc-head-controls">
+          <button class="bmc-head-btn bmc-pin-btn" title="Pin this window (won't close on outside click)"></button>
+          <button class="bmc-head-btn bmc-x" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+      <div class="bmc-body bmc-flag-body"></div>`;
+    panel.style.setProperty('z-index', '2147483647', 'important');
+    panel.style.right = '20px';
+    panel.style.top = '80px';
+    panel.style.left = 'auto';
+    document.documentElement.appendChild(panel);
+    setupDraggable(panel.querySelector('.bmc-head'), panel);
+    panel.querySelector('.bmc-x').onclick = removeUI;
+    const btnPin = panel.querySelector('.bmc-pin-btn');
+    btnPin.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>';
+    btnPin.onclick = () => {
+      isPinned = !isPinned;
+      btnPin.classList.toggle('bmc-pinned', isPinned);
+    };
+    attachOutsideClick();
+    // Esc 关闭（与页面级 Esc handler 共用 removeUI）
+    const onKey = e => { if (e.key === 'Escape' && panel) { removeUI(); } };
+    document.addEventListener('keydown', onKey, { capture: false });
+    const cleanup = () => document.removeEventListener('keydown', onKey);
+    const obs = new MutationObserver(() => { if (!document.documentElement.contains(panel)) { cleanup(); obs.disconnect(); } });
+    obs.observe(document.documentElement, { childList: true });
+
+    const body = panel.querySelector('.bmc-flag-body');
+    const shown = clean.length > 80 ? clean.slice(0, 80) + '…' : clean;
+    const kinds = [
+      ['underflag',  'Under-flagged — a problem was missed'],
+      ['mismeaning', 'Wrong suggestion / meaning shown'],
+      ['overflag',   'Over-flagged — this text is fine'],
+      ['other',      'Other problem'],
+    ];
+    body.innerHTML = `
+      <div class="bmc-flag-sub" style="margin:2px 0 8px">${esc(meta.sub)}</div>
+      ${clean ? `
+        <div class="bmc-flag-target">${esc(shown)}</div>` : ''}
+      ${kinds.map(([v, label]) => `
+        <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="${v}"> ${esc(label)}</label>`).join('')}
+      <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="${scope === 'general' ? 'What happened? (required for general reports)' : 'Explanation (optional)'}"></textarea>
       <div class="bmc-flag-row">
         <button class="bmc-flag-go" disabled>Submit</button>
         <button class="bmc-flag-cancel" data-act="cancel">Cancel</button>
       </div>`;
-    // 独立浮层（不依赖面板）：固定在视口中间偏上，可拖不需要
-    dlg.style.position = 'fixed';
-    dlg.style.left = '50%';
-    dlg.style.top = '18%';
-    dlg.style.transform = 'translateX(-50%)';
-    dlg.style.zIndex = '2147483647';
-    dlg.style.width = 'min(400px, calc(100vw - 32px))';
-    document.documentElement.appendChild(dlg);
-    const go = dlg.querySelector('.bmc-flag-go');
-    dlg.querySelectorAll('input[name="bmc-selfk"]').forEach(r =>
+    const go = body.querySelector('.bmc-flag-go');
+    const noteEl = body.querySelector('.bmc-flag-note');
+    body.querySelectorAll('input[name="bmc-fk"]').forEach(r =>
       r.addEventListener('change', () => go.disabled = false));
-    dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+    body.querySelector('[data-act="cancel"]').onclick = removeUI;
     go.onclick = async () => {
-      const kind = dlg.querySelector('input[name="bmc-selfk"]:checked')?.value;
-      const note = dlg.querySelector('.bmc-flag-note').value.trim();
+      const kind = body.querySelector('input[name="bmc-fk"]:checked')?.value;
+      const note = noteEl.value.trim();
       if (!kind) return;
+      if (scope === 'general' && !note) {
+        noteEl.focus();
+        noteEl.placeholder = 'A short explanation is required';
+        return;
+      }
       go.disabled = true; go.textContent = 'Submitting…';
       try {
         const r = await fetch(`${API}/api/flag`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: clean, kind, note, scope })
+          body: JSON.stringify({ word: clean || 'page', kind, note, scope })
         }).then(x => x.json());
         if (!r.ok) throw new Error(r.error || 'flag failed');
-        dlg.remove();
+        removeUI();
         showToast(`✓ Flagged — issue opened`, 4000);
       } catch (err) {
         go.disabled = false; go.textContent = `✗ ${err.message}`;
       }
     };
-    // Esc 关闭
-    const onKey = e => { if (e.key === 'Escape') { dlg.remove(); document.removeEventListener('keydown', onKey); } };
-    document.addEventListener('keydown', onKey);
-    dlg.querySelector('input[name="bmc-selfk"]')?.focus();
+    body.querySelector('input[name="bmc-fk"]')?.focus();
+  }
+
+  // 右键 Flag：选中单词 → word；多词短语 → grammar（不限字数）
+  function openSelectionFlag(text) {
+    const clean = sanitizeText(text || '').trim();
+    if (!clean) return;
+    openFlagPanel(/\s/.test(clean) ? 'grammar' : 'word', clean);
   }
 
   // ── 消息监听与快捷键 ──
@@ -1217,7 +1225,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       runCheck(m.text || '');
       sendResponse({ ok: true });
     } else if (m.type === 'context-flag') {
-      openSelectionFlagDialog(m.text || '');
+      openSelectionFlag(m.text || '');
       sendResponse({ ok: true });
     } else if (m.type === 'check-selection') {
       const text = getPageSelection();
@@ -1251,7 +1259,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
       scanFullPage(m.kind || 'word');
       sendResponse({ ok: true });
     } else if (m.type === 'open-general-flag') {
-      openGeneralFlagDialog();
+      // general flag（右上角 ⚑）：页面级问题，可不选字；有选中内容则预填
+      openFlagPanel('general', getPageSelection() || '');
       sendResponse({ ok: true });
     } else if (m.type === 'clear-highlights') {
       clearPageHighlights();
