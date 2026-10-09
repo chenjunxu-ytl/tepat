@@ -503,7 +503,9 @@ function envRowHtml(key, value, isNew, comments='') {
 async function loadEnv(){
  try{
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  $('#env-path').textContent=r.exists?r.path:'(no .env yet — one will be created at '+r.path+')';
+  // 不展示本机绝对路径（开源项目）：只说明文件在 tepat 数据目录下
+  $('#env-path').textContent=r.exists?'Loaded from the tepat data directory (.env)'
+                                     :'No .env yet — it will be created in the tepat data directory when you save';
   const box=$('#env-rows');box.replaceChildren();envRows.length=0;
   // 拆解：KEY=value 行进 envRows；注释/空行作为前导文本挂在下一行前
   let pendingComments='';

@@ -42,11 +42,27 @@ if getattr(sys, "frozen", False):  # PyInstaller 打包后的资源路径
 WEB_DIR = os.path.join(_ROOT, "web")
 
 
+def _appdata_dir() -> str:
+    """tepat 运行时数据目录：%APPDATA%\\tepat（Windows）/ ~/.tepat（其他）。
+    rules、词表、prpm cache、.env 全部住这里——源码/exe 目录不放运行时数据。"""
+    base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat")
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _env_path() -> str:
+    """.env 的位置：与全部运行时数据同位（%APPDATA%\\tepat\\.env /
+    ~/.tepat/.env）。源码/exe 目录不再放 env（开源项目仓库可能只读；
+    用户裁决 2026-10-09）。"""
+    return os.path.join(_appdata_dir(), ".env")
+
+
 def _load_dotenv() -> None:
-    """启动时读 exe/源码目录旁的 .env（KEY=VALUE 逐行），不覆盖已有环境变量。
+    """启动时读 tepat 数据目录的 .env（KEY=VALUE 逐行），不覆盖已有环境变量。
     .env 在 .gitignore 里，绝不打包进 release。"""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, "frozen", False)
-                        else os.path.dirname(sys.executable), ".env")
+    path = _env_path()
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -62,12 +78,6 @@ def _load_dotenv() -> None:
 
 
 _load_dotenv()
-
-
-def _env_path() -> str:
-    """启动时读的那个 .env 的位置：源码目录 / exe 旁（admin 在 Env tab 编辑它）。"""
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, "frozen", False)
-                        else os.path.dirname(sys.executable), ".env")
 
 
 CACHE_PATH = os.path.join(
@@ -402,14 +412,6 @@ _words: set[str] = set()
 
 EVIDENCE_PATH = os.environ.get("TEPAT_EVIDENCE_DB", os.path.join(_ROOT, "data", "evidence.sqlite"))
 _checker: Checker | None = None
-
-
-def _appdata_dir() -> str:
-    base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
-                        "tepat") if os.name == "nt" else \
-        os.path.join(os.path.expanduser("~"), ".tepat")
-    os.makedirs(base, exist_ok=True)
-    return base
 
 
 def _seed_to_appdata(name: str, src: str) -> None:
