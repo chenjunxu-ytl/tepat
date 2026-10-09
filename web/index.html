@@ -12,7 +12,10 @@ aside button.active{background:#2b3d4d;color:white;border-left-color:#4fa08a}
 aside button.active::before{background:#4fa08a}
 aside .side-status{margin:14px 18px 0;font-size:11px;color:#8fa0af;line-height:1.5}
 main{flex:1;max-width:980px;margin:0 auto;padding:28px 26px;width:100%}
-h2{font-size:21px;margin:0 0 6px}.sub{color:#5d6977;font-size:13px;margin:0 0 14px}
+h2{font-size:21px;margin:0 0 6px}
+/* tab 标题右侧的 icon 按钮组（Env 等）*/
+.tab-head-actions{float:right;display:flex;align-items:center;gap:6px;margin-top:2px}
+.tab-head-actions .env-head-btn{padding:5px 10px;font-size:14px;line-height:1}.sub{color:#5d6977;font-size:13px;margin:0 0 14px}
 .card{background:white;border:1px solid #dbe1e7;border-radius:12px;padding:20px;margin:16px 0}
 textarea{width:100%;min-height:175px;padding:14px;border:1px solid #bcc8d4;border-radius:8px;font:inherit}
 button.act,select{font:inherit;padding:7px 12px;background:white;border:1px solid #c4ced8;border-radius:6px;cursor:pointer}
@@ -141,15 +144,14 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 </section>
 
 <section class="tab" id="tab-env">
- <h2>Env</h2>
+ <h2>Env <span class="tab-head-actions">
+   <button class="act env-head-btn" id="btn-env-add" title="Add a key">＋</button>
+   <button class="act env-head-btn" id="btn-env-reload" title="Reload from disk">⟳</button>
+   <button class="act primary env-head-btn" id="btn-env-save" title="Save to disk">💾</button>
+   <span id="env-msg" class="msg"></span>
+ </span></h2>
  <p class="sub">Admin machine only. Each key of the <code>.env</code> next to the server executable, as its own row — edit values, add or remove keys. Saved to disk as <code>KEY=value</code> lines (a <code>.env.bak</code> of the previous version is kept). Changes apply on the next restart; nothing is hot-applied.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 10px">
-   <button class="act" id="btn-env-reload">Reload</button>
-   <button class="act primary" id="btn-env-save">Save</button>
-   <button class="act" id="btn-env-add">+ Add key</button>
-   <span id="env-msg" class="msg"></span>
-  </div>
   <p class="sub" id="env-path" style="margin:0 0 6px"></p>
   <div id="env-rows"></div>
  </div>
@@ -464,7 +466,6 @@ $('#btn-prop-submit').onclick=async()=>{
 // 原样保留（挂在下一个 key 前面——简单实现：收集在行对象里，序列化时回填）。
 const envRows = [];
 const ENV_KEYS_DOC = {
-  TEPAT_ADMIN_TOKEN: 'machine-level admin token (hash must match the embedded one)',
   TEPAT_GH_TOKEN: 'GitHub PAT — falls back to %APPDATA%\\tepat\\gh_token',
   TEPAT_GH_REPO: 'rules/proposals repo (default chenjunxu-ytl/tepat)',
   TEPAT_GH_BRANCH: 'rules branch (default main)',
