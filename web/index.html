@@ -245,7 +245,9 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
   loadEnv();
  }
  wlState.admin=!!h.admin;  // Word Lists 添加行可见性
+ cfgAdmin=!!h.admin;       // trial 规则 Accept/Reject 只给 admin
  renderWordList();
+ loadConfig();             // admin 态确定后重载（trial 按钮可见性）
 }).catch(()=>{$('#status').textContent='Server unreachable.';});
 
 async function request(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed.');return j;}
@@ -269,33 +271,70 @@ $('#output').onclick=async e=>{
 };
 
 // ── Server Rules tab ──
+let cfgAdmin=false;  // health 探测时写入；trial 规则的 Accept/Reject 只给 admin
 async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
-  const active=(r.rule_views||[]).filter(v=>v.enabled!==false).length;
-  $('#cfg-badge').textContent=r.loaded?`${active} of ${(r.rule_views||[]).length} rules on`:'grammar module not loaded (add data/evidence.sqlite to enable server-side rules)';
+  const views=r.rule_views||[];
+  const active=views.filter(v=>v.enabled!==false).length;
+  const trials=views.filter(v=>v.status==='trial').length;
+  $('#cfg-badge').textContent=r.loaded
+    ?`${active} of ${views.length} rules on${trials?` · ${trials} awaiting review`:''}`
+    :'grammar module not loaded (add data/evidence.sqlite to enable server-side rules)';
   const tb=$('#cfg-rules tbody');tb.replaceChildren();
   const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
-  for(const v of r.rule_views||[]){
+  for(const v of views){
     const tr=document.createElement('tr');
     if(v.enabled===false)tr.style.opacity='.45';
+    if(v.status==='trial')tr.style.background='#fffbeb';
     const [lvl,cls]=confMap[v.conf]||[v.conf,''];
     const ex=v.examples||{};
     const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
     const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
-    tr.innerHTML=`<td><b>${esc(v.id)}</b>${v.category?`<div style="font-size:11px;color:#5d6977">${esc(v.category)}</div>`:''}</td>
-      <td style="font-size:12px">${esc(v.note||'')}${v.valid?'':'<div class="bad">✗ '+esc(v.error||'')+'</div>'}</td>
+    // 自然语言描述优先（人审视图，用户裁决 2026-10-08）；regex/plugin 细节不展示
+    const desc=v.desc||v.note||'';
+    tr.innerHTML=`<td><b>${esc(v.id)}</b>
+        ${v.plugin?`<div class="lvl lvl-note" style="margin-top:3px">plugin</div>`:''}
+        ${v.status==='trial'?'<div class="lvl lvl-warn" style="margin-top:3px">trial</div>':''}
+        ${v.category?`<div style="font-size:11px;color:#5d6977">${esc(v.category)}</div>`:''}</td>
+      <td style="font-size:12px">${esc(desc)}${v.valid?'':'<div class="bad">✗ '+esc(v.error||'')+'</div>'}</td>
       <td style="font-size:12px">${trig||clear?'<div style="font-size:11px;color:#5d6977;margin-bottom:3px">Flags:</div>'+trig+'<div style="font-size:11px;color:#5d6977;margin:3px 0">Doesn\'t flag:</div>'+clear:'<i style="font-size:11px;color:#8a94a0">no examples yet</i>'}</td>
       <td><span class="lvl ${cls}">${lvl}</span></td>
       <td></td>`;
+    const ops=document.createElement('div');
+    ops.style.cssText='display:flex;flex-direction:column;gap:5px;align-items:flex-start';
     const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=v.enabled!==false;
+    toggle.title='on/off (local — GitHub sync restores repo state)';
     toggle.onchange=async()=>{
       try{
         await request('/api/config/rule',{entry_id:v.entry_id,enabled:toggle.checked});
         await loadConfig();
       }catch(e){toggle.checked=!toggle.checked;$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
     };
-    tr.lastElementChild.appendChild(toggle);
+    ops.appendChild(toggle);
+    if(cfgAdmin&&v.status==='trial'){
+      const accept=document.createElement('button');accept.className='act primary';accept.textContent='Accept';
+      accept.style.cssText='font-size:11.5px;padding:3px 10px';
+      accept.onclick=async()=>{
+        accept.disabled=true;accept.textContent='…';
+        try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision:'accept'});
+          $('#cfg-msg').innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
+          await loadConfig();
+        }catch(e){accept.disabled=false;accept.textContent='Accept';$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+      };
+      const reject=document.createElement('button');reject.className='act';reject.textContent='Reject';
+      reject.style.cssText='font-size:11.5px;padding:3px 10px';
+      reject.onclick=async()=>{
+        if(!confirm(`Remove rule ${v.id} entirely? (this also pushes to GitHub)`))return;
+        reject.disabled=true;reject.textContent='…';
+        try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision:'reject'});
+          $('#cfg-msg').innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
+          await loadConfig();
+        }catch(e){reject.disabled=false;reject.textContent='Reject';$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+      };
+      ops.appendChild(accept);ops.appendChild(reject);
+    }
+    tr.lastElementChild.appendChild(ops);
     tb.appendChild(tr);
   }
   for(const w of r.config_warnings||[]){const tr=document.createElement('tr');tr.innerHTML=`<td colspan="5" class="bad">⚠ ${esc(w)}</td>`;tb.appendChild(tr);}
@@ -310,7 +349,7 @@ $('#btn-sync').onclick=async()=>{
   await loadConfig();
  }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
-loadConfig();
+// 首次加载由 health 回调触发（admin 态确定后），不再急加载
 
 // ── Word lists tab：/api/config 里的三分类词表（带 ms mapping）+ overrides ──
 const WL_DESC = {

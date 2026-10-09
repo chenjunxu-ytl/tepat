@@ -942,14 +942,18 @@ class Handler(BaseHTTPRequestHandler):
             if entries[0].get("parsed"):
                 for i, r in enumerate(entries[0]["parsed"].get("rules", [])):
                     ok, err = True, None
-                    try:
-                        re.compile(r.get("re", ""))
-                    except re.error as e:
-                        ok, err = False, str(e)
+                    if not r.get("plugin"):  # regex 条目才编译校验
+                        try:
+                            re.compile(r.get("re", ""))
+                        except re.error as e:
+                            ok, err = False, str(e)
                     rule_views.append({"idx": i, "id": r.get("id"),
                                        "entry_id": r.get("entry_id") or f"idx:{i}",
                                        "conf": r.get("conf"),
                                        "enabled": r.get("enabled", True),
+                                       "status": r.get("status", "settled"),
+                                       "desc": r.get("desc", r.get("note", "")),
+                                       "plugin": r.get("plugin"),
                                        "note": r.get("note"),
                                        "category": r.get("category"),
                                        "source": r.get("source"),
@@ -1199,6 +1203,61 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[config] rule {entry_id} enabled={bool(enabled)}")
             self._json(200, {"ok": True, "entry_id": entry_id, "enabled": bool(enabled),
                              "active_rules": len(_checker.rules) if _checker else 0})
+        elif self.path == "/api/rules/decide":
+            # 规则人审（admin 专属，用户裁决 2026-10-08）：agent 转译产物默认
+            # trial（conf 降半级）。accept → status settled + conf 升回原级；
+            # reject → 整条移除（连带同 whitelist）。写盘 → 热重载 → auto-push。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            decision = str(req.get("decision") or "").strip()
+            entry_id = str(req.get("entry_id") or "")
+            if decision not in ("accept", "reject") or not entry_id:
+                self._json(400, {"error": "decision (accept|reject) and entry_id required"})
+                return
+            path = Path(_config_path("rules.json"))
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as e:
+                self._json(500, {"error": f"rules.json unreadable: {e}"})
+                return
+            idx, target = None, None
+            for i, r in enumerate(data.get("rules", [])):
+                if r.get("entry_id") == entry_id or \
+                        (entry_id.startswith("idx:") and i == int(entry_id[4:])):
+                    idx, target = i, r
+                    break
+            if target is None:
+                self._json(404, {"error": f"entry_id {entry_id} not found"})
+                return
+            if decision == "accept":
+                _CONF_UPGRADE = {"high": "high", "medium": "high",
+                                 "low": "medium"}  # trial 降过半级，升回
+                target["status"] = "settled"
+                if target.get("conf_trial"):  # 有原始级别记录才恢复
+                    target["conf"] = target.pop("conf_trial")
+                path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n",
+                                encoding="utf-8")
+                action = f"{entry_id} trial→settled"
+            else:  # reject
+                removed = data["rules"].pop(idx)
+                path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n",
+                                encoding="utf-8")
+                action = f"{entry_id} removed"
+            if _checker is not None:
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[rules] hot-reload after decide failed: {e!r}")
+            pushed = None
+            try:
+                pushed = _gh_push_file("rules.json",
+                                       path.read_text(encoding="utf-8"),
+                                       f"rules: {action} (human review)")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[rules] GitHub push failed: {e!r}")
+            _log(f"[rules] {action} pushed={bool(pushed)}")
+            self._json(200, {"ok": True, "action": action, "pushed": bool(pushed)})
         elif self.path == "/api/sync":
             # 手动拉 GitHub 规则文件：全员可用（用户裁决 2026-10-08）——
             # 5 分钟自动同步本来就不分机器跑，手动触发没有理由限制；
