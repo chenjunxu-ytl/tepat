@@ -64,6 +64,14 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 .wl-add{display:flex;align-items:center;gap:8px;margin:12px 0 0;flex-wrap:wrap}
 .wl-add input{font:13px system-ui;padding:6px 10px;border:1px solid #c4ced8;border-radius:7px;width:190px}
 .wl-add #wl-add-ms{width:230px}
+/* Env tab 逐行编辑（用户裁决 2026-10-09）*/
+.env-row{display:grid;grid-template-columns:240px auto 1fr 34px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #eef2f5}
+.env-row input.env-key{font:12.5px ui-monospace,Consolas,monospace;padding:6px 10px;border:1px solid #c4ced8;border-radius:7px;background:#f8fafc}
+.env-row input.env-key[readonly]{background:#f1f5f9;color:#526273}
+.env-row input.env-value{font:12.5px ui-monospace,Consolas,monospace;padding:6px 10px;border:1px solid #c4ced8;border-radius:7px}
+.env-row .env-del{padding:4px 8px;font-size:12px;color:#a3312a}
+.env-row .env-doc{grid-column:1/-1;font-size:11px;color:#8a94a0;margin-top:-2px}
+.env-row-new{background:#f0fdf4}
 .wl-kv{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #eef2f5;font-size:13px}
 .wl-kv b{min-width:110px}
 .wl-kv span{color:#5d6977}
@@ -134,15 +142,16 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-env">
  <h2>Env</h2>
- <p class="sub">Admin machine only. Edit the <code>.env</code> next to the server executable — saved to disk verbatim (a <code>.env.bak</code> of the previous version is kept). Changes apply on the next restart; nothing is hot-applied.</p>
+ <p class="sub">Admin machine only. Each key of the <code>.env</code> next to the server executable, as its own row — edit values, add or remove keys. Saved to disk as <code>KEY=value</code> lines (a <code>.env.bak</code> of the previous version is kept). Changes apply on the next restart; nothing is hot-applied.</p>
  <div class="card">
   <div class="controls" style="margin:0 0 10px">
    <button class="act" id="btn-env-reload">Reload</button>
    <button class="act primary" id="btn-env-save">Save</button>
+   <button class="act" id="btn-env-add">+ Add key</button>
    <span id="env-msg" class="msg"></span>
   </div>
   <p class="sub" id="env-path" style="margin:0 0 6px"></p>
-  <textarea id="env-content" spellcheck="false" placeholder="TEPAT_ADMIN_TOKEN=…" style="min-height:220px;font:12.5px/1.6 ui-monospace,Consolas,monospace"></textarea>
+  <div id="env-rows"></div>
  </div>
 </section>
 
@@ -451,19 +460,81 @@ $('#btn-prop-submit').onclick=async()=>{
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 };
 // ── Env tab（admin 专属：读写磁盘 .env，重启后生效）──
+// key=value 逐行拆解成可编辑行（用户裁决 2026-10-09）；注释/空行在保存时
+// 原样保留（挂在下一个 key 前面——简单实现：收集在行对象里，序列化时回填）。
+const envRows = [];
+const ENV_KEYS_DOC = {
+  TEPAT_ADMIN_TOKEN: 'machine-level admin token (hash must match the embedded one)',
+  TEPAT_GH_TOKEN: 'GitHub PAT — falls back to %APPDATA%\\tepat\\gh_token',
+  TEPAT_GH_REPO: 'rules/proposals repo (default chenjunxu-ytl/tepat)',
+  TEPAT_GH_BRANCH: 'rules branch (default main)',
+  TEPAT_AUTO_SYNC: 'set 0 to disable the 5-minute GitHub auto-sync',
+  TEPAT_EVIDENCE_DB: 'path to evidence.sqlite (default data/evidence.sqlite)',
+};
+function envRowHtml(key, value, isNew, comments='') {
+  const known = ENV_KEYS_DOC[key];
+  return `
+  <div class="env-row${isNew ? ' env-row-new' : ''}">
+    <input type="hidden" class="env-comments" value="${esc(comments)}">
+    <input type="text" class="env-key" value="${esc(key)}" placeholder="KEY" spellcheck="false" ${isNew ? '' : 'readonly'}>
+    <span class="wl-arrow">=</span>
+    <input type="text" class="env-value" value="${esc(value)}" placeholder="value" spellcheck="false">
+    <button class="act env-del" title="Remove this key">✕</button>
+    ${known ? `<div class="env-doc">${esc(known)}</div>` : ''}
+  </div>`;
+}
 async function loadEnv(){
  try{
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  $('#env-content').value=r.content||'';
   $('#env-path').textContent=r.exists?r.path:'(no .env yet — one will be created at '+r.path+')';
+  const box=$('#env-rows');box.replaceChildren();envRows.length=0;
+  // 拆解：KEY=value 行进 envRows；注释/空行作为前导文本挂在下一行前
+  let pendingComments='';
+  const lines=(r.content||'').split('\n');
+  if(lines.length && lines[lines.length-1]==='') lines.pop();
+  for(const line of lines){
+    const t=line.trim();
+    if(!t || t.startsWith('#')){ pendingComments+=line+'\n'; continue; }
+    const i=t.indexOf('=');
+    const key=i>0?t.slice(0,i).trim():t, value=i>0?t.slice(i+1).trim():'';
+    envRows.push({key,value,comments:pendingComments});
+    pendingComments='';
+  }
+  if(pendingComments) envRows.push({key:'',value:'',comments:pendingComments});
+  for(const row of envRows){
+    box.insertAdjacentHTML('beforeend', envRowHtml(row.key,row.value,false,row.comments));
+  }
+  bindEnvRowEvents(box);
   $('#env-msg').innerHTML='<span class="ok">✓ loaded</span>';
  }catch(e){$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
+function bindEnvRowEvents(box){
+  box.querySelectorAll('.env-row').forEach(row=>{
+    row.querySelector('.env-del').onclick=()=>row.remove();
+  });
+}
+$('#btn-env-add').onclick=()=>{
+  const box=$('#env-rows');
+  box.insertAdjacentHTML('beforeend', envRowHtml('','','true'));
+  const last=box.lastElementChild;
+  last.querySelector('.env-key').focus();
+  last.querySelector('.env-del').onclick=()=>last.remove();
+};
 $('#btn-env-reload').onclick=loadEnv;
 $('#btn-env-save').onclick=async()=>{
+ // 行 → content：每行前面回填它的注释；非法行（无 key）拦下
+ const parts=[];
+ for(const row of $('#env-rows').querySelectorAll('.env-row')){
+   const key=row.querySelector('.env-key').value.trim();
+   const value=row.querySelector('.env-value').value.trim();
+   const comments=row.querySelector('.env-comments').value;
+   if(!key){ $('#env-msg').innerHTML='<span class="bad">✗ a row is missing its KEY</span>'; row.querySelector('.env-key').focus(); return; }
+   parts.push(comments+key+'='+value);
+ }
+ const content=parts.join('\n')+(parts.length?'\n':'');
  $('#btn-env-save').disabled=true;$('#env-msg').textContent='Saving…';
  try{
-  const r=await request('/api/env',{content:$('#env-content').value});
+  const r=await request('/api/env',{content});
   $('#env-msg').innerHTML=`<span class="ok">✓ saved (${r.bytes} B) — restart tepat to apply</span>`;
  }catch(e){$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  finally{$('#btn-env-save').disabled=false;}
