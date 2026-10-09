@@ -240,10 +240,15 @@ const $=s=>document.querySelector(s), API=location.origin, esc=s=>String(s??'').
 let generation=0;
 
 // ── sidebar tabs ──
-for(const b of document.querySelectorAll('aside .nav')) b.onclick=()=>{
+function showTab(name){
+ const b=document.querySelector(`aside .nav[data-tab="${name}"]`);
+ if(!b || b.offsetParent===null) return;   // 不存在的 tab / 非 admin 隐藏的 tab 不激活
  document.querySelectorAll('aside .nav').forEach(x=>x.classList.toggle('active',x===b));
- document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id==='tab-'+b.dataset.tab));
-};
+ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id==='tab-'+name));
+ sessionStorage.setItem('tepat-tab',name);
+}
+for(const b of document.querySelectorAll('aside .nav')) b.onclick=()=>showTab(b.dataset.tab);
+// 恢复上次 tab 等 health 回来再做（admin-only 的 nav 那时才 display）
 
 // ── health / status ──
 fetch(API+'/api/health').then(r=>r.json()).then(h=>{
@@ -264,6 +269,9 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
   $('#nav-generalflags').style.display='';
   $('#sec-admin').style.display='';
   $('#nav-env').style.display='';
+ }
+ showTab(sessionStorage.getItem('tepat-tab'));   // admin 态明确后再恢复上次 tab（admin tab 此时才可见）
+ if(h.admin){
   loadFlagsView('wf');
   loadFlagsView('gf');
   loadFlagsView('genf');
