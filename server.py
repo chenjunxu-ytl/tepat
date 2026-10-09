@@ -249,7 +249,38 @@ def _gh_sync_rules() -> dict:
 # 每个规则文件的"已同步基线"内容 sha：与 GitHub 最后一次对齐时的本地内容。
 # 本地内容指纹 ≠ 基线 = 有未同步的本地写入（stale）。mtime 在同秒快速连写
 # 时分辨不出（Windows），内容指纹没有这个坑。
+# 持久化到 APPDATA sync-baseline.json（2026-10-09 第三次丢失根因）：之前基线
+# 只在内存，重启即丢；rules+PRPM 模式不跑 load_words()，基线 dict 整个进程
+# 生命周期都是空的——本地领先保护从未生效，startup fetch 直接覆盖未推送的
+# trial 规则。持久化后跨进程存活；启动时不再盲目标记（旧代码把当前内容
+# 无条件视为"与 GitHub 一致"，等于伪造基线）。
 _sync_baseline: dict[str, str] = {}
+
+
+def _baseline_path() -> str:
+    return os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
+                        "tepat", "sync-baseline.json") if os.name == "nt" else \
+        os.path.join(os.path.expanduser("~"), ".tepat", "sync-baseline.json")
+
+
+def _load_sync_baseline() -> None:
+    """启动时从 APPDATA 读回基线（失败=空基线，视同无保护）。"""
+    try:
+        data = json.loads(Path(_baseline_path()).read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _sync_baseline.update({k: v for k, v in data.items()
+                                   if isinstance(k, str) and isinstance(v, str)})
+    except (OSError, json.JSONDecodeError):
+        pass
+
+
+def _save_sync_baseline() -> None:
+    tmp = _baseline_path() + ".tmp"
+    try:
+        Path(tmp).write_text(json.dumps(_sync_baseline, indent=1), encoding="utf-8")
+        os.replace(tmp, _baseline_path())
+    except OSError:
+        pass  # 基线写不进盘只影响保护精度，不值得因此崩掉调用方
 
 
 def _file_sha(path: str) -> str | None:
@@ -275,6 +306,7 @@ def _mark_synced(repo_path: str, local_path: str | None = None) -> None:
     sha = _file_sha(path)
     if sha is not None:
         _sync_baseline[repo_path] = sha
+        _save_sync_baseline()
 
 
 def _gh_token() -> str:
@@ -696,11 +728,6 @@ def load_words() -> int:
     store = EvidenceStore(EVIDENCE_PATH)
     _checker = Checker(store, _config_path("rules.json"), _config_path("indo_words.json"))
     _words = store.lexicon  # compatibility: health word count now counts DBP attestation
-    # 同步基线初始化：启动时刻的文件内容视为"与 GitHub 一致"。启动后本地
-    # 写盘（translate/enhance/accept）会领先基线；push 成功刷新基线；push
-    # 失败则 auto-sync 跳过该文件（本地领先保护，2026-10-09 Step2 根因）。
-    for name in GH_SYNC_FILES:
-        _mark_synced(name)
     print(f"[evidence] loaded {len(_words):,} dictionary forms; run={store.metadata['review_run']}")
     return len(_words)
 
@@ -2170,6 +2197,9 @@ def main() -> int:
     # evidence.sqlite 是遗留升级包（2026-10-09 用户裁决：语料证据退役）——
     # 没有它服务完整：词表 + RB 规则 + PRPM 就是全部检查通道；有它则额外
     # 提供 spelling/context 通道。不存在属正常形态。
+    # 同步基线从 APPDATA 读回（两种模式都要，2026-10-09 第三次丢失根因：
+    # rules+PRPM 模式之前基线永远为空 → startup fetch 覆盖未推送的 trial）。
+    _load_sync_baseline()
     if os.path.exists(EVIDENCE_PATH):
         _log("[main] loading words and rules...")
         try:

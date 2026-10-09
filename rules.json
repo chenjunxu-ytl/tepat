@@ -1,0 +1,184 @@
+{
+ "meta": {
+  "version": 5,
+  "updated": "2026-10-09",
+  "source": "rules.json — Rule Book products only (LLM-translated from human descriptions, user decision 2026-10-09)",
+  "note": "Affix table rebuilt to the full Tatabahasa Dewan system (research-verified 2026-10-07 via Kamus Dewan/PRPM). Stripping generates candidates; the DBP lexicon has the final say. Ambiguous branches (meng+V, ter-/di-/ke-/se- vs bare roots) yield multiple candidates, never a verdict. noflag: true entries are exception ranges suppressing overlapping findings from other rule IDs (Rule Book semantics).",
+  "plugins": [
+   "ks02_antara",
+   "regex_match",
+   "sa01_dangling"
+  ]
+ },
+ "rules": [],
+ "ms_id_suffix_map": [
+  [
+   "ken",
+   "kan"
+  ],
+  [
+   "nye",
+   "nya"
+  ],
+  [
+   "sj",
+   "sahaja"
+  ]
+ ],
+ "affix_strip": [
+  [
+   "memper",
+   ""
+  ],
+  [
+   "diper",
+   ""
+  ],
+  [
+   "menge",
+   ""
+  ],
+  [
+   "penge",
+   ""
+  ],
+  [
+   "meng",
+   "k"
+  ],
+  [
+   "meng",
+   ""
+  ],
+  [
+   "peng",
+   "k"
+  ],
+  [
+   "peng",
+   ""
+  ],
+  [
+   "meny",
+   "s"
+  ],
+  [
+   "peny",
+   "s"
+  ],
+  [
+   "mem",
+   "p"
+  ],
+  [
+   "mem",
+   ""
+  ],
+  [
+   "pem",
+   "p"
+  ],
+  [
+   "pem",
+   ""
+  ],
+  [
+   "men",
+   "t"
+  ],
+  [
+   "men",
+   ""
+  ],
+  [
+   "pen",
+   "t"
+  ],
+  [
+   "pen",
+   ""
+  ],
+  [
+   "me",
+   ""
+  ],
+  [
+   "pe",
+   ""
+  ],
+  [
+   "bel",
+   ""
+  ],
+  [
+   "ber",
+   ""
+  ],
+  [
+   "be",
+   ""
+  ],
+  [
+   "per",
+   ""
+  ],
+  [
+   "pel",
+   ""
+  ],
+  [
+   "ter",
+   ""
+  ],
+  [
+   "te",
+   ""
+  ],
+  [
+   "di",
+   ""
+  ],
+  [
+   "ke",
+   ""
+  ],
+  [
+   "se",
+   ""
+  ]
+ ],
+ "suffix_strip": [
+  "kan",
+  "an",
+  "i"
+ ],
+ "particle_strip": [
+  "nya",
+  "lah",
+  "kah",
+  "tah",
+  "pun",
+  "ku",
+  "mu"
+ ],
+ "infix_words": {
+  "telunjuk": "tunjuk",
+  "kelangkang": "kangkang",
+  "celoreng": "coreng",
+  "gemuruh": "guruh",
+  "gemetar": "getar",
+  "kemuncup": "kuncup",
+  "kemuning": "kuning",
+  "gelembung": "gembung",
+  "cemerlang": "cerlang",
+  "gerigi": "gigi",
+  "serabut": "sabut",
+  "selerak": "serak",
+  "cerucuk": "cucuk",
+  "sinambung": "sambung",
+  "belajar": "ajar",
+  "belunjur": "unjur",
+  "pelajar": "ajar",
+  "pelunjur": "unjur"
+ }
+}
