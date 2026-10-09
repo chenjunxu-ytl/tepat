@@ -594,8 +594,10 @@ def _spawn_trial_rule(spec: dict, triggers: list[str], clears: list[str],
     人审 accept 恢复）。例句集合并进条目（行为规格随规则走 GitHub）。
     新 system prompt 不再让 LLM 回显 id——规则号由 server 生成。"""
     conf = spec.get("conf", "medium")
+    rid = rule_id or spec.get("id")
     entry = {
-        "id": rule_id or spec.get("id"), "plugin": spec["plugin"],
+        "id": rid, "entry_id": rid,  # entry_id=规则号：decide/enhance 定位条目
+        "plugin": spec["plugin"],
         "conf": _TRIAL_DOWNGRADE[conf], "conf_trial": conf,
         "status": "trial",
         "desc": spec["desc"], "note": spec["note"],

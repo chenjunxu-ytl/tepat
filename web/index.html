@@ -127,7 +127,7 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-rulebook">
  <h2>Rule Book</h2>
- <p class="sub">Write what you know about the language, in plain words — sentences that are wrong, sentences that are right, why. The LLM turns it into a rule and checks itself against your examples. Everything lands as a <b>trial</b> rule on the Server Rules tab, where you accept, enhance or reject it.</p>
+ <p class="sub">Write what you know about the language, in plain words — sentences that are wrong, sentences that are right, why. The LLM turns it into a rule and checks itself against your examples, and you review it right here: accept, enhance or reject.</p>
  <div class="card">
   <h3 style="margin:0 0 4px;font-size:16px">New rule</h3>
   <p class="sub" style="margin:0 0 10px">Explain naturally — the LLM works out which sentences define the mistake and which are fine.</p>
@@ -420,40 +420,47 @@ function bindCfgControls(){
  $('#btn-sync').onclick=cfgSync;
 }
 async function ruleDecide(v,decision){
+ // 反馈写当前页的 msg 元素：Server Rules 用 #cfg-msg；Rule Book playground
+ // 用 #prop-msg（同一动作可能从两处发起）。
+ const msgEl=$('#cfg-msg')||$('#prop-msg');
  try{const res=await request('/api/rules/decide',{entry_id:v.entry_id,decision});
-  $('#cfg-msg').innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
+  if(msgEl)msgEl.innerHTML=`<span class="ok">✓ ${esc(res.action)}${res.pushed?' · pushed':''}</span>`;
   await loadConfig();
- }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+  return res;
+ }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
-// Enhance 对话框：补例句（误报→clear，漏报→trigger）重跑 LLM 转译
+// Enhance 对话框：自然语言描述哪里不对，LLM 重跑转译。可能从 Server Rules
+// 详情页或 Rule Book playground 发起——反馈写当下可见的 msg 元素。
 function ruleEnhanceDialog(v){
+ const msgEl=$('#cfg-msg')||$('#prop-msg');
  const text=prompt(`What's wrong with rule ${v.id}? Describe it naturally — e.g. "it also flags 'X berlaku pada 2020' but dates are fine", or "it misses: Ali berasal dari Kelantan"`);
  if(text===null)return;
- if(!text.trim()){$('#cfg-msg').innerHTML='<span class="bad">✗ describe what\'s wrong first</span>';return;}
+ if(!text.trim()){if(msgEl)msgEl.innerHTML='<span class="bad">✗ describe what\'s wrong first</span>';return;}
  go(text);
  async function go(){
-  $('#cfg-msg').textContent='Re-translating with your correction…';
+  if(msgEl)msgEl.textContent='Re-translating with your correction…';
   try{const res=await request('/api/rules/enhance',{entry_id:v.entry_id,text});
-   if(res.needs_plugin){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
+   if(res.needs_plugin){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(res.desc)+'</span>';return;}
    const st=res.entry.self_test_failures?` — self-test ✗ (${esc(String(res.entry.self_test_failures).slice(0,100))})`:' — self-test ✓';
-   $('#cfg-msg').innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`;
+   if(msgEl)msgEl.innerHTML=`<span class="ok">✓ re-translated${res.pushed?' · pushed':''}${st}</span>`;
    await loadConfig();
-  }catch(e){$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+  }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  }
 }
 // Update 对话框：非行为字段直改（conf/desc/note）
 function ruleUpdateDialog(v){
+ const msgEl=$('#cfg-msg')||$('#prop-msg');
  const conf=prompt('Confidence level (high/medium/low — empty = unchanged):','');
  if(conf===null)return;
  const desc=prompt('Description (shown to reviewers — empty = unchanged):','');
  if(desc===null)return;
  const note=prompt('User note (shown when flagged — empty = unchanged):','');
  if(note===null)return;
- if(!conf&&!desc&&!note){$('#cfg-msg').innerHTML='<span class="bad">✗ nothing to update</span>';return;}
+ if(!conf&&!desc&&!note){if(msgEl)msgEl.innerHTML='<span class="bad">✗ nothing to update</span>';return;}
  request('/api/rules/update',{entry_id:v.entry_id,
    conf:conf||undefined,desc:desc||undefined,note:note||undefined})
-  .then(async res=>{$('#cfg-msg').innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`;await loadConfig();})
-  .catch(e=>$('#cfg-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>');
+  .then(async res=>{if(msgEl)msgEl.innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`;await loadConfig();})
+  .catch(e=>{if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>'});
 }
 // pill filter 作用域：只认 cfg-pills 自己的；btn-sync 提成具名函数供
 // 详情页 back 重绑（innerHTML 恢复不保事件）
@@ -574,13 +581,35 @@ $('#btn-prop-submit').onclick=async()=>{
   const e=r.entry||{}, st=e.self_test_failures;
   $('#prop-msg').innerHTML=`<span class="ok">✓ <b>${esc(r.id)}</b> created as a trial rule${r.pushed?' · pushed to GitHub':''}.</span>`;
   $('#prop-result').style.display='';
+  const ex=e.examples||{};
+  const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
+  const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
+  const selfOk=!st;
   $('#prop-result').innerHTML=`
-   <div style="margin-bottom:6px;font-size:13px"><b>What it flags:</b> ${esc(e.desc||'')}</div>
-   <div style="margin-bottom:6px;font-size:13px"><b>Shown to users:</b> ${esc(e.note||'')}</div>
-   <div style="margin-bottom:6px"><span class="lvl ${st?'lvl-warn':'lvl-note'}">${st?'self-test ✗':'self-test ✓'}</span>
-    ${st?`<span class="bad" style="font-size:12px"> ${esc((Array.isArray(st)?st.join('; '):String(st)).slice(0,160))}</span>`:'<span class="sub" style="font-size:12px"> every trigger matched, no clear sentence flagged</span>'}</div>
-   <p class="sub" style="margin:0">Trial rules flag at half level. Review it on the <a href="#" onclick="showTab('serverrules');return false" style="color:#256b58">Server Rules</a> tab — accept, enhance with more examples, or reject.</p>`;
-  $('#prop-input').value='';
+   <h3 style="margin:0 0 6px;font-size:16px">${esc(r.id)} <span class="lvl ${confMapLvl(e)}">${confMapLvlTxt(e)}</span> <span class="lvl lvl-warn">trial</span></h3>
+   <p style="margin:0 0 6px;font-size:13px"><b>What it flags:</b> ${esc(e.desc||'')}</p>
+   <p style="margin:0 0 6px;font-size:13px"><b>Shown to users:</b> ${esc(e.note||'')}</p>
+   <p style="margin:0 0 8px;font-size:12px;color:#5d6977">self-test: ${selfOk?'<span class="ok">✓ every trigger matched, no clear sentence flagged</span>':'<span class="bad">✗ '+esc((Array.isArray(st)?st.join('; '):String(st)).slice(0,160))+'</span>'}</p>
+   ${trig||clear?`<div style="margin-bottom:10px"><b style="font-size:13px">Examples</b>
+     ${trig?`<div style="font-size:11px;color:#5d6977;margin:4px 0 2px">Flags:</div><div style="font-size:12px">${trig}</div>`:''}
+     ${clear?`<div style="font-size:11px;color:#5d6977;margin:8px 0 2px">Doesn't flag:</div><div style="font-size:12px">${clear}</div>`:''}</div>`:''}
+   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="prop-ops">
+    <button class="act primary" data-op="accept">Accept</button>
+    <button class="act" data-op="enhance">Enhance…</button>
+    <button class="act" data-op="reject">Reject</button>
+    <span class="sub" style="margin:0;font-size:11.5px">trial flags at half level until accepted</span>
+   </div>`;
+  // 就地审阅：复用 Server Rules 的三个动作函数（它们只依赖 entry_id/id），
+  // 结果反馈也显示在这里，成功后结果卡收起。
+  $('#prop-result').querySelectorAll('button[data-op]').forEach(b=>b.onclick=async()=>{
+   const op=b.dataset.op;
+   const v={entry_id:e.entry_id,id:r.id};
+   if(op==='accept')await ruleDecide(v,'accept');
+   else if(op==='reject'){if(!confirm(`Remove rule ${r.id} entirely? (this also pushes to GitHub)`))return;await ruleDecide(v,'reject');}
+   else if(op==='enhance'){ruleEnhanceDialog(v);return;}
+   $('#prop-result').style.display='none';
+   $('#prop-input').value='';
+  });
   if(typeof loadConfig==='function')loadConfig();  // Server Rules 表即时带上新 trial
  }catch(e){$('#prop-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  finally{btn.disabled=false;btn.textContent='✦ Make a rule from this';}
