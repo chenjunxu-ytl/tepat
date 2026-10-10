@@ -147,6 +147,65 @@ RULE_PLUGINS = {
 }
 
 
+# ── llm_judge（agent-assisted 规则，用户裁决 2026-10-10）───────────────────
+# regex 表达不了的语言点（词序、句排列、跨句结构）走这里：规则条目带自然
+# 语言判据（judge 描述 + trigger/clear 例句——人审过的行为规格），执行时
+# 把句子交给 LLM 按判据分类。LLM 的实际调用由 server 注入（_llm_judge_fn，
+# 避免checker 依赖 server；未注入=没配 key 的机器，这类规则静默跳过）。
+# 判决按 (规则id+judge文本哈希, 句子) 进缓存——同句重扫零成本。LLM 说
+# unsure 一律放过：宁漏勿误。
+_llm_judge_fn = None        # server 注入：fn(rule_id, judge_key, sentence) -> 'trigger'|'clear'|'unsure'
+_llm_judge_cache = {}       # (judge_key, sentence) -> verdict
+
+
+def set_llm_judge(fn):
+    """server 启动时注入 LLM 判决函数；None = 该机器没有 LLM 配置。"""
+    global _llm_judge_fn
+    _llm_judge_fn = fn
+
+
+def _plugin_llm_judge(text, sents, rule, add):
+    """llm_judge：LLM 按规则的判据分类句子。params:
+      judge（必需）——自然语言判据，说明什么算错什么算对；
+      例句用规则条目自己的 examples（trigger/clear），与 Rule Book 一致。
+    产出：trigger 的整句标注（category/level 随规则 conf），note/suggestion
+    用规则自己的字段。整句标注而非 span——LLM 定位不可信，句级锚定最稳。"""
+    params = _plugin_params(rule)
+    judge = str(params.get('judge') or '').strip()
+    if not judge:
+        raise ValueError(f"llm_judge rule {rule.get('id', '?')} missing params.judge")
+    if _llm_judge_fn is None:
+        return  # 机器没配 LLM——规则可用性由部署形态决定，跳过不报错
+    ex = rule.get('examples') or {}
+    judge_key = hashlib.sha256(
+        json.dumps({'judge': judge, 'trigger': ex.get('trigger'),
+                    'clear': ex.get('clear')}, ensure_ascii=False,
+                   sort_keys=True).encode()).hexdigest()[:16]
+    conf = rule.get('conf', 'low')
+    level = {'high': 'error', 'medium': 'warning', 'low': 'info'}[conf]
+    for start, end, sent in sents:
+        key = (judge_key, sent)
+        if key not in _llm_judge_cache:
+            try:
+                _llm_judge_cache[key] = _llm_judge_fn(rule.get('id', '?'), judge, sent)
+            except Exception:  # noqa: BLE001 — LLM 调用失败：不确定=放过
+                _llm_judge_cache[key] = 'unsure'
+            # 缓存上限：判据+句子对无限增长，粗剪到最近 4k 条
+            if len(_llm_judge_cache) > 4096:
+                for k in list(_llm_judge_cache)[:len(_llm_judge_cache) - 4096]:
+                    del _llm_judge_cache[k]
+        if _llm_judge_cache[key] == 'trigger':
+            add(rule.get('category', 'grammar'), level, start, end,
+                rule.get('note', ''), rule.get('entry_id', rule['id']),
+                suggestion=rule.get('suggestion', ''),
+                evidence=[{'source': 'llm_judge', 'rule': rule['id'],
+                           'basis': judge[:200]}],
+                confidence=conf, highlight=conf != 'low', rule_id=rule['id'])
+
+
+RULE_PLUGINS['llm_judge'] = _plugin_llm_judge
+
+
 class Checker:
     def __init__(self, store: EvidenceStore, rules_path, indo_path):
         self.store = store

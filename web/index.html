@@ -432,7 +432,7 @@ async function loadConfig(){
   if(!tb)return;
   tb.replaceChildren();
   const confMap={high:['error','lvl-error'],medium:['warn','lvl-warn'],low:['note','lvl-note']};
-  const pluginType={regex_match:'regex',ks02_antara:'items',sa01_dangling:'clause'};
+  const pluginType={regex_match:'regex',ks02_antara:'items',sa01_dangling:'clause',llm_judge:'agent'};
   all.forEach((v,i)=>{
     if(cfgConfFilter&&v.conf!==cfgConfFilter)return;
     const tr=document.createElement('tr');
@@ -534,7 +534,7 @@ function showCfgDetail(v){
 }
 const confMapLvl=v=>({high:'lvl-error',medium:'lvl-warn',low:'lvl-note'}[v.conf]||'');
 const confMapLvlTxt=v=>({high:'error',medium:'warn',low:'note'}[v.conf]||v.conf||'?');
-const pluginTypeL=v=>({regex_match:'regex',ks02_antara:'items (plugin)',sa01_dangling:'clause (plugin)'}[v.plugin]||v.plugin||'regex');
+const pluginTypeL=v=>({regex_match:'regex',ks02_antara:'items (plugin)',sa01_dangling:'clause (plugin)',llm_judge:'agent (LLM-judged)'}[v.plugin]||v.plugin||'regex');
 // back 之后 controls 里的按钮事件要重绑（innerHTML 恢复不保事件）
 function bindCfgControls(){
  document.querySelectorAll('#cfg-pills .wf-pill').forEach(pill=>pill.onclick=()=>{

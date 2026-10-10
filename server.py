@@ -124,6 +124,50 @@ def _decide_admin_machine() -> bool:
 IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
 
+# llm_judge 规则的 LLM 判决函数（注入 checker，2026-10-10 用户裁决：更难的
+# 规则——词序/句排列等 regex 表达不了的语言点由 agent 跑）。LLM 没配置时
+# 注入 None，checker 侧这类规则静默跳过。
+_LLM_JUDGE_SYSTEM = """You execute ONE rule of a Malay grammar checker. The rule's author (a human editor) wrote a judge statement describing exactly which sentences violate the rule and which are fine, with example sentences. Classify the given sentence by that statement.
+
+Answer with ONE word only:
+- trigger — the sentence violates the rule (it is like the trigger examples)
+- clear — the sentence does not violate it (it is like the clear examples, or the rule simply doesn't apply)
+- unsure — you cannot tell with confidence
+
+When in doubt, answer unsure. A wrong flag costs more than a missed one."""
+
+
+def _llm_judge_fn(rule_id: str, judge: str, sentence: str) -> str:
+    """单句判决：trigger/clear/unsure。规则例句随 judge 文本一起给 LLM
+    （判据即规格）。调用失败抛异常——checker 侧按 unsure 处理。"""
+    try:
+        ex = {}
+        body = _llm_chat({"messages": [
+            {"role": "system", "content": _LLM_JUDGE_SYSTEM},
+            {"role": "user", "content": json.dumps(
+                {"rule": rule_id, "judge": judge, "sentence": sentence},
+                ensure_ascii=False)}]})
+        content = (body.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        verdict = content.strip().lower()
+        for v in ("trigger", "clear", "unsure"):
+            if v in verdict:
+                return v
+        return "unsure"
+    except RuntimeError:
+        raise
+
+
+def _inject_llm_judge() -> None:
+    """有 LLM 配置才注入；checker 对 None 静默跳过 llm_judge 规则。"""
+    try:
+        _llm_config()
+    except RuntimeError:
+        return
+    from checker import set_llm_judge
+    set_llm_judge(_llm_judge_fn)
+    _log("[llm-judge] LLM judge injected — llm_judge rules active")
+
+
 def _proposals_path() -> str:
     base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"),
                         "tepat") if os.name == "nt" else \
@@ -568,7 +612,9 @@ Rules for the regex:
 - Every trigger sentence must match; NO clear sentence may match.
 - Use \\b word boundaries around words; keep the pattern as narrow as the examples justify.
 - exceptions patterns suppress matches inside their span — use them for legal contexts visible in clear examples.
-- If the distinction cannot be expressed by regex (counting items, clause analysis), set "plugin" to null and explain in "desc" starting with "NEEDS-PLUGIN:".
+- If the distinction cannot be expressed by regex (word order, sentence structure, counting items, clause analysis), use the llm_judge form instead:
+  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "suggestion": "<replacement guidance or empty>"}.
+  The judge runs sentence-by-sentence against an LLM; write it so that borderline sentences read as clear, not trigger.
 Spelling/conf guidance:
 - conf high = structural error with no legal context.
 - conf medium = usually wrong but context can make it legal.
@@ -649,6 +695,40 @@ Return the JSON object only."""
     if spec.get("plugin") is None:  # NEEDS-PLUGIN 路径：合法，前端展示给人类决定
         if not str(spec.get("desc", "")).startswith("NEEDS-PLUGIN:"):
             raise ValueError("plugin null requires NEEDS-PLUGIN: desc")
+        return spec
+    if spec["plugin"] == "llm_judge":
+        # agent-assisted 规则（2026-10-10 用户裁决）：regex 表达不了的语言点
+        # 由 LLM 按判据跑。judge 自测——用真判决函数验例句（trigger 判
+        # trigger、clear 判 clear；unsure 算 fail，判据必须写得够清楚）。
+        params = spec.get("params") or {}
+        judge = str(params.get("judge") or "").strip()
+        if not judge:
+            raise ValueError("llm_judge requires params.judge")
+        ex = spec.get("examples") or {}
+        triggers = [str(t).strip()[:300] for t in (ex.get("trigger") or []) if str(t).strip()]
+        clears = [str(c).strip()[:300] for c in (ex.get("clear") or []) if str(c).strip()]
+        if not triggers:
+            raise ValueError("LLM extracted no trigger sentences from the description")
+        spec["_triggers"], spec["_clears"] = triggers, clears
+        try:
+            _llm_config()
+        except RuntimeError:
+            spec["_self_test"] = "pass (judge untested — LLM not configured)"
+            return spec
+        fails = []
+        for t in triggers:
+            try:
+                if _llm_judge_fn(rule_id, judge, t) != "trigger":
+                    fails.append(f"judge does not flag trigger: {t[:60]}")
+            except Exception:  # noqa: BLE001 — LLM 不可达按 fail 记
+                fails.append(f"judge unreachable for trigger: {t[:60]}")
+        for c in clears:
+            try:
+                if _llm_judge_fn(rule_id, judge, c) == "trigger":
+                    fails.append(f"judge flags clear sentence: {c[:60]}")
+            except Exception:  # noqa: BLE001
+                pass  # clear 侧不可达不记——fail 噪声足够引人注意了
+        spec["_self_test"] = fails or "pass"
         return spec
     if spec["plugin"] not in ("regex_match",):
         raise ValueError(f"unknown plugin {spec['plugin']!r}")
@@ -857,18 +937,40 @@ def scan_words_lightweight(text: str, register: str = "formal") -> dict:
                            for w, v in indo.get("register_words", {}).items()})
         casual_map.update({w: "" for w in indo.get("context_words", {})})
     issues = []
-    # 规则通道（rules.json，与 checker 的 regex_match 同口径）：admin 的
-    # RB-* 规则在无 evidence 模式下照常工作。
+    # 规则通道（rules.json，与 checker 的 plugin 同口径）：admin 的 RB-*
+    # 规则在无 evidence 模式下照常工作。regex_match 直判；llm_judge
+    # （agent-assisted，2026-10-10）复用 checker 的实现——注入的判决函数
+    # 没配 LLM 时自然跳过。
     try:
         rules_data = json.loads(Path(_config_path("rules.json")).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         rules_data = {}
     all_sents = list(sentences(text[:30000]))
+    from checker import _plugin_llm_judge
+    def _add(category, level, start, end, note, origin, *, suggestion="",
+             evidence=None, confidence="medium", highlight=True, rule_id=None):
+        span = text[start:end]
+        item = {"category": category, "level": level, "confidence": confidence,
+                "start": utf16_offset(text, start), "end": utf16_offset(text, end),
+                "span": span, "note": note, "origin": origin,
+                "suggestion": suggestion, "evidence": evidence or [],
+                "highlight": highlight}
+        issues.append(item)
+        if rule_id:
+            item["rule"] = rule_id
+            item["conf"] = confidence
+        return item
     for rule in rules_data.get("rules", []):
         if (not isinstance(rule, dict) or rule.get("enabled") is False
-                or rule.get("plugin") != "regex_match"
+                or rule.get("plugin") not in ("regex_match", "llm_judge")
                 or rule.get("register", "any") not in {"any", register}
                 or rule.get("noflag")):
+            continue
+        if rule.get("plugin") == "llm_judge":
+            try:
+                _plugin_llm_judge(text[:30000], all_sents, rule, _add)
+            except Exception as e:  # noqa: BLE001
+                continue
             continue
         params = rule.get("params") or {}
         pattern = params.get("pattern")
@@ -2435,6 +2537,7 @@ def main() -> int:
     # 同步基线从 APPDATA 读回（两种模式都要，2026-10-09 第三次丢失根因：
     # rules+PRPM 模式之前基线永远为空 → startup fetch 覆盖未推送的 trial）。
     _load_sync_baseline()
+    _inject_llm_judge()  # llm_judge 规则（agent-assisted）有 LLM 配置即激活
     if os.path.exists(EVIDENCE_PATH):
         _log("[main] loading words and rules...")
         try:
