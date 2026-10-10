@@ -407,6 +407,10 @@ def _gh_closed_flag_issues() -> list[str]:
 _closed_flags_cache: list[str] | None = None
 _closed_flags_at: float = 0.0
 
+# 扩展更新检测缓存（/api/extension-update）
+_ext_update_cache: dict | None = None
+_ext_update_at: float = 0.0
+
 
 class GHPushError(RuntimeError):
     """push 失败（token 缺失/权限不足/网络）——调用方必须把这个错误显示给
@@ -1265,14 +1269,47 @@ class Handler(BaseHTTPRequestHandler):
                              "config_warnings": _checker.config_warnings if _checker else [],
                              "admin": IS_ADMIN_MACHINE,
                              "tray": tray_icon is not None})
-        elif self.path == "/api/env":
-            # Env tab（admin 专属）：读磁盘上的 .env 原文。非 admin 一律 403——
-            # 里面有 admin token / PAT，普通用户机器上不存在也不该看。
-            # key_docs：server 实际读取的 key 的字段说明（权威清单在代码读取
-            # 处；前端不 hardcode key 名/示例值）。
-            if not IS_ADMIN_MACHINE:
-                self._json(403, {"error": "admin machine required"})
+        elif self.path == "/api/extension-update":
+            # 扩展更新检测（2026-10-09 用户裁决）：浏览器安全模型不允许网页
+            # 触发 chrome://extensions 重载——这里只做"有没有新版"的检测：
+            # GitHub latest release 的 manifest version vs 本地 extension。
+            # 前端渲染状态 + 下载/重载步骤引导。60s 缓存。
+            global _ext_update_cache, _ext_update_at
+            now = time.time()
+            if _ext_update_cache is not None and now - _ext_update_at < 60:
+                self._json(200, _ext_update_cache)
                 return
+            local = ""
+            try:
+                local = json.loads(Path(os.path.join(
+                    _ROOT, "extension", "manifest.json")).read_text(
+                    encoding="utf-8")).get("version", "")
+            except (OSError, json.JSONDecodeError):
+                pass
+            out = {"local_version": local, "latest_version": None,
+                   "update_available": False, "release_url": None, "error": None}
+            try:
+                req = urllib.request.Request(
+                    f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/releases/latest",
+                    headers={"Accept": "application/vnd.github+json"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    rel = json.loads(resp.read())
+                latest = str(rel.get("tag_name", "")).lstrip("v")
+                out["latest_version"] = latest
+                out["release_url"] = rel.get("html_url")
+                out["update_available"] = bool(latest) and latest != local
+                out["assets"] = [{"name": a.get("name"), "url": a.get("browser_download_url")}
+                                 for a in rel.get("assets", [])
+                                 if a.get("name", "").endswith((".zip",))]
+            except OSError as e:
+                out["error"] = str(e)
+            _ext_update_cache, _ext_update_at = out, now
+            self._json(200, out)
+        elif self.path == "/api/env":
+            # Env tab（2026-10-09 用户裁决：常驻显示，分层）：
+            #   user：每 key 的 set/unset 状态 + key_docs 说明 + server/extension
+            #         版本——不含任何值（token/PAT 是秘密）。
+            #   admin：额外给 .env 原文（编辑器用）。
             content = ""
             exists = os.path.isfile(_env_path())
             if exists:
@@ -1281,8 +1318,27 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError as e:
                     self._json(500, {"error": f"read failed: {e}"})
                     return
-            self._json(200, {"path": _env_path(), "exists": exists, "content": content,
-                             "key_docs": ENV_KEY_DOCS})
+            keys_set = {}
+            for line in content.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                if key.strip():
+                    keys_set[key.strip()] = bool(val.strip())
+            ext_manifest = os.path.join(_ROOT, "extension", "manifest.json")
+            try:
+                ext_version = json.loads(Path(ext_manifest).read_text(
+                    encoding="utf-8")).get("version", "")
+            except (OSError, json.JSONDecodeError):
+                ext_version = ""
+            payload = {"path": _env_path(), "exists": exists,
+                       "keys_set": keys_set, "key_docs": ENV_KEY_DOCS,
+                       "extension_version": ext_version,
+                       "admin": IS_ADMIN_MACHINE}
+            if IS_ADMIN_MACHINE:
+                payload["content"] = content
+            self._json(200, payload)
         elif self.path == "/api/config":
             # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
             # + 解析态 + 逐条规则视图，web UI 的 Config 区消费。

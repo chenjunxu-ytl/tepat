@@ -122,7 +122,7 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
  <button class="nav" id="nav-grammarflags" data-tab="grammarflags" style="display:none">Grammar flags</button>
  <button class="nav" id="nav-generalflags" data-tab="generalflags" style="display:none">General flags</button>
  <div class="side-sec" id="sec-admin" style="display:none">Admin</div>
- <button class="nav" id="nav-env" data-tab="env" style="display:none">Env</button>
+ <button class="nav" id="nav-env" data-tab="env">Env</button>
  <button class="nav" data-tab="about">About</button>
  <div class="side-status" id="status">Connecting…</div>
 </aside>
@@ -173,17 +173,21 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-env">
  <h2>Env <span class="tab-head-actions">
-   <button class="head-btn" id="btn-env-add" title="Add a key">
+   <button class="head-btn" id="btn-env-add" title="Add a key" style="display:none">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
    </button>
    <button class="head-btn" id="btn-env-reload" title="Reload from disk">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
    </button>
-   <button class="head-btn head-btn-save" id="btn-env-save" title="Save to disk">
+   <button class="head-btn head-btn-save" id="btn-env-save" title="Save to disk" style="display:none">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
    </button>
    <span id="env-msg" class="msg"></span>
  </span></h2>
+ <div class="card" id="env-ext-card" style="margin-bottom:10px">
+  <b style="font-size:13px">Extension</b>
+  <div id="env-ext-status" style="font-size:12px;color:#5d6977;margin-top:4px">checking…</div>
+ </div>
  <div class="card">
   <div id="env-rows"></div>
  </div>
@@ -291,21 +295,20 @@ fetch(API+'/api/health').then(r=>r.json()).then(h=>{
  }else{
   src.closest('table').style.display='none';
  }
- // admin 机器（启动时 .env token hash match 内置 hash）：专属 flags + admin sections
+ // admin 机器（启动时 .env token hash match 内置 hash）：专属 flags sections
+ // Env tab 常驻（2026-10-09 用户裁决）：user 看状态+文档，admin 额外看值+编辑
  if(h.admin){
   $('#sec-flags').style.display='';
   $('#nav-wordflags').style.display='';
   $('#nav-grammarflags').style.display='';
   $('#nav-generalflags').style.display='';
-  $('#sec-admin').style.display='';
-  $('#nav-env').style.display='';
  }
+ loadEnv();   // 常驻：admin 态由接口数据决定渲染层级
  showTab(sessionStorage.getItem('tepat-tab'));   // admin 态明确后再恢复上次 tab（admin tab 此时才可见）
  if(h.admin){
   loadFlagsView('wf');
   loadFlagsView('gf');
   loadFlagsView('genf');
-  loadEnv();
  }
  wlState.admin=!!h.admin;  // Word Lists 添加行可见性
  cfgAdmin=!!h.admin;       // trial 规则 Accept/Reject 只给 admin
@@ -736,26 +739,59 @@ async function loadEnv(){
  try{
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
   Object.assign(ENV_KEYS_DOC, r.key_docs||{});
+  const isAdmin=!!r.admin;
+  // 工具按钮：编辑功能只给 admin
+  $('#btn-env-add').style.display=isAdmin?'':'none';
+  $('#btn-env-save').style.display=isAdmin?'':'none';
   const box=$('#env-rows');box.replaceChildren();envRows.length=0;
-  // 拆解：KEY=value 行进 envRows；注释/空行作为前导文本挂在下一行前
-  let pendingComments='';
-  const lines=(r.content||'').split('\n');
-  if(lines.length && lines[lines.length-1]==='') lines.pop();
-  for(const line of lines){
-    const t=line.trim();
-    if(!t || t.startsWith('#')){ pendingComments+=line+'\n'; continue; }
-    const i=t.indexOf('=');
-    const key=i>0?t.slice(0,i).trim():t, value=i>0?t.slice(i+1).trim():'';
-    envRows.push({key,value,comments:pendingComments});
-    pendingComments='';
+  if(isAdmin){
+   // admin 编辑器：.env 原文拆行（与旧实现一致）
+   let pendingComments='';
+   const lines=(r.content||'').split('\n');
+   if(lines.length && lines[lines.length-1]==='') lines.pop();
+   for(const line of lines){
+     const t=line.trim();
+     if(!t || t.startsWith('#')){ pendingComments+=line+'\n'; continue; }
+     const i=t.indexOf('=');
+     const key=i>0?t.slice(0,i).trim():t, value=i>0?t.slice(i+1).trim():'';
+     envRows.push({key,value,comments:pendingComments});
+     pendingComments='';
+   }
+   if(pendingComments) envRows.push({key:'',value:'',comments:pendingComments});
+   for(const row of envRows){
+     box.insertAdjacentHTML('beforeend', envRowHtml(row.key,row.value,false,row.comments));
+   }
+   bindEnvRowEvents(box);
+  }else{
+   // user 视图：每个 server 认识的 key 一行——set/unset + 说明，无值
+   const set=r.keys_set||{};
+   box.innerHTML=Object.entries(ENV_KEYS_DOC).map(([k,doc])=>`
+    <div class="wl-kv"><b>${esc(k)}</b>
+      <span>${set[k]?'<span class="ok">✓ set</span>':'<span class="bad">✗ not set</span>'} — ${esc(doc)}</span></div>`).join('')
+    +`<div class="wl-kv" style="border:none"><b>.env</b><span>${r.exists?'exists':'not created yet'} — ${esc(r.path)}</span></div>`;
   }
-  if(pendingComments) envRows.push({key:'',value:'',comments:pendingComments});
-  for(const row of envRows){
-    box.insertAdjacentHTML('beforeend', envRowHtml(row.key,row.value,false,row.comments));
-  }
-  bindEnvRowEvents(box);
   $('#env-msg').innerHTML='<span class="ok">✓ loaded</span>';
  }catch(e){$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+ loadExtUpdate();
+}
+// 扩展更新检测（/api/extension-update）：浏览器不允许网页代点 chrome://extensions
+// 的刷新，这里显示版本状态 + 给下载和手动重载的步骤
+async function loadExtUpdate(){
+ const el=$('#env-ext-status');if(!el)return;
+ el.textContent='checking…';
+ try{
+  const r=await fetch(API+'/api/extension-update').then(x=>x.json());
+  if(r.error){el.innerHTML='<span class="bad">✗ '+esc(r.error)+'</span>';return;}
+  const local=r.local_version||'?';
+  if(!r.latest_version){el.innerHTML=`installed <b>${esc(local)}</b> — latest unknown (no release found)`;return;}
+  if(!r.update_available){
+   el.innerHTML=`installed <b>${esc(local)}</b> — up to date`;return;
+  }
+  const zip=(r.assets||[]).find(a=>/chrome\.zip$/.test(a.name))||(r.assets||[])[0];
+  el.innerHTML=`installed <b>${esc(local)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span><br>`+
+   `<span style="color:#5d6977">1. download ${zip?`<a href="${esc(zip.url)}" target="_blank" rel="noopener">${esc(zip.name)}</a>`:`from <a href="${esc(r.release_url)}" target="_blank" rel="noopener">the release page</a>`} and unzip over your extension folder<br>`+
+   `2. open <b>chrome://extensions</b> and click ⟳ on the Tepat card (browsers block pages from doing this for you)</span>`;
+ }catch(e){el.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
 function bindEnvRowEvents(box){
   box.querySelectorAll('.env-row').forEach(row=>{
