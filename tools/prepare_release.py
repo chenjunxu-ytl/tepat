@@ -116,6 +116,17 @@ def prepare(app_dir, output):
     bundle += [(source, 'tepat/' + name) for source, name in documents]
     archive(output / f'tepat-{TAG}-all-in-one.zip', bundle)
 
+    # source（用户裁决 2026-10-09）：无 exe 替代——目标机器装 Python 即跑
+    # （server 纯 stdlib，零 pip 依赖），绕开无签名 exe 的 SmartScreen/杀软
+    # 拦截。核心 py + web + extension + start.bat + 文档；政策数据靠首启
+    # sync 拉（单份原则，不进包）。
+    source_files = git(BASE, 'ls-files', '--',
+                       'server.py', 'checker.py', 'evidence.py', 'text_units.py',
+                       'start.bat', 'assets/', 'web/', 'extension/').splitlines()
+    source = [(BASE / name, 'tepat-source/' + name) for name in source_files]
+    source += [(path, 'tepat-source/' + name) for path, name in documents]
+    archive(output / f'tepat-{TAG}-source.zip', source)
+
     corpus_files = git(puzzle, 'ls-files', '--', 'cleaning', 'indo_blacklist.md', 'indo_blacklist.json', 'split.json').splitlines()
     archive(output / f'tepat-{TAG}-corpus-tools.zip', [(puzzle / name, 'puzzle/' + name) for name in corpus_files] + documents)
 
