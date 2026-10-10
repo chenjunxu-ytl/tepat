@@ -106,13 +106,18 @@ def prepare(app_dir, output):
     # all-in-one（用户裁决 2026-10-09）：exe 运行时 + extension 一步到位——
     # 用户解压即得完整 Tepat（跑 exe + 加载扩展），不用分别下两个 zip。
     # 布局：tepat/extension/...（chrome://extensions 直接 Load unpacked 选它）、
-    # tepat/tepat-v2/...（运行时）、文档在 tepat/ 根。
+    # tepat/tepat-v2/...（运行时）、tepat/source/...（无 exe 备胎：exe 被杀软/
+    # SmartScreen 拦时进这里跑 start.bat）、文档在 tepat/ 根。
     bundle = [(BASE / name, 'tepat/extension/' + name.split('/', 1)[1])
               for name in extension_files]
     for source, name in runtime:
         if name.startswith('tepat-v2/_internal') or name == 'tepat-v2/tepat-v2.exe':
             bundle.append((source, name.replace('tepat-v2/', 'tepat/tepat-v2/', 1)))
         # else: 文档（tepat-v2/INSTALL.md 等）——留在根，下面 documents 补
+    bundle += [(BASE / name, 'tepat/source/' + name)
+               for name in ('server.py', 'checker.py', 'evidence.py',
+                            'text_units.py', 'start.bat')]
+    bundle += [(BASE / 'web' / 'index.html', 'tepat/source/web/index.html')]
     bundle += [(source, 'tepat/' + name) for source, name in documents]
     archive(output / f'tepat-{TAG}-all-in-one.zip', bundle)
 
