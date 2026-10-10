@@ -2294,6 +2294,18 @@ def main() -> int:
     import ctypes
     import socket as _socket
 
+    # bat/源码启动时控制台最小化到任务栏（2026-10-09 用户裁决）：tray 的
+    # tepat icon 才是常驻入口，控制台最小化但保留——需要看 log 时点任务栏
+    # 即可恢复。--no-tray 调试模式不最小化（看输出是调试的目的）。
+    # exe（--noconsole 打包）没有控制台句柄，自然跳过。
+    if os.name == "nt" and not args.no_tray:
+        try:
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+        except Exception:  # noqa: BLE001
+            pass
+
     def _port_in_use(port: int) -> bool:
         s = _socket.socket()
         s.settimeout(0.5)
