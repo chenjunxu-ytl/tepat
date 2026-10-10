@@ -694,6 +694,80 @@ def _rule_words_for_prpm(text: str) -> list[str]:
 _TRIAL_DOWNGRADE = {"high": "medium", "medium": "low", "low": "low"}
 
 
+# ── Agent-assisted deep check（用户裁决 2026-10-10）──
+# 与 Rule Book 转译同构：LLM 单发、结构化输出、人类裁决。区别在输入输出——
+# 转译吃"人对语言现象的描述"产"规则"；assist 吃"人要检查的文章 + 确定性
+# 扫描结果 + PRPM 释义"产"针对这段文字的 findings"。产出不落盘、不直接
+# 展示给最终用户：前端逐条渲染，人确认/忽略。LLM 不从 0 创造——分析对象
+# 和最终裁决都是人给的。
+_ASSIST_SYSTEM = """You are the deep-analysis pass of a Malay language checker. The deterministic pass (word lists, regex rules) has already scanned the text and produced machine findings. Your job is ONE careful pass over the same text for what regex cannot see.
+
+You are given:
+- the text (Malay, possibly mixed with other languages),
+- the deterministic findings (word-list hits and rule hits with spans),
+- DBP dictionary definitions for some of the words.
+
+Find issues the deterministic pass missed, and assess the ones it raised. Look for: wrong word choice (bukan/tidak, dari/daripada, di/dia), agreement, clitic/form mismatch, register mixing (baku vs pasar), Indonesian-influenced vocabulary, awkward but grammatical phrasing, and anything a careful Malay editor would query.
+
+Rules of engagement:
+- Quote each finding's span EXACTLY as it appears in the text — the UI anchors on it.
+- "error" = clearly wrong in formal Malay. "warn" = questionable, context-dependent. "note" = editorial suggestion only.
+- Do NOT re-report a deterministic finding unless you disagree with it or have something to add; use assess to state your verdict on it.
+- Do not invent issues: if the text is clean, return an empty findings list — silence is a valid answer.
+- Facts, names and figures are out of scope.
+
+Output: ONE JSON object, no prose, exactly:
+{
+ "findings": [
+  {"span": "<exact substring of the text>",
+   "level": "error|warn|note",
+   "kind": "grammar|word-choice|register|style",
+   "note": "<short Malay note for the user>",
+   "suggestion": "<replacement or empty>",
+   "assesses": null
+  }
+ ],
+ "summary": "<one sentence in Malay: overall state of the text>"
+}
+"assesses" is set to the origin string of a deterministic finding (e.g. "RB-001" or "indo:dokter") when your item is a verdict on that finding; null for new discoveries. The server checks every span against the text and drops mismatches — quote exactly."""
+
+
+def _llm_deep_check(text: str, scan_issues: list, prpm_defs: dict) -> dict:
+    """agent-assisted 深检（单发）：text + 确定性 findings + PRPM 释义 →
+    结构化 findings。span 与原文不匹配的条目由 server 丢弃（不信任 LLM 的
+    定位）。LLM 未配置时抛 RuntimeError，端点转 503。"""
+    det = [{"span": i.get("span", ""), "level": i.get("level"),
+            "note": i.get("note", ""), "origin": i.get("origin")}
+           for i in scan_issues[:60]]
+    user = json.dumps({"text": text[:8000], "deterministic_findings": det,
+                       "prpm_definitions": prpm_defs}, ensure_ascii=False)
+    body = _llm_chat({"messages": [
+        {"role": "system", "content": _ASSIST_SYSTEM},
+        {"role": "user", "content": user}]})
+    content = (body.get("choices") or [{}])[0].get("message", {}).get("content", "")
+    m = re.search(r"\{[\s\S]*\}", content)
+    if not m:
+        raise ValueError("LLM returned no JSON object")
+    out = json.loads(m.group(0))
+    findings = []
+    for f in out.get("findings", []):
+        if not isinstance(f, dict):
+            continue
+        span = str(f.get("span") or "")
+        if not span or span not in text:  # 定位必须锚在原文上
+            continue
+        if f.get("level") not in ("error", "warn", "note"):
+            continue
+        findings.append({"span": span, "level": f["level"],
+                         "kind": str(f.get("kind") or "style")[:20],
+                         "note": str(f.get("note") or "")[:500],
+                         "suggestion": str(f.get("suggestion") or "")[:200],
+                         "assesses": f.get("assesses") or None})
+    return {"findings": findings,
+            "summary": str(out.get("summary") or "")[:300],
+            "dropped": max(0, len(out.get("findings", [])) - len(findings))}
+
+
 def _spawn_trial_rule(spec: dict, triggers: list[str], clears: list[str],
                       origin_note: str, rule_id: str = "") -> dict:
     """LLM 产物 → trial 规则条目（conf 降半级，原级记在 conf_trial，
@@ -1692,6 +1766,38 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[rules] {action} pushed={bool(pushed)}")
             self._json(200, {"ok": True, "action": action, "pushed": bool(pushed),
                              **({"push_error": push_err} if push_err else {})})
+        elif self.path == "/api/assist":
+            # agent-assisted 深检（用户裁决 2026-10-10）：text → 先跑确定性
+            # 扫描，连同 PRPM 释义喂给 LLM 做深度分析。产出的 findings 不落盘
+            # ——前端逐条渲染给人裁决（确认成 flag / 忽略）。
+            text = str(req.get("text") or "").strip()[:8000]
+            register = str(req.get("register") or "formal")
+            if not text:
+                self._json(400, {"error": "text required"})
+                return
+            if _checker is not None:
+                issues = scan(text, register).get("issues", [])
+            else:
+                issues = scan_words_lightweight(text, register).get("issues", [])
+            prpm_defs = {}
+            for w in _rule_words_for_prpm(text):
+                try:
+                    r = prpm_lookup(w)
+                    if r.get("status") == "hit" and r.get("definition"):
+                        prpm_defs[w] = r["definition"][:300]
+                except Exception:  # noqa: BLE001 — 释义失败不挡分析
+                    continue
+            try:
+                out = _llm_deep_check(text, issues, prpm_defs)
+            except RuntimeError as e:
+                self._json(503, {"error": str(e)})
+                return
+            except ValueError as e:
+                self._json(502, {"error": f"deep check failed: {e}"})
+                return
+            _log(f"[assist] {len(out['findings'])} findings "
+                 f"({out['dropped']} dropped, span mismatch) for {len(text)} chars")
+            self._json(200, {"ok": True, **out})
         elif self.path == "/api/rules/translate":
             # LLM 转译入口（admin 发起，用户裁决 2026-10-09）：人类用自己的
             # 话描述语言现象（哪些用法错、哪些对，可夹例句），server 取 PRPM

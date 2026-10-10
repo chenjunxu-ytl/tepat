@@ -136,6 +136,16 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
   <label>Register <select id="register"><option value="formal">Formal writing</option><option value="informal">Informal / conversation</option></select></label></div>
   <div id="text-result"></div></div>
  <div class="card" id="output" aria-live="polite">Results will appear here.</div>
+ <div class="card" id="assist-card" style="display:none">
+  <div class="controls" style="margin:0 0 8px">
+   <b style="font-size:14px">Deep check</b>
+   <span style="flex:1"></span>
+   <button class="act" id="btn-assist">✦ Deep check this text</button>
+   <span id="assist-msg" class="msg"></span>
+  </div>
+  <p class="sub" style="margin:0 0 8px">The agent reads the same text with the scan results and DBP definitions — it catches what word lists and regex cannot. Every finding is yours to judge.</p>
+  <div id="assist-body"></div>
+ </div>
 </section>
 
 <section class="tab" id="tab-rulebook">
@@ -365,9 +375,39 @@ $('#btn-check').onclick=async()=>{
  try{const r=await request('/api/scan',{text,register:$('#register').value});if(current!==generation)return;
   $('#output').innerHTML=TepatResults.html(r);$('#text-result').replaceChildren();
   for(const p of TepatResults.segments(text,r.issues||[])){if(!p.level){$('#text-result').appendChild(document.createTextNode(p.text));continue;}const mark=document.createElement('mark');mark.className=p.level;mark.textContent=p.text;mark.title=p.notes.join(' · ');mark.onclick=()=>$('#output').scrollIntoView({behavior:'smooth'});$('#text-result').appendChild(mark);}
+  $('#assist-card').style.display='';   // 扫描完成后 deep check 入口出现
+  $('#assist-body').replaceChildren();
+  $('#assist-msg').textContent='';
  }catch(e){if(current===generation)$('#output').textContent=e.message;}finally{$('#btn-check').disabled=false;}
 };
-$('#btn-clear').onclick=()=>{generation++;$('#input').value='';$('#text-result').replaceChildren();$('#output').textContent='Results will appear here.';};
+$('#btn-clear').onclick=()=>{generation++;$('#input').value='';$('#text-result').replaceChildren();$('#output').textContent='Results will appear here.';$('#assist-card').style.display='none';};
+// ── Agent-assisted deep check（2026-10-10）：同一段文字的 LLM 深度分析 ──
+$('#btn-assist').onclick=async()=>{
+ const text=$('#input').value.trim();if(!text)return;
+ const btn=$('#btn-assist');btn.disabled=true;
+ $('#assist-msg').textContent='The agent is reading…';
+ $('#assist-body').replaceChildren();
+ try{
+  const r=await request('/api/assist',{text,register:$('#register').value});
+  const box=$('#assist-body');
+  $('#assist-msg').innerHTML=`<span class="ok">✓ ${r.findings.length} findings${r.dropped?` · ${r.dropped} dropped (span mismatch)`:''}${r.summary?` — ${esc(r.summary)}`:''}</span>`;
+  if(!r.findings.length){
+   box.innerHTML='<p class="sub" style="margin:0">No additional issues found — the agent agrees the text is clean at this level.</p>';
+   return;
+  }
+  const lvlCls={error:'lvl-error',warn:'lvl-warn',note:'lvl-note'};
+  const lvlTxt={error:'error',warn:'warn',note:'note'};
+  box.innerHTML=r.findings.map((f,i)=>`
+   <div class="assist-item" data-i="${i}" style="border:1px solid #dbe1e7;border-radius:8px;padding:10px 12px;margin:7px 0;font-size:13px">
+    <div><span class="lvl ${lvlCls[f.level]||'lvl-note'}">${esc(lvlTxt[f.level]||f.level)}</span>
+     <span class="lvl lvl-note">${esc(f.kind)}</span>
+     <b>${esc(f.span)}</b>${f.suggestion?` <span style="color:#256b58">→ <b>${esc(f.suggestion)}</b></span>`:''}
+     ${f.assesses?`<span class="sub" style="font-size:11px"> · assesses ${esc(f.assesses)}</span>`:''}</div>
+    <div style="font-size:12px;color:#526273;margin-top:4px">${esc(f.note)}</div>
+   </div>`).join('');
+ }catch(e){$('#assist-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+ finally{btn.disabled=false;btn.textContent='✦ Deep check this text';}
+};
 $('#output').onclick=async e=>{
  const btn=e.target.closest('.bmc-evidence-btn,.bmc-kamus-btn');if(!btn)return;
  btn.disabled=true;const item=btn.closest('.bmc-item');let box=item.querySelector('.bmc-local-evidence');if(!box){box=document.createElement('div');box.className='bmc-local-evidence';item.appendChild(box);}box.textContent='Loading…';
