@@ -6,10 +6,13 @@ factuality has no automated check.
 
 ## Windows app
 
-1. Download `tepat-v0.3.0-all-in-one.zip` (recommended — runtime + extension in one archive) or `tepat-v0.3.0-win64.zip` for the runtime alone, and extract the whole archive.
-2. Open `tepat-v2/tepat-v2.exe`. Keep the `_internal` folder beside the executable.
-3. Open http://127.0.0.1:8377 if the browser does not open automatically.
-4. Enter Malay text, choose formal or informal register, and select **Semak**.
+Two ways to run the local service — pick whichever your machine allows:
+
+**A. Exe** (no Python needed): download `tepat-v0.3.0-all-in-one.zip` (recommended — runtime + extension in one archive) or `tepat-v0.3.0-win64.zip`, extract the whole archive, open `tepat-v2/tepat-v2.exe` (keep `_internal` beside it). The executable is unsigned — if Windows shows "cannot access the file", right-click it → Properties → check **Unblock**.
+
+**B. Source** (no exe — use this when antivirus/SmartScreen blocks the exe): download `tepat-v0.3.0-source.zip`, install Python 3.10+ (Microsoft Store works), extract, double-click `start.bat`. Nothing to pip install — the server is pure standard library.
+
+Then: open http://127.0.0.1:8377 (or right-click the tray icon → Buka UI), enter Malay text, choose the register, **Semak**.
 
 The extracted app needs well under 100 MB. Checks read the rule files in
 `%APPDATA%\tepat` — the single live copy, fetched from the GitHub repo on
