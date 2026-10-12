@@ -308,7 +308,8 @@
    },
    "params": {
     "judge": "A sentence violates this rule if it contains a coordinated series (items separated by commas and/or 'dan') where the items mix fully-affixed verbs (e.g., bergotong-royong, menyanyi, memasak, bermain) with bare nouns (e.g., kuih-muih, makanan, permainan). Every item in such a verb series should be a verb with parallel form; a single bare noun item inside a verb series is a violation. Lists that are consistently all nouns (no verbs present) are fine and must NOT be flagged. Lists that are consistently all verbs are fine. Only flag when a bare noun appears among verbs in the same coordinated series.",
-    "suggestion": "Gantikan kata nama kasar dengan kata kerja yang selaras, atau asingkan kata nama ke dalam senarai berasingan."
+    "suggestion": "Gantikan kata nama kasar dengan kata kerja yang selaras, atau asingkan kata nama ke dalam senarai berasingan.",
+    "trigger": ",\\s*(dan|serta)\\b"
    },
    "impl": "Every sentence is sent to the LLM with the criterion: flag coordinated series that mix fully-affixed verbs with bare nouns, sparing all-noun or all-verb lists; sentences the LLM calls trigger are flagged as a whole-sentence note.",
    "enhanced_from": "RB-010"
