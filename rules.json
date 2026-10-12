@@ -103,6 +103,37 @@
     "suggestion": "daripada"
    },
    "impl": "The regex matches 'lebih/kurang/paling' optionally followed by intervening words then 'dari', or 'berasal dari'; the exception pattern suppresses matches when the word after 'dari' is one of 4 listed point-of-view nouns (segi, sudut, aspek, perspektif)."
+  },
+  {
+   "id": "RB-004",
+   "entry_id": "RB-004",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags sentences where lebih or kurang is followed by berbanding (dengan), since comparative forms with lebih/kurang require daripada, not berbanding.",
+   "note": "Selepas 'lebih' atau 'kurang', gunakan 'daripada', bukan 'berbanding (dengan)'. Contoh: lebih murah daripada barang di KL.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Kereta ini lebih laju berbanding dengan motosikal.",
+     "lebih murah berbanding dengan barang di KL",
+     "Harga di sini kurang murah berbanding kedai lain."
+    ],
+    "clear": [
+     "Kereta ini lebih laju daripada motosikal.",
+     "Berbanding dengan tahun lepas, harga naik.",
+     "Berbanding dengan tahun lepas, harga lebih murah."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(?:lebih|kurang)\\b[^.]{0,40}?\\bberbanding\\b",
+    "exceptions": [
+     "\\bberbanding dengan\\b[^.]{0,30}?\\blebih\\b"
+    ],
+    "suggestion": "daripada"
+   },
+   "impl": "The regex matches any sentence containing lebih or kurang within 40 characters before berbanding, then suppresses the match when the exception pattern 'berbanding dengan … lebih' is found — i.e. legal fronted 'Berbanding dengan … lebih …' clauses are skipped."
   }
  ],
  "ms_id_suffix_map": [
