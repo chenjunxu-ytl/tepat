@@ -409,6 +409,41 @@
     "suggestion": ""
    },
    "impl": "The regex matches two calqued phrases: 'kerana fakta bahawa' (any whitespace between the three words) and 'adalah kerana' (any whitespace between the two words). No exceptions are defined."
+  },
+  {
+   "id": "RB-014",
+   "entry_id": "RB-014",
+   "plugin": "regex_match",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags the English calques 'yang mana' and 'di mana' when used as relative pronouns or conjunctions inside a statement (not as a question), while sparing interrogative 'Di mana' at sentence start.",
+   "note": "Penggunaan 'yang mana' / 'di mana' sebagai kata hubung adalah calitan daripada bahasa Inggeris. Gantikan 'yang mana' dengan 'yang'. Untuk 'di mana' sebagai kata hubung, strukturkan semula ayat.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Buku yang mana saya beli itu mahal.",
+     "Laporan yang mana dikemukakan semalam telah diluluskan.",
+     "Mesyuarat di mana keputusan dibuat adalah rahsia.",
+     "Sekolah di mana dia belajar terletak di bandar."
+    ],
+    "clear": [
+     "Laporan yang dikemukakan semalam telah diluluskan.",
+     "Di mana kamu tinggal?",
+     "Buku yang saya beli itu mahal."
+    ]
+   },
+   "params": {
+    "pattern": "(\\byang\\s+mana\\b)|(\\bdi\\s+mana\\b(?=\\s+\\w))",
+    "exceptions": [
+     "\\bdi\\s+mana\\b\\s*[?？]"
+    ],
+    "suggestion": ""
+   },
+   "self_test_failures": [
+    "flags clear sentence: Di mana kamu tinggal?"
+   ],
+   "impl": "The regex matches 'yang mana' anywhere, and 'di mana' only when followed by whitespace and a word — then the exception suppresses the match when the sentence ends with a question mark immediately after 'di mana', so interrogative location questions are spared."
   }
  ],
  "ms_id_suffix_map": [
