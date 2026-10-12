@@ -534,8 +534,8 @@
    "conf": "low",
    "conf_trial": "medium",
    "status": "trial",
-   "desc": "Flags 'antara X dan Y' when exactly two coordinated items are joined by 'dan' instead of 'dengan'; spares lists of three or more items joined by 'dan'.",
-   "note": "Untuk dua perkara sahaja, gunakan 'antara X dengan Y'. Gunakan 'dan' hanya untuk tiga perkara atau lebih.",
+   "desc": "Flags 'antara X dan Y' with exactly two coordinated items joined by 'dan' instead of 'dengan', but spares relational/temporal/spatial idioms (perbezaan, hubungan, pukul, terletak, etc.) where 'dan' is natural even with two items.",
+   "note": "Untuk hubungan timbal balik dua pihak, gunakan 'antara X dengan Y' mengikut Tatabahasa Dewan. Namun, corak idiom seperti 'perbezaan antara X dan Y', 'hubungan antara X dan Y', 'antara pukul X dan Y', dan 'terletak antara X dan Y' adalah betul dengan 'dan'.",
    "source": "LLM-translated from human description (2026-10-12)",
    "examples": {
     "trigger": [
@@ -544,15 +544,23 @@
     ],
     "clear": [
      "Persetujuan antara kerajaan dengan syarikat itu ditandatangani.",
-     "Antara Ali, Abu dan Ahmad, Ali paling tinggi."
+     "Antara Ali, Abu dan Ahmad, Ali paling tinggi.",
+     "Perbezaan antara bandar dan kampung semakin ketara.",
+     "Dia datang antara pukul tiga dan empat petang.",
+     "Hubungan antara Malaysia dan Indonesia erat.",
+     "Buku itu terletak antara meja dan kerusi."
     ]
    },
    "params": {
-    "judge": "The sentence must contain the word 'antara' followed later by ' dan '. Count the coordinated items between 'antara' and that 'dan'. If there are exactly TWO items (no comma-separated list before 'dan'), it is a violation — 'dengan' should be used instead of 'dan'. If there are THREE OR MORE items (a comma-separated list like 'X, Y dan Z'), it is correct and must NOT be flagged. Only flag when 'antara' is used as a preposition meaning 'between/among' coordinating items, not when 'antara' appears in other contexts.",
-    "trigger": "\\bantara\\b.{1,60}?\\bdan\\b",
-    "suggestion": "Gantikan 'dan' dengan 'dengan' apabila hanya dua perkara terlibat."
+    "judge": "Flag the sentence ONLY when it contains 'antara X dan Y' expressing a reciprocal/complementary relationship of exactly two parties (e.g. agreement, treaty, contract, cooperation between two entities) where Tatabahasa Dewan prescribes 'dengan' instead of 'dan'. Do NOT flag when 'antara X dan Y' appears in: (a) relational idioms like 'perbezaan antara X dan Y' (difference between), 'hubungan antara X dan Y' (relations between), 'persamaan antara X dan Y' (similarity between), 'pertandingan antara X dan Y' (contest between); (b) temporal ranges like 'antara pukul X dan Y' (between time X and time Y); (c) spatial location like 'terletak antara X dan Y' (located between X and Y); (d) lists of three or more items joined by 'dan'. When in doubt, do not flag.",
+    "trigger": "\\bantara\\b[^.]{0,60}\\bdan\\b",
+    "suggestion": "Gantikan 'dan' dengan 'dengan' untuk hubungan timbal balik dua pihak: antara X dengan Y"
    },
-   "impl": "Sentences matching the pre-filter regex (\\bantara\\b followed within 60 characters by \\bdan\\b) are sent to the LLM with the criterion: count items between 'antara' and 'dan'; flag only when exactly two items are joined by 'dan' instead of 'dengan', spare three-or-more-item lists. LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent."
+   "self_test_failures": [
+    "judge does not flag trigger: Antara Malaysia dan Indonesia terdapat banyak persamaan buda"
+   ],
+   "impl": "Sentences matching the pre-filter regex (the word 'antara' followed within 60 characters by 'dan') are sent to the LLM with the criterion: flag only reciprocal/complementary two-party relationships where Tatabahasa Dewan prescribes 'dengan', sparing relational/temporal/spatial idioms and lists of three or more; LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent.",
+   "enhanced_from": "RB-018"
   },
   {
    "id": "RB-019",
