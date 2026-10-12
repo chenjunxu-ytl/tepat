@@ -257,7 +257,7 @@
   {
    "id": "RB-009",
    "entry_id": "RB-009",
-   "plugin": "regex_match",
+   "plugin": "llm_judge",
    "conf": "medium",
    "conf_trial": "high",
    "status": "trial",
@@ -280,11 +280,10 @@
     ]
    },
    "params": {
-    "pattern": "\\bmemberikan\\s+(?:pelajar(?:nya)?|guru(?:nya)?|orang(?:nya)?|anak(?:nya)?|ibu(?:nya)?|bapa(?:nya)?|ayah(?:nya)?|rakan(?:\\-rakan)?(?:nya)?|kawan(?:\\-kawan)?(?:nya)?|sahabat(?:nya)?|murid(?:nya)?|penuntut(?:nya)?|pekerja(?:nya)?|majikan(?:nya)?|tetamu(?:nya)?|jiran(?:nya)?|mereka|isteri(?:nya)?|suami(?:nya)?|adik(?:nya)?|kakak(?:nya)?|abang(?:nya)?|nenek(?:nya)?|datuk(?:nya)?|paman(?:nya)?|bibi(?:nya)?|sepupu(?:nya)?|menantu(?:nya)?|ipar(?:nya)?|anak\\-anak(?:nya)?)\\b",
-    "exceptions": [],
+    "judge": "Flag the sentence when the verb 'memberikan' is directly followed by a LIVING recipient — a person or animate being, including possessive clitic forms (anaknya, gurunya, rakan-rakan) and pronouns referring to people (mereka, kami). With a living recipient the correct form is plain 'memberi': 'Guru memberi pelajar sebuah buku.', 'Ibu memberi anaknya coklat.' Do NOT flag when 'memberikan' is followed by an inanimate thing (sumbangan, bantuan, nasihat, layanan, taklimat...) — that is correct: 'Dia memberikan sumbangan besar.' If the following noun's animacy is genuinely ambiguous, answer unsure. Example verdicts: 'Ibu memberikan anaknya coklat.' = trigger; 'Guru memberikan murid buku.' = trigger; 'Dia memberikan sumbangan besar.' = clear; 'Pihak syarikat memberikan taklimat kepada media.' = clear.",
     "suggestion": "memberi"
    },
-   "impl": "The regex matches the word 'memberikan' followed by whitespace and then one of ~40 listed animate nouns (each optionally carrying the -nya clitic, e.g. anaknya, gurunya) or the pronoun 'mereka'. No exception pattern is needed because the listed nouns are all animate recipients; inanimate objects like 'sumbangan' or 'bantuan' simply do not appear in the list and are never matched.",
+   "impl": "Every sentence is sent to the LLM with this rule's criterion: flag 'memberikan' only when its direct object is a living recipient (person/animal, incl. -nya clitics and people-pronouns) where plain 'memberi' is required; 'memberikan' with an inanimate object (sumbangan/bantuan/nasihat...) is correct and must not be flagged; ambiguous animacy answers unsure (never flagged). Flagged sentences get a whole-sentence note (LLM span localisation is not trusted).",
    "enhanced_from": "RB-009"
   },
   {
