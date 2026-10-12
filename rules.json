@@ -473,6 +473,33 @@
     "suggestion": ""
    },
    "impl": "The regex matches three specific collocation patterns: 'menggapai untung', 'terima kasih di atas', and 'menyambungkan talian kepada' — each flagged as a collocation error with no exceptions."
+  },
+  {
+   "id": "RB-016",
+   "entry_id": "RB-016",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags the misspellings 'frekuensy' (should be 'frekuensi') and 'membantuh' (should be 'membantu').",
+   "note": "Ejaan tidak standard. Seharusnya 'frekuensi' atau 'membantu'.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Frekuensy gelombang itu tinggi.",
+     "Jangan membantuh mereka."
+    ],
+    "clear": [
+     "Frekuensi gelombang itu tinggi.",
+     "Jangan membantu mereka."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(frekuensy|membantuh)\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches whole-word 'frekuensy' or 'membantuh' (case-insensitive) with no exceptions; any match is flagged as a spelling error."
   }
  ],
  "ms_id_suffix_map": [
