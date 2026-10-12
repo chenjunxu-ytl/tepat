@@ -134,6 +134,39 @@
     "suggestion": "daripada"
    },
    "impl": "The regex matches any sentence containing lebih or kurang within 40 characters before berbanding, then suppresses the match when the exception pattern 'berbanding dengan … lebih' is found — i.e. legal fronted 'Berbanding dengan … lebih …' clauses are skipped."
+  },
+  {
+   "id": "RB-005",
+   "entry_id": "RB-005",
+   "plugin": "regex_match",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags sentences where 'kepada' follows benefit/purpose nouns like faedah, manfaat, habis, or ruang, since 'bagi' should be used instead.",
+   "note": "Gunakan 'bagi' (bukan 'kepada') selepas kata seperti faedah, manfaat, habis, dan ruang yang menyatakan manfaat atau tujuan.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Faedah ini kepada pelajar.",
+     "Manfaat program ini kepada masyarakat setempat."
+    ],
+    "clear": [
+     "Manfaat program ini bagi masyarakat setempat.",
+     "Dia memberi buku kepada adiknya."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(faedah|manfaat|habis|ruang)\\b[^.!?\\n]{0,30}\\bkepada\\b",
+    "exceptions": [
+     "\\bmemberi\\b[^.!?\\n]{0,20}\\bkepada\\b",
+     "\\bmemberikan\\b[^.!?\\n]{0,20}\\bkepada\\b",
+     "\\bberi\\b[^.!?\\n]{0,20}\\bkepada\\b",
+     "\\bberikan\\b[^.!?\\n]{0,20}\\bkepada\\b",
+     "\\bmengurniakan\\b[^.!?\\n]{0,20}\\bkepada\\b"
+    ],
+    "suggestion": "bagi"
+   },
+   "impl": "The regex matches any of four benefit nouns (faedah, manfaat, habis, ruang) followed within 30 characters by kepada, then suppresses the match when the span also contains one of 5 listed giver verbs (memberi, memberikan, beri, berikan, mengurniakan) — i.e. legal 'X kepada Y' recipient constructions are recognised by that verb list only."
   }
  ],
  "ms_id_suffix_map": [
