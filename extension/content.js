@@ -871,6 +871,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
   }
 
   function renderCheck(r, text) {
+    const cleanTextForDeep = (text || '').slice(0, 8000);  // /api/assist 上限
     panelBody().innerHTML = TepatResults.html(r);
     // 卡片点击 → 页面上高亮该命中片段（用户裁决 2026-10-12：不再整页
     // scan 铺高亮——检查面板里点哪张卡，页面就亮哪段）。
@@ -899,6 +900,73 @@ const safeStorageSet = (obj) => new Promise((res) => {
       };
       headControls.insertBefore(btn, headControls.firstChild);
     }
+    // Deep check（第三层，用户裁决 2026-10-12）：结果卡下方入口——regex
+    // + trigger 预筛的 llm_judge 都不够时，手动触发全段 LLM 分析。
+    // findings 用同款卡片渲染（含卡片点击高亮 / Wrong flag icon）。
+    if (cleanTextForDeep) {
+      const deep = document.createElement('button');
+      deep.className = 'act bmc-deep-btn';
+      deep.style.cssText = 'display:block;width:100%;margin-top:8px;padding:8px;font-size:12.5px;border:1px solid #c4ced8;border-radius:8px;background:#fff;cursor:pointer';
+      deep.textContent = '✦ Deep check this text';
+      panelBody().appendChild(deep);
+      deep.onclick = async () => {
+        deep.disabled = true;
+        deep.textContent = 'The agent is reading…';
+        try {
+          const r = await fetch(`${API}/api/assist`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: cleanTextForDeep })
+          }).then(x => x.json());
+          if (r.error) throw new Error(r.error);
+          deep.remove();
+          const box = document.createElement('div');
+          box.className = 'bmc-deep-results';
+          box.innerHTML = renderDeepFindings(r);
+          panelBody().appendChild(box);
+          // deep findings 卡片同样支持点击高亮
+          box.querySelectorAll('.bmc-item').forEach(item => {
+            item.style.cursor = 'pointer';
+            item.addEventListener('click', e => {
+              if (e.target.closest('.bmc-item-corner')) return;
+              const word = item.querySelector('b')?.textContent;
+              if (word) highlightOnPage(word);
+            });
+          });
+        } catch (e) {
+          deep.disabled = false;
+          deep.textContent = '✦ Deep check this text';
+          showToast('Deep check failed: ' + (e.message || e), 5000);
+        }
+      };
+    }
+  }
+
+  // deep check findings → 卡片 HTML（与检查结果同款结构；level 映射到
+  // bmc-item 的配色 class）
+  function renderDeepFindings(r) {
+    const findings = r.findings || [];
+    if (!findings.length) {
+      return `<div class="bmc-clean-box"><b>No further issues found.</b>
+        <div>The deep pass found nothing beyond the scan above.</div></div>`;
+    }
+    const cls = { error: 'miss', warning: 'warn', note: 'info' };
+    const title = { error: 'Specific rules', warning: 'Needs review', info: 'Needs context' };
+    const byLevel = { error: [], warning: [], note: [] };
+    for (const f of findings) byLevel[f.level]?.push(f);
+    let html = `<div class="bmc-sec-title">Deep check — ${findings.length} finding${findings.length > 1 ? 's' : ''}</div>`;
+    for (const level of ['error', 'warning', 'note']) {
+      if (!byLevel[level].length) continue;
+      html += `<div class="bmc-sec-title" style="font-size:11px">${title[level]}</div>`;
+      for (const f of byLevel[level]) {
+        html += `<div class="bmc-item bmc-item-${cls[level]}">
+          <div class="bmc-item-main"><div>${f.assesses ? `<span class="bmc-tag">assesses ${esc(String(f.assesses))}</span>` : ''}<b>${esc(f.span)}</b>${f.suggestion ? ` <span class="bmc-arrow">→</span> <b class="bmc-sug">${esc(f.suggestion)}</b>` : ''}</div></div>
+          <div class="bmc-${cls[level]}-note">${esc(f.note)}</div>
+        </div>`;
+      }
+    }
+    if (r.summary) html += `<div class="bmc-foot">${esc(r.summary)}</div>`;
+    return html;
   }
 
   // 一次性高亮全部命中（统一定位按钮）：逐个 span 搜页面出现位置，全部
