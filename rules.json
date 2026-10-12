@@ -382,6 +382,33 @@
     "suggestion": ""
    },
    "impl": "The regex matches any of the five plural markers followed by whitespace and a reduplicated noun (word-hyphen-same-word), capturing the noun in group 2 and back-referencing it to confirm exact reduplication. No exceptions are needed since the pattern is already narrow — it only fires on true reduplication, not on hyphenated compounds."
+  },
+  {
+   "id": "RB-013",
+   "entry_id": "RB-013",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags calqued English phrases 'kerana fakta bahawa' (due to the fact that) and 'adalah kerana' in Malay.",
+   "note": "Frasa ini dipinjam terjemah daripada bahasa Inggeris. Ganti 'kerana fakta bahawa' dengan 'kerana'. Ganti 'adalah kerana' dengan 'ialah kerana' atau ubah struktur ayat.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Hal ini berlaku kerana fakta bahawa harga naik.",
+     "Sebabnya adalah kerana cuaca."
+    ],
+    "clear": [
+     "Hal ini berlaku kerana harga naik.",
+     "Sebabnya ialah cuaca."
+    ]
+   },
+   "params": {
+    "pattern": "\\bkerana\\s+fakta\\s+bahawa\\b|\\badalah\\s+kerana\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches two calqued phrases: 'kerana fakta bahawa' (any whitespace between the three words) and 'adalah kerana' (any whitespace between the two words). No exceptions are defined."
   }
  ],
  "ms_id_suffix_map": [
