@@ -500,6 +500,36 @@
     "suggestion": ""
    },
    "impl": "The regex matches whole-word 'frekuensy' or 'membantuh' (case-insensitive) with no exceptions; any match is flagged as a spelling error."
+  },
+  {
+   "id": "RB-017",
+   "entry_id": "RB-017",
+   "plugin": "regex_match",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags the bare verb 'lepas' directly followed by a noun phrase object (should be 'lepaskan'), while sparing prepositional/conjunctional uses like 'lepas makan' or 'selepas'.",
+   "note": "Frasa \"lepas\" + objek dalam konteks ini adalah bahasa basahan. Gunakan \"lepaskan\" untuk maksud melepaskan sesuatu objek.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Dia lepas burung itu pagi tadi.",
+     "Polis lepas suspek itu."
+    ],
+    "clear": [
+     "Dia lepaskan burung itu pagi tadi.",
+     "Polis lepaskan suspek itu.",
+     "Lepas makan, kami jalan-jalan."
+    ]
+   },
+   "params": {
+    "pattern": "\\blepas\\b\\s+(?!makan\\b|itu\\b|sebelum\\b|selepas\\b|kami\\b|saya\\b|awak\\b|dia\\b|mereka\\b|anda\\b|kita\\b)(?:[A-Za-zÀ-ÿ]+)",
+    "exceptions": [
+     "\\bselepas\\b"
+    ],
+    "suggestion": "lepaskan"
+   },
+   "impl": "The regex matches the word 'lepas' followed by whitespace and any word, but uses a negative lookahead to skip common prepositional contexts ('lepas makan', 'lepas itu', 'lepas kami', etc.); the exceptions pattern additionally suppresses any match containing 'selepas'."
   }
  ],
  "ms_id_suffix_map": [
