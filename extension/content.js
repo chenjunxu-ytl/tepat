@@ -112,6 +112,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
     outsideClickListener = (e) => {
       if (!panel || isPinned) return;
       if (panel.contains(e.target)) return;
+      // flag 面板内点击不关 checker 面板（两弹窗并存，用户裁决 2026-10-12）
+      if (flagPanel?.contains(e.target)) return;
       removeUI();
     };
     // 延迟挂载，避免触发本次点击
@@ -196,6 +198,19 @@ const safeStorageSet = (obj) => new Promise((res) => {
   }
 
   // ── 面板构造（含顶部搜索栏与直接输入查询）──
+  // ── server 状态点（用户裁决 2026-10-12）：所有面板的 brand-dot 都是
+  // 连接证据——红 = server 未连接，绿 = /api/health 探测成功。与 popup
+  // 右上的点同一语义。panelRoot 传面板根元素，探测结果写到它里面的
+  // .bmc-brand-dot 上。
+  function pollServerDot(panelRoot) {
+    const dot = panelRoot?.querySelector('.bmc-brand-dot');
+    if (!dot) return;
+    fetch(`${API}/api/health`)
+      .then(r => r.json())
+      .then(() => dot.classList.add('ok'))
+      .catch(() => dot.classList.remove('ok'));
+  }
+
   function mkPanel(title, initialQuery = '', mode = 'prpm') {
     removeUI();
     currentMode = mode;
@@ -206,7 +221,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       <div class="bmc-drag-pill"></div>
       <div class="bmc-head">
         <div class="bmc-head-title">
-          <span class="bmc-brand-dot"></span>
+          <span class="bmc-brand-dot" title="green = server connected, red = not reachable"></span>
           <span class="bmc-title-text">${esc(title)}</span>
         </div>
         <div class="bmc-head-controls">
@@ -310,6 +325,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
     document.documentElement.appendChild(panel);
     setupDraggable(panel.querySelector('.bmc-head'), panel);
     attachOutsideClick();
+    pollServerDot(panel);
 
     return panel;
   }
@@ -858,22 +874,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
     panelBody().innerHTML = TepatResults.html(r);
   }
 
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest?.('.bmc-evidence-btn');
-    if (!btn) return;
-    btn.disabled = true;
-    try {
-      const r = await fetch(`${API}/api/evidence`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:btn.dataset.q})}).then(x=>x.json());
-      const rows = [];
-      for (const d of r.lexical?.definitions || []) rows.push(`<div><b>${esc(d.dictionary_source || 'DBP')}</b>: ${esc(d.cleaned_text)}</div>`);
-      for (const ex of r.lexical?.examples || []) rows.push(`<div><b>${esc(ex.source)}</b>: ${esc(ex.text)}</div>`);
-      for (const ref of r.references || []) rows.push(`<div><b>${esc(ref.source)}</b>: ${esc(ref.text.slice(0,500))}</div>`);
-      let target = btn.closest('.bmc-item').querySelector('.bmc-local-evidence');
-      if (!target) { target=document.createElement('div');target.className='bmc-local-evidence';btn.closest('.bmc-item').appendChild(target); }
-      target.innerHTML = rows.length ? rows.join('') : 'No local evidence found; check external sources.';
-    } catch { showToast('Could not load local evidence.',3000); }
-    finally { btn.disabled=false; }
-  });
+  // Local evidence 按钮已删（用户裁决 2026-10-12）：无 evidence 库的部署
+  // 只会报错；查询需求由卡片右上角的搜索 icon 覆盖。/api/evidence 端点保留。
 
   function prpmBtn(word) {
     if (!prpmEnabled) return '';
@@ -1114,19 +1116,36 @@ const safeStorageSet = (obj) => new Promise((res) => {
   // 提交。面板复用 checker 的 bmc-panel 体系：头部可拖、点外关闭（pin 保持）、
   // Esc 关闭、z-index 最高。提交开 GitHub Issue，title [flag:scope:kind]
   // 与审核台 /api/flags/list 的解析正则严格对齐。
-  function openFlagPanel(initialScope, selection = '') {
+  // flag 面板独立生命周期（用户裁决 2026-10-12）：从 Wrong? 按钮打开时
+  // 不关 checker 面板——两个弹窗允许并存，各自拖动/关闭。flagPanel 自己
+  // 管理点击外部关闭（checker 的 outsideClick 只看自己的 panel）。
+  let flagPanel = null;
+  let flagOutsideClickListener = null;
+  function closeFlagPanel() {
+    if (flagOutsideClickListener) {
+      document.removeEventListener('pointerdown', flagOutsideClickListener, true);
+      flagOutsideClickListener = null;
+    }
+    flagPanel?.remove();
+    flagPanel = null;
+  }
+
+  function openFlagPanel(initialScope, selection = '', opts = {}) {
     const clean = sanitizeText(selection || '').trim();
     // 默认 scope 按入口形态推导；用户可在面板里改
     let scope = initialScope;
+    const presetKind = opts.presetKind || '';
+    const presetRule = (opts.rule || '').trim();
 
-    removeUI();
-    panel = document.createElement('div');
-    panel.className = 'bmc-panel bmc-flag-panel';
-    panel.innerHTML = `
+    closeFlagPanel();
+    const fp = document.createElement('div');
+    fp.className = 'bmc-panel bmc-flag-panel';
+    flagPanel = fp;
+    fp.innerHTML = `
       <div class="bmc-drag-pill"></div>
       <div class="bmc-head">
         <div class="bmc-head-title">
-          <span class="bmc-brand-dot"></span>
+          <span class="bmc-brand-dot" title="green = server connected, red = not reachable"></span>
           <span class="bmc-title-text">⚑ Flag</span>
         </div>
         <div class="bmc-head-controls">
@@ -1135,28 +1154,38 @@ const safeStorageSet = (obj) => new Promise((res) => {
         </div>
       </div>
       <div class="bmc-body bmc-flag-body"></div>`;
-    panel.style.setProperty('z-index', '2147483647', 'important');
-    panel.style.right = '20px';
-    panel.style.top = '80px';
-    panel.style.left = 'auto';
-    document.documentElement.appendChild(panel);
-    setupDraggable(panel.querySelector('.bmc-head'), panel);
-    panel.querySelector('.bmc-x').onclick = removeUI;
-    const btnPin = panel.querySelector('.bmc-pin-btn');
+    fp.style.setProperty('z-index', '2147483647', 'important');
+    fp.style.right = '20px';
+    fp.style.top = '80px';
+    fp.style.left = 'auto';
+    document.documentElement.appendChild(fp);
+    setupDraggable(fp.querySelector('.bmc-head'), fp);
+    pollServerDot(fp);
+    fp.querySelector('.bmc-x').onclick = closeFlagPanel;
+    const btnPin = fp.querySelector('.bmc-pin-btn');
+    let fpPinned = false;
     btnPin.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>';
     btnPin.onclick = () => {
-      isPinned = !isPinned;
-      btnPin.classList.toggle('bmc-pinned', isPinned);
+      fpPinned = !fpPinned;
+      btnPin.classList.toggle('bmc-pinned', fpPinned);
     };
-    attachOutsideClick();
-    // Esc 关闭（与页面级 Esc handler 共用 removeUI）
-    const onKey = e => { if (e.key === 'Escape' && panel) { removeUI(); } };
-    document.addEventListener('keydown', onKey, { capture: false });
+    flagOutsideClickListener = (e) => {
+      if (fpPinned) return;
+      if (fp.contains(e.target)) return;
+      // checker 面板内点击不关 flag 面板（反之亦然——checker 的 listener
+      // 只看自己的 panel，两个弹窗互不打扰）
+      if (panel?.contains(e.target)) return;
+      closeFlagPanel();
+    };
+    document.addEventListener('pointerdown', flagOutsideClickListener, true);
+    // Esc 关 flag 面板（checker 面板的 Esc 由页面级 handler 处理）
+    const onKey = e => { if (e.key === 'Escape' && flagPanel) { closeFlagPanel(); } };
+    document.addEventListener('keydown', onKey, { capture: true });
     const cleanup = () => document.removeEventListener('keydown', onKey);
-    const obs = new MutationObserver(() => { if (!document.documentElement.contains(panel)) { cleanup(); obs.disconnect(); } });
+    const obs = new MutationObserver(() => { if (!document.documentElement.contains(fp)) { cleanup(); obs.disconnect(); } });
     obs.observe(document.documentElement, { childList: true });
 
-    const body = panel.querySelector('.bmc-flag-body');
+    const body = fp.querySelector('.bmc-flag-body');
     const shown = clean.length > 80 ? clean.slice(0, 80) + '…' : clean;
     const kinds = [
       ['underflag',  'Under-flagged — a problem was missed'],
@@ -1172,7 +1201,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       </div>
       ${clean ? `
         <div class="bmc-flag-target">${esc(shown)}</div>` : ''}
-      <input class="bmc-flag-rule" value="${esc(panel?.dataset?.flagRule || '')}" placeholder="Rule id (optional, e.g. RB-001)" spellcheck="false" style="width:100%;font:12px/1.4 system-ui;padding:6px 9px;border:1px solid #c4ced8;border-radius:7px;margin-top:8px">
+      <input class="bmc-flag-rule" value="${esc(presetRule)}" placeholder="Rule id (optional, e.g. RB-001)" spellcheck="false" style="width:100%;font:12px/1.4 system-ui;padding:6px 9px;border:1px solid #c4ced8;border-radius:7px;margin-top:8px">
       ${kinds.map(([v, label]) => `
         <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="${v}"> ${esc(label)}</label>`).join('')}
       <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="Explanation (optional)"></textarea>
@@ -1194,7 +1223,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
     const go = body.querySelector('.bmc-flag-go');
     body.querySelectorAll('input[name="bmc-fk"]').forEach(r =>
       r.addEventListener('change', () => go.disabled = false));
-    body.querySelector('[data-act="cancel"]').onclick = removeUI;
+    body.querySelector('[data-act="cancel"]').onclick = closeFlagPanel;
     go.onclick = async () => {
       const kind = body.querySelector('input[name="bmc-fk"]:checked')?.value;
       const note = noteEl.value.trim();
@@ -1206,20 +1235,24 @@ const safeStorageSet = (obj) => new Promise((res) => {
       }
       go.disabled = true; go.textContent = 'Submitting…';
       try {
-        const rule = panel?.dataset?.flagRule ||
-          (panel?.querySelector('.bmc-flag-rule')?.value || '').trim();
+        const rule = (fp.querySelector('.bmc-flag-rule')?.value || '').trim();
         const r = await fetch(`${API}/api/flag`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ word: clean || 'page', kind, note, scope, rule })
         }).then(x => x.json());
         if (!r.ok) throw new Error(r.error || 'flag failed');
-        removeUI();
+        closeFlagPanel();
         showToast(`✓ Flagged — issue opened`, 4000);
       } catch (err) {
         go.disabled = false; go.textContent = `✗ ${err.message}`;
       }
     };
+    // 预选 kind（Wrong? 入口预选 overflag）
+    if (presetKind) {
+      const pre = body.querySelector(`input[name="bmc-fk"][value="${presetKind}"]`);
+      if (pre) { pre.checked = true; go.disabled = false; }
+    }
     body.querySelector('input[name="bmc-fk"]')?.focus();
   }
 
@@ -1230,26 +1263,15 @@ const safeStorageSet = (obj) => new Promise((res) => {
     openFlagPanel(/\s/.test(clean) ? 'grammar' : 'word', clean);
   }
 
-  // Wrong? 按钮（scan 命中项）：用户认为这条判定不对 → grammar flag 预填。
-  // rule（origin）随 flag 提交，审核台据此显示 "enhance this rule" 直达入口。
+  // Wrong? 按钮（scan 命中项）：用户认为这条判定不对 → grammar flag 预填
+  // rule（origin）+ overflag；面板独立于 checker 面板存在。
   document.addEventListener('click', e => {
     const btn = e.target.closest?.('.bmc-wrong-btn');
     if (!btn) return;
-    const word = btn.dataset.word || '';
-    openFlagPanel('grammar', word);
-    // 面板是异步同步渲染的——下一帧再预选 overflag（"这个判错了"最常见立场）
-    setTimeout(() => {
-      if (!panel) return;
-      const kindInput = panel.querySelector('.bmc-flag-body input[name="bmc-fk"][value="overflag"]');
-      if (kindInput) {
-        kindInput.checked = true;
-        kindInput.dispatchEvent(new Event('change'));
-      }
-      const noteEl = panel.querySelector('.bmc-flag-note');
-      if (noteEl) noteEl.placeholder = 'What is wrong with this flag? (which rule, what should it do?)';
-      // rule 记到面板 dataset，提交时随 /api/flag 一起发
-      if (btn.dataset.rule) panel.dataset.flagRule = btn.dataset.rule;
-    }, 50);
+    openFlagPanel('grammar', btn.dataset.word || '', {
+      presetKind: 'overflag',
+      rule: btn.dataset.rule || ''
+    });
   });
 
   // ── 消息监听与快捷键 ──

@@ -32,7 +32,14 @@ button.act,select{font:inherit;padding:7px 12px;background:white;border:1px soli
 button.act.primary{background:#256b58;color:white;border-color:#256b58}
 .controls{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
 #text-result{white-space:pre-wrap;line-height:1.9;margin-top:14px}mark{border-radius:3px;padding:1px 0;cursor:pointer}mark.error{background:#ffdbd8}mark.warning{background:#fff0bd}mark.info{background:#e2edf9}
-.bmc-item{border:1px solid #dbe1e7;border-left:3px solid #8da7c0;padding:13px;margin:10px 0;border-radius:6px}.bmc-item-miss{border-left-color:#ba4237}.bmc-item-warn{border-left-color:#c99520}.bmc-item-info{border-left-color:#5482ac}
+.bmc-item{border:1px solid #dbe1e7;border-left:3px solid #8da7c0;padding:13px;margin:10px 0;border-radius:6px;position:relative}.bmc-item-miss{border-left-color:#ba4237}.bmc-item-warn{border-left-color:#c99520}.bmc-item-info{border-left-color:#5482ac}
+.bmc-item-corner{position:absolute;top:6px;right:6px;display:flex;gap:2px;align-items:center;z-index:2}
+.bmc-item-corner button,.bmc-item-corner a{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;cursor:pointer;border:1px solid transparent;border-radius:6px;background:transparent;color:#64748b;text-decoration:none}
+.bmc-item-corner button:hover,.bmc-item-corner a:hover{background:rgba(100,116,139,.12)}
+.bmc-item-corner .bmc-search-link{color:#60a5fa}
+.bmc-item-corner [data-tip]{position:relative}
+.bmc-item-corner [data-tip]::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);right:0;white-space:nowrap;font-size:11px;font-weight:500;padding:4px 8px;border-radius:6px;background:#1e293b;color:#f1f5f9;opacity:0;pointer-events:none;transition:opacity .1s ease .1s;z-index:10}
+.bmc-item-corner [data-tip]:hover::after{opacity:1}
 .bmc-tag{font-size:11px;color:#607080;margin-right:8px}.bmc-actions{display:flex;gap:9px;align-items:center;margin-top:9px;flex-wrap:wrap}.bmc-actions button,.bmc-actions a{font-size:12px}
 .bmc-sec-title{font-weight:600;margin-top:16px}.bmc-miss-note,.bmc-warn-note,.bmc-info-note{font-size:13px;color:#526273}.bmc-sug{color:#256b58}.bmc-err-box{color:#a3312a}
 .bmc-clean-box{padding:18px;background:#eef5f3;margin:12px 0}.bmc-clean-box div{font-size:13px;color:#526273}
@@ -226,12 +233,21 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 
 <section class="tab" id="tab-grammarflags">
  <h2>Grammar flags (Rule Book)</h2>
- <p class="sub">Flags on Rule Book rule hits — wrong regex, missing context, over-triggering. Open = awaiting review; closed = handled (rule fixed or rejected).</p>
+ <p class="sub">Flags on Rule Book rule hits — wrong regex, missing context, over-triggering. <b>Enhance this rule</b> opens the reported rule with the correction dialog ready; <b>Reject</b> = close on GitHub.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 8px">
-   <button class="act" id="btn-gf-load">Reload</button>
-   <label><input type="checkbox" id="gf-show-closed" checked> show closed</label>
-   <span id="gf-msg" class="msg"></span></div>
+  <div class="wf-toolbar">
+   <div class="wf-pills">
+    <button class="wf-pill wf-pill-active" data-kind="">All</button>
+    <button class="wf-pill" data-kind="underflag">Said: should be found</button>
+    <button class="wf-pill" data-kind="mismeaning">Said: meaning wrong</button>
+    <button class="wf-pill" data-kind="overflag">Said: over-triggering</button>
+    <button class="wf-pill" data-kind="other">Other</button>
+   </div>
+   <button class="wf-closed-toggle" id="gf-show-closed" title="Show closed flags">Closed</button>
+   <span style="flex:1"></span>
+   <span id="gf-msg" class="msg"></span>
+   <span class="wf-reload" id="btn-gf-load" title="Reload from GitHub">⟳</span>
+  </div>
   <div id="gf-list"></div>
  </div>
 </section>
@@ -240,10 +256,19 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
  <h2>General flags</h2>
  <p class="sub">Page-level subjective reports from the extension popup flag — false alarms, missed problems, suggestions. Not tied to a specific word or rule; handle on GitHub.</p>
  <div class="card">
-  <div class="controls" style="margin:0 0 8px">
-   <button class="act" id="btn-genf-load">Reload</button>
-   <label><input type="checkbox" id="genf-show-closed" checked> show closed</label>
-   <span id="genf-msg" class="msg"></span></div>
+  <div class="wf-toolbar">
+   <div class="wf-pills">
+    <button class="wf-pill wf-pill-active" data-kind="">All</button>
+    <button class="wf-pill" data-kind="underflag">Said: missed a problem</button>
+    <button class="wf-pill" data-kind="mismeaning">Said: off-target</button>
+    <button class="wf-pill" data-kind="overflag">Said: false alarm</button>
+    <button class="wf-pill" data-kind="other">Other</button>
+   </div>
+   <button class="wf-closed-toggle" id="genf-show-closed" title="Show closed flags">Closed</button>
+   <span style="flex:1"></span>
+   <span id="genf-msg" class="msg"></span>
+   <span class="wf-reload" id="btn-genf-load" title="Reload from GitHub">⟳</span>
+  </div>
   <div id="genf-list"></div>
  </div>
 </section>
@@ -408,13 +433,8 @@ $('#btn-assist').onclick=async()=>{
  }catch(e){$('#assist-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  finally{btn.disabled=false;btn.textContent='✦ Deep check this text';}
 };
-$('#output').onclick=async e=>{
- const btn=e.target.closest('.bmc-evidence-btn,.bmc-kamus-btn');if(!btn)return;
- btn.disabled=true;const item=btn.closest('.bmc-item');let box=item.querySelector('.bmc-local-evidence');if(!box){box=document.createElement('div');box.className='bmc-local-evidence';item.appendChild(box);}box.textContent='Loading…';
- try{if(btn.classList.contains('bmc-kamus-btn')){const r=await request('/api/prpm',{word:btn.dataset.w});box.textContent=({hit:'Entry found; meaning and register still need review. ',miss:'No entry found; this does not prove a spelling error. ',unreachable:'PRPM could not be verified. '}[r.status]||'')+(r.definition||r.note||'');}
- else{const r=await request('/api/evidence',{query:btn.dataset.q});box.replaceChildren();const rows=[...(r.lexical?.definitions||[]).map(d=>({source:d.dictionary_source||'DBP',text:d.cleaned_text})),...(r.lexical?.examples||[]),...(r.references||[])];const unique=new Set();for(const row of rows){const key=row.source+row.text;if(unique.has(key))continue;unique.add(key);const p=document.createElement('p');p.textContent=`${row.source}: ${row.text}`;box.appendChild(p);}if(!rows.length)box.textContent='No local evidence found; check external sources.';}
- }catch(e){box.textContent=e.message;}finally{btn.disabled=false;}
-};
+// Local evidence 按钮（/api/evidence）已删（用户裁决 2026-10-12）：
+// 无 evidence 库的部署只会报错；查询需求由卡片右上角的搜索 icon 覆盖。
 
 // ── Server Rules tab ──
 let cfgAdmin=false;  // health 探测时写入；trial 规则的 Accept/Reject 只给 admin
@@ -880,12 +900,16 @@ async function loadExtUpdate(){
   const r=await fetch(API+'/api/extension-update').then(x=>x.json());
   if(r.error){el.innerHTML='<span class="bad">✗ '+esc(r.error)+'</span>';return;}
   const local=r.local_version||'?';
-  if(!r.latest_version){el.innerHTML=`installed <b>${esc(local)}</b> — latest unknown (no release found)`;return;}
+  const srv=r.server_version||'?';
+  const srvLine=r.server_update_available
+   ?`<div style="margin-top:4px">server <b>${esc(srv)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span>: download the new exe from <a href="${esc(r.release_url)}" target="_blank" rel="noopener">the release</a> and replace your copy (rules & word lists hot-sync on their own)</div>`
+   :`<div style="margin-top:4px;color:#5d6977">server <b>${esc(srv)}</b> — up to date</div>`;
+  if(!r.latest_version){el.innerHTML=`installed <b>${esc(local)}</b> — latest unknown (no release found)${srvLine}`;return;}
   if(!r.update_available){
-   el.innerHTML=`installed <b>${esc(local)}</b> — up to date`;return;
+   el.innerHTML=`installed <b>${esc(local)}</b> — up to date${srvLine}`;return;
   }
   const zip=(r.assets||[]).find(a=>/chrome\.zip$/.test(a.name))||(r.assets||[])[0];
-  el.innerHTML=`installed <b>${esc(local)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span><br>`+
+  el.innerHTML=`installed <b>${esc(local)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span>${srvLine}<br>`+
    `<span style="color:#5d6977">1. download ${zip?`<a href="${esc(zip.url)}" target="_blank" rel="noopener">${esc(zip.name)}</a>`:`from <a href="${esc(r.release_url)}" target="_blank" rel="noopener">the release page</a>`} and unzip over your extension folder<br>`+
    `2. open <b>chrome://extensions</b> and click ⟳ on the Tepat card (browsers block pages from doing this for you)</span>`;
  }catch(e){el.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
@@ -931,14 +955,12 @@ async function loadFlagsView(which){
  msg.textContent='Loading…';
  try{
   const r = await fetch(API+'/api/flags/list').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
-  // 注意作用域：只能读 wf 自己的 pill（Word lists tab 的 pill 也是 .wf-pill-active）
-  const kindFilter = which==='wf' ? (document.querySelector('#tab-wordflags .wf-pill-active')?.dataset.kind || '') : '';
+  // pill 过滤：三个 tab 各读自己容器里的 pill（同 class 不同容器）
+  const kindFilter = document.querySelector(`#${which==='wf'?'tab-wordflags':which==='gf'?'tab-grammarflags':'tab-generalflags'} .wf-pill-active`)?.dataset.kind || '';
   const all = (r.flags||[]).filter(f =>
     (f.scope === scope || (scope==='prpm' && f.scope==='legacy'))
     && (!kindFilter || f.kind === kindFilter));
-  const showClosed = which==='wf' ? $('#wf-show-closed').classList.contains('on')
-                    : which==='genf' ? $('#genf-show-closed').checked
-                    : $('#gf-show-closed').checked;
+  const showClosed = document.querySelector(`#${which}-show-closed`)?.classList.contains('on');
   const open = all.filter(f => f.state==='open');
   const closed = all.filter(f => f.state==='closed');
   msg.innerHTML=`<span class="ok">✓ ${open.length} open · ${closed.length} closed</span>`;
@@ -946,7 +968,10 @@ async function loadFlagsView(which){
                       overflag: 'not a word', other: 'other' };
   const kindLabelGeneral = { underflag: 'missed a problem', overflag: 'false alarm',
                              mismeaning: 'off-target', other: 'other' };
-  const kindBadge = k => `<span class="lvl ${k==='overflag'||k==='other'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc((which==='genf'?kindLabelGeneral:kindLabel)[k] || k || '?')}</span>`;
+  const kindLabelGrammar = { underflag: 'should be found', overflag: 'over-triggering',
+                             mismeaning: 'meaning wrong', other: 'other' };
+  const kindLabels = which==='genf'?kindLabelGeneral : which==='gf'?kindLabelGrammar : kindLabel;
+  const kindBadge = k => `<span class="lvl ${k==='overflag'||k==='other'?'lvl-note':k==='mismeaning'?'lvl-warn':'lvl-error'}">${esc(kindLabels[k] || k || '?')}</span>`;
   // 决策行（仅 word flags 的 open 条目）：status + definition 来源 + Accept/Reject
   const decideRow = f => {
     const id = `wf-d-${f.number}`;
@@ -978,21 +1003,31 @@ async function loadFlagsView(which){
   const row = f => `
     <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px;opacity:.6">
       <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
+      ${f.rule?`<span class="lvl lvl-warn">${esc(f.rule)}</span>`:''}
       <span class="lvl lvl-note">closed</span>
       <span style="font-size:11px;color:#5d6977">#${f.number}${f.closed_at?' · closed '+esc(f.closed_at.slice(0,10)):''}</span>
       <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
     </div>`;
+  // gf/genf 的 open 卡片：与 word flags decideRow 同构——大标题行（target +
+  // kind 徽章 + rule 徽章）+ reporter 说明块 + 元信息行 + 动作区。
+  const flagRow = f => `
+    <div style="border:1px solid #dbe1e7;border-radius:8px;padding:12px 14px;margin:8px 0;font-size:13px">
+      <div>
+        <b style="font-size:15px">${esc(f.target)}</b> ${kindBadge(f.kind)}
+        ${f.rule?`<span class="lvl lvl-warn" title="the reported rule">${esc(f.rule)}</span>`:''}
+        <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}</span>
+        <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
+      </div>
+      ${f.user_note && f.user_note !== '-' ? `<div style="font-size:12px;color:#526273;margin:6px 0 0">reporter: ${esc(f.user_note.slice(0,300))}</div>` : ''}
+      ${which==='gf' ? `
+      <div style="display:flex;gap:9px;margin-top:10px">
+        ${f.rule&&/^RB-\d+$/i.test(f.rule)?`<button class="act primary" data-enhance-rule="${esc(f.rule)}">Enhance this rule</button>`:''}
+        <button class="act" data-close-issue="${esc(f.url)}" data-number="${esc(f.number)}">Reject — close on GitHub</button>
+      </div>` : ''}
+    </div>`;
   list.innerHTML =
     (open.length
-      ? (which==='wf' ? open.map(decideRow).join('') : open.map(f=>`
-        <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px">
-          <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
-          ${f.rule?`<span class="lvl lvl-warn" title="the reported rule">${esc(f.rule)}</span>`:''}
-          <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}</span>
-          <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
-          ${which==='gf'&&f.rule&&/^RB-\d+$/i.test(f.rule)?`<button class="act" data-enhance-rule="${esc(f.rule)}" style="font-size:11.5px;padding:2px 10px;margin-left:6px">Enhance this rule</button>`:''}
-          ${f.user_note && f.user_note !== '-' ? `<div style="font-size:12px;color:#526273;margin:5px 0 0">${esc(f.user_note.slice(0,300))}</div>`:''}
-        </div>`).join(''))
+      ? (which==='wf' ? open.map(decideRow).join('') : open.map(flagRow).join(''))
       : '<p class="sub" style="margin:0">No open flags.</p>')
     + (showClosed && closed.length
         ? `<div class="bmc-sec-title">Closed</div>` + closed.map(row).join('')
@@ -1011,6 +1046,18 @@ async function loadFlagsView(which){
     showCfgDetail(v);
     const enhanceBtn = document.querySelector('[data-op="enhance"]');
     if (enhanceBtn) enhanceBtn.click();
+  });
+  // gf/genf 的 Reject：直接在 GitHub 关 issue（无本地副作用——这俩 scope
+  // 没有 override 可写，处理动作就是关单或 enhance）
+  list.querySelectorAll('[data-close-issue]').forEach(btn => btn.onclick = async () => {
+    if (!await openConfirm({title:`Close issue #${btn.dataset.number}?`,
+      sub:'The issue is closed on GitHub. No local change is made.',confirmText:'Close issue'})) return;
+    btn.disabled = true; btn.textContent = '…';
+    try{
+      await request('/api/flags/close',{url:btn.dataset.closeIssue});
+      msg.innerHTML=`<span class="ok">✓ issue #${esc(btn.dataset.number)} closed</span>`;
+      loadFlagsView(which);
+    }catch(e){ btn.disabled=false; btn.textContent='Reject — close on GitHub'; msg.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>'; }
   });
   if (which==='wf') {
    // Accept / Reject（definition 已预填在 textarea，admin 自由编辑）
@@ -1048,8 +1095,23 @@ $('#wf-show-closed').onclick=()=>{
   loadFlagsView('wf');
 };
 $('#btn-wf-load').onclick=()=>loadFlagsView('wf');
+// Grammar / General flags：同款 toolbar 的 pill / closed toggle / ⟳
+document.querySelectorAll('#tab-grammarflags .wf-pill').forEach(pill => pill.onclick=()=>{
+  document.querySelectorAll('#tab-grammarflags .wf-pill').forEach(x => x.classList.toggle('wf-pill-active', x===pill));
+  loadFlagsView('gf');
+});
+$('#gf-show-closed').onclick=()=>{
+  $('#gf-show-closed').classList.toggle('on');
+  loadFlagsView('gf');
+};
 $('#btn-gf-load').onclick=()=>loadFlagsView('gf');
+document.querySelectorAll('#tab-generalflags .wf-pill').forEach(pill => pill.onclick=()=>{
+  document.querySelectorAll('#tab-generalflags .wf-pill').forEach(x => x.classList.toggle('wf-pill-active', x===pill));
+  loadFlagsView('genf');
+});
+$('#genf-show-closed').onclick=()=>{
+  $('#genf-show-closed').classList.toggle('on');
+  loadFlagsView('genf');
+};
 $('#btn-genf-load').onclick=()=>loadFlagsView('genf');
-$('#gf-show-closed').onchange=()=>loadFlagsView('gf');
-$('#genf-show-closed').onchange=()=>loadFlagsView('genf');
 </script></body></html>

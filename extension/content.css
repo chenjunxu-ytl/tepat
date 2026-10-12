@@ -90,9 +90,11 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #3b82f6;
-  box-shadow: 0 0 0 3px #dbeafe;
+  background: #ef4444;  /* 默认红 = server 未连接；health 探测成功加 .ok 变绿 */
+  box-shadow: 0 0 0 3px #fee2e2;
+  transition: all .25s ease;
 }
+.bmc-brand-dot.ok { background: #22c55e; box-shadow: 0 0 0 3px #dcfce7; }
 
 /* 头部操作区 */
 .bmc-head-controls {
@@ -652,6 +654,34 @@
 }
 .bmc-toast-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.15); }
 
+
+/* ── 命中卡片右上角 icon 按钮组（evidence / PRPM / search / wrong-flag）── */
+.bmc-item { position: relative; }
+/* z-index: .bmc-item-main 无定位但盒子横跨全卡片（DOM 又在 corner 之后），
+   同层叠序下会抢走 icon 区域的 hover——只有 button 边缘像素可 hover。 */
+.bmc-item-corner { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; align-items: center; z-index: 2; }
+.bmc-item-corner button, .bmc-item-corner a {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; cursor: pointer;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: #64748b; text-decoration: none;
+}
+.bmc-item-corner button:hover, .bmc-item-corner a:hover { background: rgba(100,116,139,.12); }
+.bmc-item-corner .bmc-wrong-btn { color: #b45309; }
+.bmc-item-corner .bmc-wrong-btn:hover { background: rgba(180,83,9,.12); }
+.bmc-item-corner .bmc-evidence-btn, .bmc-item-corner .bmc-kamus-btn, .bmc-item-corner .bmc-search-link { color: inherit; }
+/* data-tip 即时 tooltip：hover 0.1s 出现，不依赖原生 title 的 1s 延迟 */
+.bmc-item-corner [data-tip] { position: relative; }
+.bmc-item-corner [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 6px); right: 0;
+  white-space: nowrap; font-size: 11px; font-weight: 500;
+  padding: 4px 8px; border-radius: 6px;
+  background: #1e293b; color: #f1f5f9;
+  opacity: 0; pointer-events: none;
+  transition: opacity .1s ease .1s; z-index: 10;
+}
+.bmc-item-corner [data-tip]:hover::after { opacity: 1; }
 
 .bmc-evidence-btn{font-size:12px;padding:4px 8px;cursor:pointer;border:1px solid #64748b;border-radius:5px;background:transparent;color:inherit}
 .bmc-wrong-btn{font-size:12px;padding:4px 8px;cursor:pointer;border:1px solid #b45309;border-radius:5px;background:transparent;color:#b45309}

@@ -123,6 +123,10 @@ def _decide_admin_machine() -> bool:
 
 IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
+# server 版本（用户裁决 2026-10-12）：与 extension manifest / release tag 同步
+# 递增——/api/extension-update 对比它和 latest release，提示用户换新 exe。
+SERVER_VERSION = "0.3.0"
+
 
 # llm_judge 规则的 LLM 判决函数（注入 checker，2026-10-10 用户裁决：更难的
 # 规则——词序/句排列等 regex 表达不了的语言点由 agent 跑）。LLM 没配置时
@@ -418,7 +422,8 @@ def _gh_open_word_flag(word: str, scope: str, kind: str, status: str,
             f"**flagged_at:** {int(time.time())}\n"
             + "\n\n_Auto-filed by Tepat extension._")
     return _gh_create_issue(title[:120], body,
-                            ["word-flag", f"flag:{scope}", f"flag:{scope}:{kind}"])
+                            ["word-flag", f"flag:{scope}", f"flag:{scope}:{kind}"],
+                            dedupe=True)
 
 
 def _gh_closed_flag_issues() -> list[str]:
@@ -555,13 +560,33 @@ def _gh_close_issue(issue_url: str) -> None:
             raise RuntimeError(f"close failed: HTTP {resp.status}")
 
 
-def _gh_create_issue(title: str, body: str, labels: list[str]) -> str:
-    """GitHub 开 Issue 的公共实现（proposal / word flag 共用）。"""
+def _gh_create_issue(title: str, body: str, labels: list[str],
+                     dedupe: bool = False) -> str:
+    """GitHub 开 Issue 的公共实现（proposal / word flag 共用）。
+    dedupe=True（flag 通道，用户裁决 2026-10-12）：同一 target 的 flag 允许
+    多人/多次提交（理由可能不同）——open issues 里有同 title 的就不重复开单，
+    改为往那条 issue 追加本次理由的评论，审核台看到的是一个 issue 下多条意见。"""
     import urllib.error as _ue
     import urllib.request as _rq
     token = _gh_token()
     if not token:
         raise RuntimeError("no GitHub token configured (%APPDATA%\\tepat\\gh_token)")
+    if dedupe:
+        try:
+            q = urllib.parse.quote(f'repo:{GH_PROPOSAL_REPO} is:issue is:open in:title "{title[:80]}"')
+            req = _rq.Request(
+                f"https://api.github.com/search/issues?q={q}",
+                headers={"Authorization": f"Bearer {token}",
+                         "Accept": "application/vnd.github+json"})
+            with _rq.urlopen(req, timeout=15) as resp:
+                items = json.loads(resp.read()).get("items", [])
+            for it in items:
+                if it.get("title", "") == title:
+                    _gh_comment_issue(it.get("html_url", ""),
+                                      f"**Another report** (same target):\n\n{body}")
+                    return it.get("html_url", "")
+        except (_ue.HTTPError, OSError) as e:
+            _log(f"[flag-dedupe] search failed, opening new issue: {e!r}")
     req = _rq.Request(
         f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/issues",
         data=json.dumps({"title": title, "body": body, "labels": labels}).encode(),
@@ -1539,6 +1564,7 @@ class Handler(BaseHTTPRequestHandler):
                              "source_counts": _checker.store.metadata["counts"] if _checker else {},
                              "config_warnings": _checker.config_warnings if _checker else [],
                              "admin": IS_ADMIN_MACHINE,
+                             "server_version": SERVER_VERSION,
                              "tray": tray_icon is not None})
         elif self.path == "/api/extension-update":
             # 扩展更新检测（2026-10-09 用户裁决）：浏览器安全模型不允许网页
@@ -1558,7 +1584,8 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, json.JSONDecodeError):
                 pass
             out = {"local_version": local, "latest_version": None,
-                   "update_available": False, "release_url": None, "error": None}
+                   "update_available": False, "release_url": None, "error": None,
+                   "server_version": SERVER_VERSION, "server_update_available": False}
             try:
                 req = urllib.request.Request(
                     f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/releases/latest",
@@ -1569,9 +1596,12 @@ class Handler(BaseHTTPRequestHandler):
                 out["latest_version"] = latest
                 out["release_url"] = rel.get("html_url")
                 out["update_available"] = bool(latest) and latest != local
+                # server 本体（exe）也对比 latest release——规则/词表本来
+                # 就热更，这里只关心 server 代码变化（端点/逻辑）需要换 exe 的场景
+                out["server_update_available"] = bool(latest) and latest != SERVER_VERSION
                 out["assets"] = [{"name": a.get("name"), "url": a.get("browser_download_url")}
                                  for a in rel.get("assets", [])
-                                 if a.get("name", "").endswith((".zip",))]
+                                 if a.get("name", "").endswith((".zip", ".exe"))]
             except OSError as e:
                 out["error"] = str(e)
             _ext_update_cache, _ext_update_at = out, now
@@ -2376,6 +2406,37 @@ class Handler(BaseHTTPRequestHandler):
                              "self_test": mismatches or "pass",
                              "github_issue": gh_url or None,
                              "github_error": gh_error})
+        elif self.path == "/api/flags/close":
+            # 关 flag issue（admin，用户裁决 2026-10-12）：grammar/general flag
+            # 没有 override 可写，处理动作就是关单（enhance 走另一个入口）。
+            # url 必须是本 repo 的 issue 链接——防误关其他 repo。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            url = str(req.get("url") or "").strip()
+            m = re.match(r"https://github\.com/([^/]+/[^/]+)/issues/(\d+)$", url)
+            if not m or m.group(1) != GH_PROPOSAL_REPO:
+                self._json(400, {"error": "url must be an issue link of this repo"})
+                return
+            import urllib.request as _rq
+            token = _gh_token()
+            if not token:
+                self._json(502, {"error": "no GitHub token configured"})
+                return
+            req_gh = _rq.Request(
+                f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/issues/{m.group(2)}",
+                data=json.dumps({"state": "closed"}).encode(), method="PATCH",
+                headers={"Authorization": f"Bearer {token}",
+                         "Accept": "application/vnd.github+json",
+                         "Content-Type": "application/json"})
+            try:
+                with _rq.urlopen(req_gh, timeout=15) as resp:
+                    state = json.loads(resp.read()).get("state", "")
+            except Exception as e:  # noqa: BLE001
+                self._json(502, {"error": f"GitHub close failed: {e}"})
+                return
+            _log(f"[flags] closed issue #{m.group(2)} via review console")
+            self._json(200, {"ok": True, "state": state, "number": int(m.group(2))})
         elif self.path == "/api/flag":
             # 词级 flag（用户裁决 2026-10-08）：免 token 反馈通道。
             # scope 区分 prpm（词）/ grammar（短语/规则命中）/ general

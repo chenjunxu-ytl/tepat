@@ -10,6 +10,28 @@ fetch(API + '/api/health')
   })
   .catch(() => { /* dot stays red */ });
 
+// ── update 按钮（用户裁决 2026-10-12）：popup 打开时问 server 有没有新
+// release（/api/extension-update，server 端 60s 缓存）。extension 或 server
+// 有新版 → 最左侧脉冲下载 icon → 点击开 release 页（浏览器不允许网页代点
+// chrome://extensions 的刷新，装包/重载仍需手动）。title 带版本对比。
+fetch(API + '/api/extension-update')
+  .then((r) => r.json())
+  .then((r) => {
+    const what = [];
+    if (r.update_available) what.push(`extension ${r.local_version || '?'} → ${r.latest_version}`);
+    if (r.server_update_available) what.push(`server ${r.server_version || '?'} → ${r.latest_version}`);
+    if (!what.length) return;
+    const btn = $('#opt-update');
+    if (!btn) return;
+    btn.classList.add('show');
+    btn.title = `Update available: ${what.join(' · ')} — click to open the release`;
+    btn.onclick = () => {
+      chrome.tabs.create({ url: r.release_url || `https://github.com/chenjunxu-ytl/tepat/releases` });
+      window.close();
+    };
+  })
+  .catch(() => { /* server 没跑/端点失败 → 不显示按钮 */ });
+
 // 获取当前活动标签页并发送指令（若页面未注入 content script 则自动注入后发送）
 async function sendToActiveTab(msg) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
