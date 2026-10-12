@@ -13,6 +13,7 @@ python -m PyInstaller --onedir --noconsole --noconfirm --name tepat-v2 ^
   --icon assets\icon.ico ^
   --add-data "web;web" ^
   --add-data "extension\results.js;extension" ^
+  --add-data "extension\manifest.json;extension" ^
   --add-data "assets;assets" ^
   server.py
 if errorlevel 1 exit /b 1

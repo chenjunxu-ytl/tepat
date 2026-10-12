@@ -1576,11 +1576,14 @@ class Handler(BaseHTTPRequestHandler):
             if _ext_update_cache is not None and now - _ext_update_at < 60:
                 self._json(200, _ext_update_cache)
                 return
-            local = ""
+            # fallback = SERVER_VERSION：manifest 读不到（0.4.0 exe 未打包
+            # manifest → local 空 → 永远误报有更新，2026-10-12 实测）。exe 与
+            # 扩展同发版，SERVER_VERSION 是可靠近似。
+            local = SERVER_VERSION
             try:
                 local = json.loads(Path(os.path.join(
                     _ROOT, "extension", "manifest.json")).read_text(
-                    encoding="utf-8")).get("version", "")
+                    encoding="utf-8")).get("version") or SERVER_VERSION
             except (OSError, json.JSONDecodeError):
                 pass
             out = {"local_version": local, "latest_version": None,
