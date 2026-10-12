@@ -857,37 +857,46 @@ async function loadEnv(){
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
   Object.assign(ENV_KEYS_DOC, r.key_docs||{});
   const isAdmin=!!r.admin;
-  // 工具按钮：编辑功能只给 admin
-  $('#btn-env-add').style.display=isAdmin?'':'none';
-  $('#btn-env-save').style.display=isAdmin?'':'none';
+  const locked=new Set(r.locked_keys||[]);
+  $('#btn-env-add').style.display='';
+  $('#btn-env-save').style.display='';
   const box=$('#env-rows');box.replaceChildren();envRows.length=0;
-  if(isAdmin){
-   // admin 编辑器：.env 原文拆行（与旧实现一致）
-   let pendingComments='';
-   const lines=(r.content||'').split('\n');
-   if(lines.length && lines[lines.length-1]==='') lines.pop();
-   for(const line of lines){
-     const t=line.trim();
-     if(!t || t.startsWith('#')){ pendingComments+=line+'\n'; continue; }
-     const i=t.indexOf('=');
-     const key=i>0?t.slice(0,i).trim():t, value=i>0?t.slice(i+1).trim():'';
-     envRows.push({key,value,comments:pendingComments});
-     pendingComments='';
-   }
-   if(pendingComments) envRows.push({key:'',value:'',comments:pendingComments});
-   for(const row of envRows){
-     box.insertAdjacentHTML('beforeend', envRowHtml(row.key,row.value,false,row.comments));
-   }
-   bindEnvRowEvents(box);
-  }else{
-   // user 视图：每个 server 认识的 key 一行——set/unset + 说明，无值
-   const set=r.keys_set||{};
-   box.innerHTML=Object.entries(ENV_KEYS_DOC).map(([k,doc])=>`
-    <div class="wl-kv"><b>${esc(k)}</b>
-      <span>${set[k]?'<span class="ok">✓ set</span>':'<span class="bad">✗ not set</span>'} — ${esc(doc)}</span></div>`).join('')
-    +`<div class="wl-kv" style="border:none"><b>.env</b><span>${r.exists?'exists':'not created yet'} — ${esc(r.path)}</span></div>`;
+  // user 与 admin 同款编辑器（2026-10-12 用户裁决：user 也能配置自己机器的
+  // LLM/GH/auto-sync）；差异只在 locked key 行——user 视图里 admin token 行
+  // 值为空且只读（server 端保存时也会强制保留磁盘原值，双保险）。
+  let pendingComments='';
+  const lines=(r.content||'').split('\n');
+  if(lines.length && lines[lines.length-1]==='') lines.pop();
+  for(const line of lines){
+    const t=line.trim();
+    if(!t || t.startsWith('#')){ pendingComments+=line+'\n'; continue; }
+    const i=t.indexOf('=');
+    const key=i>0?t.slice(0,i).trim():t, value=i>0?t.slice(i+1).trim():'';
+    envRows.push({key,value,comments:pendingComments,locked:locked.has(key)&&!isAdmin});
+    pendingComments='';
   }
-  $('#env-msg').innerHTML='<span class="ok">✓ loaded</span>';
+  if(pendingComments) envRows.push({key:'',value:'',comments:pendingComments});
+  for(const row of envRows){
+    box.insertAdjacentHTML('beforeend', envRowHtml(row.key,row.value,false,row.comments));
+    if(row.locked){
+      const el=box.lastElementChild;
+      el.querySelector('.env-value').readOnly=true;
+      el.querySelector('.env-value').title='set by the admin of this machine — not editable here';
+      el.querySelector('.env-del').style.display='none';
+      el.style.opacity='.75';
+    }
+  }
+  bindEnvRowEvents(box);
+  if(!r.exists){
+    // 还没有 .env：给 user 一排可填的空行（server 认识的 key）
+    for(const k of Object.keys(ENV_KEYS_DOC)){
+      if(locked.has(k)) continue;
+      box.insertAdjacentHTML('beforeend', envRowHtml(k,'',true));
+    }
+    bindEnvRowEvents(box);
+  }
+  $('#env-msg').innerHTML='<span class="ok">✓ loaded</span>'
+   +(locked.size&&!isAdmin?'<span style="color:#5d6977"> · admin-controlled keys are read-only</span>':'');
  }catch(e){$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
  loadExtUpdate();
 }

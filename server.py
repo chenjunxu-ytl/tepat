@@ -1642,6 +1642,20 @@ class Handler(BaseHTTPRequestHandler):
                        "admin": IS_ADMIN_MACHINE}
             if IS_ADMIN_MACHINE:
                 payload["content"] = content
+            else:
+                # user 视图（2026-10-12 用户裁决：user 也能配置自己的机器）：
+                # 非 admin key 的行原样给出（可编辑），admin key 的行只保留
+                # key 名（值是提权秘密，user 端不可见不可改）。admin key 是否
+                # set 已由 keys_set 表达。
+                user_lines = []
+                for line in content.splitlines():
+                    s = line.strip()
+                    if s.startswith("TEPAT_ADMIN_TOKEN="):
+                        user_lines.append("TEPAT_ADMIN_TOKEN=")
+                    else:
+                        user_lines.append(line)
+                payload["content"] = "\n".join(user_lines)
+                payload["locked_keys"] = ["TEPAT_ADMIN_TOKEN"]
             self._json(200, payload)
         elif self.path == "/api/config":
             # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
@@ -2698,14 +2712,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "accepted": rid,
                              "rules": len(rules_data["rules"])})
         elif self.path == "/api/env":
-            # Env tab 保存（admin 专属）：整文件覆盖写回磁盘 .env。
-            # 只写磁盘——进程内环境变量/IS_ADMIN_MACHINE 不动（改 admin token
-            # 需要"旧 token 撤权"效果，热应用反而违背启动时判定的初衷）；
-            # 下次重启 _load_dotenv 生效。TEPAT_ADMIN_TOKEN 的 hash 比对也
-            # 因此保持"改了 token → 重启后才切换 admin 身份"的干净语义。
-            if not IS_ADMIN_MACHINE:
-                self._json(403, {"error": "admin machine required"})
-                return
+            # Env tab 保存（2026-10-12 user 也可写）：整文件覆盖写回磁盘 .env。
+            # admin 专属的是 TEPAT_ADMIN_TOKEN（提权通道）——user 保存时该 key
+            # 的磁盘原值被强制保留（user 视图里它本来就是空值，直接写会清掉
+            # admin 的 token）。其余 key user 可自由配置（LLM/GH/auto-sync 是
+            # 每机器自己的事）。只写磁盘——进程内状态不动，重启生效。
             content = str(req.get("content") or "")
             if len(content) > 65536:
                 self._json(413, {"error": "env file too large (64KB limit)"})
@@ -2717,6 +2728,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": f"lines without '=': {bad[:3]}"})
                 return
             path = _env_path()
+            # user 权限护栏：TEPAT_ADMIN_TOKEN 行替换回磁盘原值（user 视图
+            # 看不到原值，直接采用提交值 = 静默清权）。admin 机器不受限。
+            if not IS_ADMIN_MACHINE:
+                try:
+                    disk_lines = Path(path).read_text(
+                        encoding="utf-8", errors="replace").splitlines()
+                except OSError:
+                    disk_lines = []
+                disk_admin = next((ln for ln in disk_lines
+                                   if ln.strip().startswith("TEPAT_ADMIN_TOKEN=")), None)
+                out_lines = []
+                submitted_admin = False
+                for ln in content.splitlines():
+                    if ln.strip().startswith("TEPAT_ADMIN_TOKEN="):
+                        submitted_admin = True
+                        if disk_admin is not None:
+                            out_lines.append(disk_admin)
+                        # 磁盘上本来就没有 admin token → 不写入（user 不能自授）
+                    else:
+                        out_lines.append(ln)
+                content = "\n".join(out_lines)
+                if submitted_admin and disk_admin is None:
+                    _log("[env] user save dropped TEPAT_ADMIN_TOKEN line "
+                         "(not set on this machine — only admin can set it)")
             # 写前备份同目录 .env.bak（一次滚动，够找回手误）。
             # 注意用字符串拼接：Path('.env').with_suffix() 对 dotfile 会得到
             # '.env.env.bak' 这种怪名。
@@ -2730,7 +2765,8 @@ class Handler(BaseHTTPRequestHandler):
             except OSError as e:
                 self._json(500, {"error": f"write failed: {e}"})
                 return
-            _log(f"[env] .env overwritten via web UI ({len(content)} chars) — restart to apply")
+            _log(f"[env] .env overwritten via web UI ({len(content)} chars), "
+                 f"admin={IS_ADMIN_MACHINE} — restart to apply")
             self._json(200, {"ok": True, "path": path, "bytes": len(content.encode('utf-8')),
                              "note": "restart tepat to apply changes"})
         else:
