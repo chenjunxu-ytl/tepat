@@ -349,6 +349,39 @@
     "suggestion": ""
    },
    "impl": "The regex matches four exact doubled-copula phrases (adalah merupakan, ialah merupakan, ialah ialah, adalah adalah) as contiguous word pairs, and also matches three cross-sentence double-conjunction patterns by searching for the first conjunction then any non-period characters then the second conjunction (tetapi…namun, namun…tetapi, walaupun…tetapi)."
+  },
+  {
+   "id": "RB-012",
+   "entry_id": "RB-012",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags plural markers (sebahagian, beberapa, para, semua, kebanyakan) directly followed by a reduplicated noun, which is redundant.",
+   "note": "Penanda jamak seperti 'beberapa', 'para', 'semua', 'sebahagian', dan 'kebanyakan' sudah menyatakan jamak. Tidak perlu ulang kata nama selepasnya. Contoh: 'beberapa orang' (bukan 'beberapa orang-orang').",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Beberapa buku-buku baharu telah tiba.",
+     "Para pelajar-pelajar berbaris.",
+     "Semua pelajar-pelajar dikehendaki hadir.",
+     "Sebahagian rumah-rumah itu telah roboh.",
+     "Kebanyakan guru-guru bersetuju dengan cadangan itu."
+    ],
+    "clear": [
+     "Beberapa buku baharu telah tiba.",
+     "Para pelajar berbaris.",
+     "Semua pelajar dikehendaki hadir.",
+     "Sebahagian rumah itu telah roboh.",
+     "Kebanyakan guru bersetuju dengan cadangan itu."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(sebahagian|beberapa|para|semua|kebanyakan)\\s+([A-Za-z]+)-\\2\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches any of the five plural markers followed by whitespace and a reduplicated noun (word-hyphen-same-word), capturing the noun in group 2 and back-referencing it to confirm exact reduplication. No exceptions are needed since the pattern is already narrow — it only fires on true reduplication, not on hyphenated compounds."
   }
  ],
  "ms_id_suffix_map": [
