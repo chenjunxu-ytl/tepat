@@ -650,7 +650,7 @@ Rules for the regex:
 - Use \\b word boundaries around words; keep the pattern as narrow as the examples justify.
 - exceptions patterns suppress matches inside their span — use them for legal contexts visible in clear examples.
 - If the distinction cannot be expressed by regex (word order, sentence structure, counting items, clause analysis), use the llm_judge form instead:
-  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "trigger": "<a NARROW python regex pre-filter — sentences must match this before the LLM is consulted, e.g. one required keyword or short phrase; keep it cheap and permissive (the judge refines, the trigger only gates)", "suggestion": "<replacement guidance or empty>"}. In that case "impl" describes both layers: 'Sentences matching the pre-filter regex are sent to the LLM with the criterion: <one-line summary>; LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent.'
+  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "trigger": "<a NARROW python regex pre-filter — sentences must match this before the LLM is consulted, e.g. one required keyword or short phrase; keep it cheap and permissive (the judge refines, the trigger only gates). OMIT trigger entirely only for sentence-structure rules that cannot name any keyword — those become deep-only rules, judged only when the user runs a deep check", "suggestion": "<replacement guidance or empty>"}. In that case "impl" describes both layers: 'Sentences matching the pre-filter regex are sent to the LLM with the criterion: <one-line summary>; LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent.'
   The judge runs sentence-by-sentence against an LLM; write it so that borderline sentences read as clear, not trigger.
 Spelling/conf guidance:
 - conf high = structural error with no legal context.
@@ -831,78 +831,7 @@ def _rule_words_for_prpm(text: str) -> list[str]:
 _TRIAL_DOWNGRADE = {"high": "medium", "medium": "low", "low": "low"}
 
 
-# ── Agent-assisted deep check（用户裁决 2026-10-10）──
-# 与 Rule Book 转译同构：LLM 单发、结构化输出、人类裁决。区别在输入输出——
-# 转译吃"人对语言现象的描述"产"规则"；assist 吃"人要检查的文章 + 确定性
-# 扫描结果 + PRPM 释义"产"针对这段文字的 findings"。产出不落盘、不直接
-# 展示给最终用户：前端逐条渲染，人确认/忽略。LLM 不从 0 创造——分析对象
-# 和最终裁决都是人给的。
-_ASSIST_SYSTEM = """You are the deep-analysis pass of a Malay language checker. The deterministic pass (word lists, regex rules) has already scanned the text and produced machine findings. Your job is ONE careful pass over the same text for what regex cannot see.
 
-You are given:
-- the text (Malay, possibly mixed with other languages),
-- the deterministic findings (word-list hits and rule hits with spans),
-- DBP dictionary definitions for some of the words.
-
-Find issues the deterministic pass missed, and assess the ones it raised. Look for: wrong word choice (bukan/tidak, dari/daripada, di/dia), agreement, clitic/form mismatch, register mixing (baku vs pasar), Indonesian-influenced vocabulary, awkward but grammatical phrasing, and anything a careful Malay editor would query.
-
-Rules of engagement:
-- Quote each finding's span EXACTLY as it appears in the text — the UI anchors on it.
-- "error" = clearly wrong in formal Malay. "warn" = questionable, context-dependent. "note" = editorial suggestion only.
-- Do NOT re-report a deterministic finding unless you disagree with it or have something to add; use assess to state your verdict on it.
-- Do not invent issues: if the text is clean, return an empty findings list — silence is a valid answer.
-- Facts, names and figures are out of scope.
-
-Output: ONE JSON object, no prose, exactly:
-{
- "findings": [
-  {"span": "<exact substring of the text>",
-   "level": "error|warn|note",
-   "kind": "grammar|word-choice|register|style",
-   "note": "<short Malay note for the user>",
-   "suggestion": "<replacement or empty>",
-   "assesses": null
-  }
- ],
- "summary": "<one sentence in Malay: overall state of the text>"
-}
-"assesses" is set to the origin string of a deterministic finding (e.g. "RB-001" or "indo:dokter") when your item is a verdict on that finding; null for new discoveries. The server checks every span against the text and drops mismatches — quote exactly."""
-
-
-def _llm_deep_check(text: str, scan_issues: list, prpm_defs: dict) -> dict:
-    """agent-assisted 深检（单发）：text + 确定性 findings + PRPM 释义 →
-    结构化 findings。span 与原文不匹配的条目由 server 丢弃（不信任 LLM 的
-    定位）。LLM 未配置时抛 RuntimeError，端点转 503。"""
-    det = [{"span": i.get("span", ""), "level": i.get("level"),
-            "note": i.get("note", ""), "origin": i.get("origin")}
-           for i in scan_issues[:60]]
-    user = json.dumps({"text": text[:8000], "deterministic_findings": det,
-                       "prpm_definitions": prpm_defs}, ensure_ascii=False)
-    body = _llm_chat({"messages": [
-        {"role": "system", "content": _ASSIST_SYSTEM},
-        {"role": "user", "content": user}]})
-    content = (body.get("choices") or [{}])[0].get("message", {}).get("content", "")
-    m = re.search(r"\{[\s\S]*\}", content)
-    if not m:
-        raise ValueError("LLM returned no JSON object")
-    out = json.loads(m.group(0))
-    findings = []
-    for f in out.get("findings", []):
-        if not isinstance(f, dict):
-            continue
-        span = str(f.get("span") or "")
-        if not span or span not in text:  # 定位必须锚在原文上
-            continue
-        if f.get("level") not in ("error", "warn", "note"):
-            continue
-        findings.append({"span": span, "level": f["level"],
-                         "kind": str(f.get("kind") or "style")[:20],
-                         "note": str(f.get("note") or "")[:500],
-                         "suggestion": str(f.get("suggestion") or "")[:200],
-                         "assesses": f.get("assesses") or None})
-    return {"findings": findings,
-            "summary": str(out.get("summary") or "")[:300],
-            "dropped": max(0, len(out.get("findings", [])) - len(findings))}
 
 
 def _spawn_trial_rule(spec: dict, triggers: list[str], clears: list[str],
@@ -1073,7 +1002,7 @@ def word_exists(w: str) -> bool:
 # /api/scan 直接 503，但词表信号（indo/casual）只需要 indo_words.json +
 # 分词器——不依赖任何数据库。全页 Scan words 走这里；有 evidence 时
 # spelling/cold 通道仍由 /api/scan 提供（面板查询用）。
-def scan_words_lightweight(text: str, register: str = "formal") -> dict:
+def scan_words_lightweight(text: str, register: str = "formal", deep: bool = False) -> dict:
     """无 evidence.sqlite 的完整扫描降级通道（2026-10-09 用户裁决：evidence
     语料库抓不准且巨大，弃用——word/grammar 检查全部依赖 APPDATA 的规则
     文件（rules.json RB-* / indo_words.json）+ PRPM API）。
@@ -1128,7 +1057,7 @@ def scan_words_lightweight(text: str, register: str = "formal") -> dict:
             continue
         if rule.get("plugin") == "llm_judge":
             try:
-                _plugin_llm_judge(text[:30000], all_sents, rule, _add)
+                _plugin_llm_judge(text[:30000], all_sents, rule, _add, deep=deep)
             except Exception as e:  # noqa: BLE001
                 continue
             continue
@@ -1227,10 +1156,10 @@ def bigram_exists(a: str, b: str) -> bool:
     return bool(_checker and _checker.store.support(f"{normalize(a)} {normalize(b)}", 2))
 
 
-def scan(text: str, register: str = "formal") -> dict:
+def scan(text: str, register: str = "formal", deep: bool = False) -> dict:
     if _checker is None:
         raise RuntimeError("Evidence not loaded — call load_words() first")
-    return _checker.scan(text, register)
+    return _checker.scan(text, register, deep=deep)
 
 
 # ── PRPM 查询（简化版：hit / miss / unreachable 三态 + sqlite 缓存 + 串行限流）──
@@ -2054,37 +1983,42 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "action": action, "pushed": bool(pushed),
                              **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/assist":
-            # agent-assisted 深检（用户裁决 2026-10-10）：text → 先跑确定性
-            # 扫描，连同 PRPM 释义喂给 LLM 做深度分析。产出的 findings 不落盘
-            # ——前端逐条渲染给人裁决（确认成 flag / 忽略）。
-            text = str(req.get("text") or "").strip()[:8000]
+            # Deep scan（用户裁决 2026-10-12 重定义）：规则驱动，不是 LLM
+            # 自由分析。跑两遍 checker：
+            #   1) 常规 scan（regex + 带 trigger 预筛的 llm_judge）
+            #   2) deep scan（额外跑 deep-only 的 llm_judge——句型排列类，
+            #      无 trigger，判据仍是 rules.json 里人审过的数据）
+            # 返回合并 findings；deep-only 命中标 deep_only: true 供前端区分。
+            # 旧的自由分析通道（_ASSIST_SYSTEM 细读）已删——LLM 不在规则
+            # 之外发明 findings。
+            text = str(req.get("text") or "").strip()[:30000]
             register = str(req.get("register") or "formal")
             if not text:
                 self._json(400, {"error": "text required"})
                 return
-            if _checker is not None:
-                issues = scan(text, register).get("issues", [])
-            else:
-                issues = scan_words_lightweight(text, register).get("issues", [])
-            prpm_defs = {}
-            for w in _rule_words_for_prpm(text):
-                try:
-                    r = prpm_lookup(w)
-                    if r.get("status") == "hit" and r.get("definition"):
-                        prpm_defs[w] = r["definition"][:300]
-                except Exception:  # noqa: BLE001 — 释义失败不挡分析
-                    continue
             try:
-                out = _llm_deep_check(text, issues, prpm_defs)
-            except RuntimeError as e:
-                self._json(503, {"error": str(e)})
-                return
+                if _checker is not None:
+                    base = scan(text, register).get("issues", [])
+                    deep = scan(text, register, deep=True).get("issues", [])
+                else:  # rules+PRPM 模式：轻量通道（同款规则引擎，无 evidence 词级）
+                    base = scan_words_lightweight(text, register).get("issues", [])
+                    deep = scan_words_lightweight(text, register, deep=True).get("issues", [])
             except ValueError as e:
-                self._json(502, {"error": f"deep check failed: {e}"})
+                self._json(400, {"error": str(e)})
                 return
-            _log(f"[assist] {len(out['findings'])} findings "
-                 f"({out['dropped']} dropped, span mismatch) for {len(text)} chars")
-            self._json(200, {"ok": True, **out})
+            base_keys = {(i.get("start"), i.get("end"), i.get("origin"))
+                         for i in base}
+            findings = [dict(i) for i in base]
+            for i in deep:
+                k = (i.get("start"), i.get("end"), i.get("origin"))
+                if k not in base_keys:
+                    d = dict(i)
+                    d["deep_only"] = True
+                    findings.append(d)
+            _log(f"[assist] deep scan: {len(base)} base + "
+                 f"{len(findings) - len(base)} deep-only findings")
+            self._json(200, {"ok": True, "findings": findings,
+                             "engine": "rules-deep"})
         elif self.path == "/api/rules/translate":
             # LLM 转译入口（admin 发起，用户裁决 2026-10-09）：人类用自己的
             # 话描述语言现象（哪些用法错、哪些对，可夹例句），server 取 PRPM

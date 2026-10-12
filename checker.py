@@ -40,7 +40,7 @@ def _plugin_params(rule):
     return params
 
 
-def _plugin_ks02_antara(text, sents, rule, add):
+def _plugin_ks02_antara(text, sents, rule, add, deep=False):
     """KS-02 antara X dengan/dan：数并列项。2 项 + dan → error（该用 dengan）；
     ≥3 项 + dengan → warn（通常用 dan）。数法：antara 与 dan/dengan 之间按
     逗号和 'dan' 切分并列项（最后一项前的 dan 是连接词不算项）。
@@ -82,7 +82,7 @@ def _plugin_ks02_antara(text, sents, rule, add):
                     confidence='low')
 
 
-def _plugin_sa01_dangling(text, sents, rule, add):
+def _plugin_sa01_dangling(text, sents, rule, add, deep=False):
     """SA-01 dangling modifier：句首时间从句（temporal_openers）的动作发出者
     必须是主句主语。可判的确定形态：时间从句无主语（动词/分词开头），
     主句却是 di- 被动——从句动作没有发出者可挂，错。
@@ -115,7 +115,7 @@ def _plugin_sa01_dangling(text, sents, rule, add):
                 confidence=rule.get('conf', 'medium'))
 
 
-def _plugin_regex_match(text, sents, rule, add):
+def _plugin_regex_match(text, sents, rule, add, deep=False):
     """regex_match：通用正则规则执行器（用户裁决 2026-10-09：所有规则统一
     plugin 格式——regex 直判也是 plugin，pattern 随 rules.json 走 GitHub）。
     行为与旧 regex 通道逐字段一致（exceptions/noflag/register/entry_id
@@ -164,13 +164,13 @@ def set_llm_judge(fn):
     _llm_judge_fn = fn
 
 
-def _plugin_llm_judge(text, sents, rule, add):
+def _plugin_llm_judge(text, sents, rule, add, deep=False):
     """llm_judge：LLM 按规则的判据分类句子。params:
       judge（必需）——自然语言判据，说明什么算错什么算对；
-      trigger（可选，强烈建议）——regex 预筛（用户裁决 2026-10-12：不是
-      每句都跑 LLM——句子命中 trigger 才送判决，否则直接 clear。成本从
-      "每句一次 LLM" 降到 "含关键词的句子一次"。缺 trigger = 全句判决
-      （向后兼容老规则；deep scan 场景）；
+      trigger（可选）——regex 预筛。有 trigger：常规扫描就跑（句子命中
+      才送 LLM）。无 trigger：deep-only（用户裁决 2026-10-12）——句型
+      排列这类连预筛关键词都给不出的规则只在 deep scan 跑（deep=True
+      时执行器才调用它），常规扫描跳过，速度不受影响；
       例句用规则条目自己的 examples（trigger/clear），与 Rule Book 一致。
     产出：trigger 的整句标注（category/level 随规则 conf），note/suggestion
     用规则自己的字段。整句标注而非 span——LLM 定位不可信，句级锚定最稳。"""
@@ -180,10 +180,10 @@ def _plugin_llm_judge(text, sents, rule, add):
         raise ValueError(f"llm_judge rule {rule.get('id', '?')} missing params.judge")
     if _llm_judge_fn is None:
         return  # 机器没配 LLM——规则可用性由部署形态决定，跳过不报错
-    trigger_rx = None
     trigger_pat = str(params.get('trigger') or '').strip()
-    if trigger_pat:
-        trigger_rx = re.compile(trigger_pat, re.IGNORECASE)
+    if not trigger_pat and not deep:
+        return  # deep-only 规则：常规扫描不跑，deep scan 才逐句判决
+    trigger_rx = re.compile(trigger_pat, re.IGNORECASE) if trigger_pat else None
     ex = rule.get('examples') or {}
     judge_key = hashlib.sha256(
         json.dumps({'judge': judge, 'trigger': ex.get('trigger'),
@@ -499,11 +499,13 @@ class Checker:
         ranked = sorted(matches,key=lambda w:(-sum(s['doc_c'] for s in self.store.support(w) if s['source']!='wiki'),w))
         return ranked[:3]
 
-    def scan(self, text: str, register: str = 'formal') -> dict:
+    def scan(self, text: str, register: str = 'formal', deep: bool = False) -> dict:
         if register not in {'formal','informal'}:
             raise ValueError('register must be formal or informal')
         if len(text)>30000:
             raise ValueError('Maximum 30,000 characters per scan')
+        # deep=True：deep-only 的 llm_judge 规则（无 trigger 预筛——句型排列
+        # 类）也逐句判决；常规扫描跳过它们（用户裁决 2026-10-12）。
         started=time.monotonic()
         issues=[]; lexical=[]; sent_results=[]; rule_hits=[]; indo_hits=[]; cold=[]
         def add(category, level, start, end, note, origin, *, suggestion='', evidence=None,
@@ -544,7 +546,7 @@ class Checker:
                 continue
             before=len(rule_hits)
             try:
-                fn(text, all_sentences, rule, add)
+                fn(text, all_sentences, rule, add, deep=deep)
             except Exception as e:  # noqa: BLE001 — plugin 崩不能带垮整个 scan
                 self.config_warnings.append(f"plugin {rule.get('plugin')}: {e!r}")
                 continue

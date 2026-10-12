@@ -406,28 +406,31 @@ $('#btn-check').onclick=async()=>{
  }catch(e){if(current===generation)$('#output').textContent=e.message;}finally{$('#btn-check').disabled=false;}
 };
 $('#btn-clear').onclick=()=>{generation++;$('#input').value='';$('#text-result').replaceChildren();$('#output').textContent='Results will appear here.';$('#assist-card').style.display='none';};
-// ── Agent-assisted deep check（2026-10-10）：同一段文字的 LLM 深度分析 ──
+// ── Deep check（2026-10-12 重定义：规则驱动）──常规 scan 之上跑 deep-only
+// 的 llm_judge 规则（句型排列类，无 regex 预筛）。findings 与 scan issues
+// 同结构；deep_only: true 的条目是只有 deep scan 才抓到的规则命中。
 $('#btn-assist').onclick=async()=>{
  const text=$('#input').value.trim();if(!text)return;
  const btn=$('#btn-assist');btn.disabled=true;
- $('#assist-msg').textContent='The agent is reading…';
+ $('#assist-msg').textContent='Running the deep rules…';
  $('#assist-body').replaceChildren();
  try{
   const r=await request('/api/assist',{text,register:$('#register').value});
   const box=$('#assist-body');
-  $('#assist-msg').innerHTML=`<span class="ok">✓ ${r.findings.length} findings${r.dropped?` · ${r.dropped} dropped (span mismatch)`:''}${r.summary?` — ${esc(r.summary)}`:''}</span>`;
+  const deepOnly=r.findings.filter(f=>f.deep_only);
+  $('#assist-msg').innerHTML=`<span class="ok">✓ ${r.findings.length} findings · ${deepOnly.length} from deep-only rules</span>`;
   if(!r.findings.length){
-   box.innerHTML='<p class="sub" style="margin:0">No additional issues found — the agent agrees the text is clean at this level.</p>';
+   box.innerHTML='<p class="sub" style="margin:0">No issues found — the rules (including the deep-only sentence-structure rules) are clean on this text.</p>';
    return;
   }
-  const lvlCls={error:'lvl-error',warn:'lvl-warn',note:'lvl-note'};
-  const lvlTxt={error:'error',warn:'warn',note:'note'};
+  const lvlCls={error:'lvl-error',warning:'lvl-warn',info:'lvl-note'};
+  const lvlTxt={error:'error',warning:'warn',info:'note'};
   box.innerHTML=r.findings.map((f,i)=>`
-   <div class="assist-item" data-i="${i}" style="border:1px solid #dbe1e7;border-radius:8px;padding:10px 12px;margin:7px 0;font-size:13px">
+   <div class="assist-item" data-i="${i}" style="border:1px solid #dbe1e7;border-radius:8px;padding:10px 12px;margin:7px 0;font-size:13px${f.deep_only?';background:#f0f7ff':''}">
     <div><span class="lvl ${lvlCls[f.level]||'lvl-note'}">${esc(lvlTxt[f.level]||f.level)}</span>
-     <span class="lvl lvl-note">${esc(f.kind)}</span>
-     <b>${esc(f.span)}</b>${f.suggestion?` <span style="color:#256b58">→ <b>${esc(f.suggestion)}</b></span>`:''}
-     ${f.assesses?`<span class="sub" style="font-size:11px"> · assesses ${esc(f.assesses)}</span>`:''}</div>
+     <span class="lvl lvl-warn">${esc(f.origin)}</span>
+     ${f.deep_only?'<span class="lvl lvl-note" title="only the deep check catches this rule">deep</span>':''}
+     <b>${esc(f.span)}</b>${f.suggestion?` <span style="color:#256b58">→ <b>${esc(f.suggestion)}</b></span>`:''}</div>
     <div style="font-size:12px;color:#526273;margin-top:4px">${esc(f.note)}</div>
    </div>`).join('');
  }catch(e){$('#assist-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}

@@ -911,7 +911,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       panelBody().appendChild(deep);
       deep.onclick = async () => {
         deep.disabled = true;
-        deep.textContent = 'The agent is reading…';
+        deep.textContent = 'Running the deep rules…';
         try {
           const r = await fetch(`${API}/api/assist`, {
             method: 'POST',
@@ -942,33 +942,33 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }
   }
 
-  // deep check findings → 卡片 HTML（与检查结果同款结构；level 映射到
-  // bmc-item 的配色 class）
+  // deep check findings → 卡片 HTML。findings 是 scan issues 同结构
+  // （2026-10-12 重定义：规则驱动——deep-only llm_judge 的命中 + 常规命中
+  // 合并）；deep_only: true 的条目标 "deep" 徽章。
   function renderDeepFindings(r) {
     const findings = r.findings || [];
     if (!findings.length) {
-      return `<div class="bmc-clean-box"><b>No further issues found.</b>
-        <div>The deep pass found nothing beyond the scan above.</div></div>`;
+      return `<div class="bmc-clean-box"><b>No issues found.</b>
+        <div>The rules — including the deep-only sentence-structure rules — are clean on this text.</div></div>`;
     }
-    const cls = { error: 'miss', warning: 'warn', note: 'info' };
+    const cls = { error: 'miss', warning: 'warn', info: 'info' };
     const title = { error: 'Specific rules', warning: 'Needs review', info: 'Needs context' };
-    const byLevel = { error: [], warning: [], note: [] };
+    const byLevel = { error: [], warning: [], info: [] };
     for (const f of findings) byLevel[f.level]?.push(f);
-    let html = `<div class="bmc-sec-title">Deep check — ${findings.length} finding${findings.length > 1 ? 's' : ''}</div>`;
-    for (const level of ['error', 'warning', 'note']) {
+    const deepOnly = findings.filter(f => f.deep_only).length;
+    let html = `<div class="bmc-sec-title">Deep check — ${findings.length} finding${findings.length > 1 ? 's' : ''}${deepOnly ? ` · ${deepOnly} deep-only` : ''}</div>`;
+    for (const level of ['error', 'warning', 'info']) {
       if (!byLevel[level].length) continue;
       html += `<div class="bmc-sec-title" style="font-size:11px">${title[level]}</div>`;
       for (const f of byLevel[level]) {
-        const tag = f.assesses
-          ? `<span class="bmc-tag" title="verdict on the deterministic finding '${esc(String(f.assesses))}'">assesses ${esc(String(f.assesses))}</span> `
-          : (f.kind ? `<span class="bmc-tag">${esc(f.kind)}</span> ` : '');
-        html += `<div class="bmc-item bmc-item-${cls[level]}">
-          <div class="bmc-item-main"><div>${tag}<b>${esc(f.span)}</b>${f.suggestion ? ` <span class="bmc-arrow">→</span> <b class="bmc-sug">${esc(f.suggestion)}</b>` : ''}</div></div>
+        const tag = f.origin ? `<span class="bmc-tag">${esc(f.origin)}</span> ` : '';
+        const deepBadge = f.deep_only ? `<span class="bmc-tag" style="color:#2563eb" title="only the deep check catches this rule">deep</span> ` : '';
+        html += `<div class="bmc-item bmc-item-${cls[level]}${f.deep_only ? '" style="background:#f0f7ff' : ''}">
+          <div class="bmc-item-main"><div>${tag}${deepBadge}<b>${esc(f.span)}</b>${f.suggestion ? ` <span class="bmc-arrow">→</span> <b class="bmc-sug">${esc(f.suggestion)}</b>` : ''}</div></div>
           <div class="bmc-${cls[level]}-note">${esc(f.note)}</div>
         </div>`;
       }
     }
-    if (r.summary) html += `<div class="bmc-foot">${esc(r.summary)}</div>`;
     return html;
   }
 
