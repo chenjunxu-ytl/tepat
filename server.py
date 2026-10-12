@@ -83,7 +83,7 @@ ENV_KEY_DEFAULTS = {
     "TEPAT_GH_BRANCH": "main",
     "TEPAT_AUTO_SYNC": "1",
     "TEPAT_LLM_URL": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    "TEPAT_LLM_MODEL": "glm-4.7",
+    "TEPAT_LLM_MODEL": "glm-5.2",
 }
 
 
@@ -616,7 +616,7 @@ def _gh_create_issue(title: str, body: str, labels: list[str],
 # 不减，每次纠正永久变成回归测试。API 配置走 .env（Env tab 可编辑）：
 #   TEPAT_LLM_URL   e.g. https://open.bigmodel.cn/api/paas/v4/chat/completions
 #   TEPAT_LLM_KEY   API key
-#   TEPAT_LLM_MODEL e.g. glm-4.7
+#   TEPAT_LLM_MODEL e.g. glm-5.2
 
 
 def _llm_config() -> tuple[str, str, str]:
