@@ -432,12 +432,12 @@
    "params": {
     "pattern": "\\byang mana\\b|\\bdi mana\\b",
     "exceptions": [
-     "(?is)\\bdi mana\\b[^.]*\\?",
-     "(?is)^[^.]*?\\bdi mana\\b"
+     "^di mana",
+     "[^.?]*\\bdi mana\\b(?=[^.]*\\?)"
     ],
-    "suggestion": ""
+    "suggestion": "yang"
    },
-   "impl": "The regex matches any occurrence of 'yang mana' or 'di mana'. Two exception patterns then suppress matches: one cancels any 'di mana' match when a question mark appears later in the same sentence, and the other cancels when 'di mana' appears at the start of the sentence (interrogative use). 'yang mana' matches are never suppressed.",
+   "impl": "The regex matches 'yang mana' anywhere, and 'di mana' except in two contexts: at the start of a sentence (a location question like 'Di mana kamu tinggal?') or anywhere in a sentence that ends with a question mark (e.g. 'Kamu tinggal di mana?'). Relative-conjunction uses ('Mesyuarat di mana keputusan dibuat...') are flagged. Embedded questions in statements ('Dia tanya di mana stesen.') are still flagged — only direct questions are exempt.",
    "enhanced_from": "RB-014"
   },
   {
