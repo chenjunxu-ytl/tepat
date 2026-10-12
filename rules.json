@@ -553,6 +553,35 @@
     "suggestion": "Gantikan 'dan' dengan 'dengan' apabila hanya dua perkara terlibat."
    },
    "impl": "Sentences matching the pre-filter regex (\\bantara\\b followed within 60 characters by \\bdan\\b) are sent to the LLM with the criterion: count items between 'antara' and 'dan'; flag only when exactly two items are joined by 'dan' instead of 'dengan', spare three-or-more-item lists. LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent."
+  },
+  {
+   "id": "RB-019",
+   "entry_id": "RB-019",
+   "plugin": "llm_judge",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags dangling-modifier sentences where a time/sequence clause with a passive di- verb is followed by a main clause whose subject is a person who could not logically be the actor of that passive action.",
+   "note": "Modifer tergantung: subjek klausa utama (manusia) bukan pelaku perbuatan pasif dalam klausa awal 'Setelah/Selepas/Semasa/Ketika di-'. Ubah susunan agar subjek sepadan dengan pelaku atau gunakan bentuk aktif.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Selepas dibersihkan, Ali tidur di bilik itu.",
+     "Semasa dibina rumah itu, dia belum lahir.",
+     "Setelah ditulis oleh guru, murid itu pulang ke rumah."
+    ],
+    "clear": [
+     "Selepas dibersihkan, bilik itu kelihatan cerah.",
+     "Setelah selesai tugasan, dia pulang.",
+     "Setelah selesaikan kerja, laporan ditulis oleh Ali."
+    ]
+   },
+   "params": {
+    "judge": "The sentence violates the rule ONLY IF all three conditions hold: (1) it begins with Setelah, Selepas, Semasa, or Ketika; (2) that opening clause contains a passive verb in the di- form (e.g. dibersihkan, dibina, ditulis); (3) the subject of the main clause (the noun phrase right after the comma, or the pronoun immediately after the comma) is a specific person or personal pronoun (Ali, dia, beliau, dia, etc.) who could NOT logically be the actor/agent of the passive verb — i.e. the person neither performed the action nor is the logical patient/theme of that passive verb. A sentence is FINE (clear, not a trigger) when the main-clause subject is the thing that was acted upon (e.g. 'bilik itu' after 'dibersihkan'), or when the opening clause uses an active verb, a bare verb, or an adjective (selesai, siap, bersih), or when the main-clause subject could plausibly be the actor. When in doubt, classify as clear.",
+    "trigger": "\\b(setelah|selepas|semasa|ketika)\\s+di\\w+",
+    "suggestion": ""
+   },
+   "impl": "Sentences matching the pre-filter regex (a time/sequence word directly followed by a di- verb) are sent to the LLM with the criterion: flag only when the main-clause subject is a person who could not logically be the actor of the passive verb; sentences without the pre-filter match are never sent."
   }
  ],
  "ms_id_suffix_map": [
