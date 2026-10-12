@@ -959,8 +959,11 @@ const safeStorageSet = (obj) => new Promise((res) => {
       if (!byLevel[level].length) continue;
       html += `<div class="bmc-sec-title" style="font-size:11px">${title[level]}</div>`;
       for (const f of byLevel[level]) {
+        const tag = f.assesses
+          ? `<span class="bmc-tag" title="verdict on the deterministic finding '${esc(String(f.assesses))}'">assesses ${esc(String(f.assesses))}</span> `
+          : (f.kind ? `<span class="bmc-tag">${esc(f.kind)}</span> ` : '');
         html += `<div class="bmc-item bmc-item-${cls[level]}">
-          <div class="bmc-item-main"><div>${f.assesses ? `<span class="bmc-tag">assesses ${esc(String(f.assesses))}</span>` : ''}<b>${esc(f.span)}</b>${f.suggestion ? ` <span class="bmc-arrow">→</span> <b class="bmc-sug">${esc(f.suggestion)}</b>` : ''}</div></div>
+          <div class="bmc-item-main"><div>${tag}<b>${esc(f.span)}</b>${f.suggestion ? ` <span class="bmc-arrow">→</span> <b class="bmc-sug">${esc(f.suggestion)}</b>` : ''}</div></div>
           <div class="bmc-${cls[level]}-note">${esc(f.note)}</div>
         </div>`;
       }
