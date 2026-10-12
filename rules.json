@@ -282,7 +282,8 @@
    },
    "params": {
     "judge": "Flag the sentence when the verb 'memberikan' is directly followed by a LIVING recipient — a person or animate being, including possessive clitic forms (anaknya, gurunya, rakan-rakan) and pronouns referring to people (mereka, kami). With a living recipient the correct form is plain 'memberi': 'Guru memberi pelajar sebuah buku.', 'Ibu memberi anaknya coklat.' Do NOT flag when 'memberikan' is followed by an inanimate thing (sumbangan, bantuan, nasihat, layanan, taklimat...) — that is correct: 'Dia memberikan sumbangan besar.' If the following noun's animacy is genuinely ambiguous, answer unsure. Example verdicts: 'Ibu memberikan anaknya coklat.' = trigger; 'Guru memberikan murid buku.' = trigger; 'Dia memberikan sumbangan besar.' = clear; 'Pihak syarikat memberikan taklimat kepada media.' = clear.",
-    "suggestion": "memberi"
+    "suggestion": "memberi",
+    "trigger": "\\bmemberikan\\b"
    },
    "impl": "Every sentence is sent to the LLM with this rule's criterion: flag 'memberikan' only when its direct object is a living recipient (person/animal, incl. -nya clitics and people-pronouns) where plain 'memberi' is required; 'memberikan' with an inanimate object (sumbangan/bantuan/nasihat...) is correct and must not be flagged; ambiguous animacy answers unsure (never flagged). Flagged sentences get a whole-sentence note (LLM span localisation is not trusted).",
    "enhanced_from": "RB-009"
