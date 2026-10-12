@@ -524,31 +524,6 @@
     "suggestion": "lepaskan"
    },
    "impl": "The regex matches the word 'lepas' followed by whitespace and any word, but uses a negative lookahead to skip common prepositional contexts ('lepas makan', 'lepas itu', 'lepas kami', etc.); the exceptions pattern additionally suppresses any match containing 'selepas'."
-  },
-  {
-   "id": "RB-018",
-   "entry_id": "RB-018",
-   "plugin": "regex_match",
-   "conf": "medium",
-   "conf_trial": "high",
-   "status": "trial",
-   "desc": "Flags adjective + 'sangat' order (e.g., 'murah sangat') instead of correct 'sangat' + adjective.",
-   "note": "Susunan yang betul ialah 'sangat' + kata sifat, bukan kata sifat + 'sangat'. Contoh: 'sangat murah', bukan 'murah sangat'.",
-   "source": "LLM-translated from human description (2026-10-12)",
-   "examples": {
-    "trigger": [
-     "Ini murah sangat sekali."
-    ],
-    "clear": [
-     "Ini sangat murah sekali."
-    ]
-   },
-   "params": {
-    "pattern": "\\b(murah|mahal|besar|kecil|tinggi|rendah|baik|buruk|cantik|hodoh|pandai|bodoh|lambat|cepat|lambat|sedih|gembira|marah|penat|lapar|kenyang|sedap|sedap|panas|sejuk|keras|lembut|berat|ringan|tebal|nipis|lebar|sempit|panjang|pendek|jauh|dekat|lama|baru|tua|muda|kaya|miskin|kuat|lemah|ramai|sedikit|banyak|sunyi|bising|kotor|bersih|terang|gelap|kering|basah|licin|kasar|tajam|tumpul|bulat|persegi|panas|sejuk|merah|putih|hitam|kuning|biru|hijau|comel|lawa|cantik|gemuk|kurus) sangat\\b",
-    "exceptions": [],
-    "suggestion": "sangat {adj}"
-   },
-   "impl": "The regex matches any of 75 listed common adjectives directly followed by 'sangat' (e.g., 'murah sangat'), flagging the wrong word order; correct order 'sangat' + adjective is never matched because the pattern requires the adjective to precede 'sangat'."
   }
  ],
  "ms_id_suffix_map": [
