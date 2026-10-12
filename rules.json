@@ -7,7 +7,8 @@
   "plugins": [
    "ks02_antara",
    "regex_match",
-   "sa01_dangling"
+   "sa01_dangling",
+   "llm_judge"
   ]
  },
  "rules": [
@@ -40,8 +41,8 @@
     ],
     "suggestion": "sangat \\1"
    },
-   "self_test_failures": [],
-   "enabled": true
+   "enabled": true,
+   "impl": "The regex matches any single word directly followed by 'sangat' (wrong order, e.g. 'murah sangat'), then cancels the match only when the NEXT word after 'sangat' is one of 60 listed common adjectives (murah, mahal, besar, …) — i.e. correct order ('sangat murah') is recognised by that list alone; an unlisted adjective in correct order (e.g. 'sangat lasak') is a known blind spot that this pattern will wrongly flag. Suggestion swaps the match to 'sangat <matched word>'. Exception: 'sangat sangat' is never flagged."
   },
   {
    "id": "RB-002",
@@ -71,7 +72,8 @@
    },
    "self_test_failures": [
     "judge flags clear sentence: Dia kebiasaannya datang awal."
-   ]
+   ],
+   "impl": "Every sentence is sent to the LLM with this rule's criterion: flag when 'kebiasaannya' appears mid-sentence AND directly follows a verb; sentences with 'kebiasaannya' at the start, or mid-sentence after a non-verb, must not be flagged. Flagged sentences get a whole-sentence note (LLM span localisation is not trusted)."
   }
  ],
  "ms_id_suffix_map": [
