@@ -526,6 +526,33 @@
     "suggestion": "lepaskan"
    },
    "impl": "The regex matches the word 'lepas' followed by whitespace and any word, but uses a negative lookahead to skip common prepositional contexts ('lepas makan', 'lepas itu', 'lepas kami', etc.); the exceptions pattern additionally suppresses any match containing 'selepas'."
+  },
+  {
+   "id": "RB-018",
+   "entry_id": "RB-018",
+   "plugin": "llm_judge",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags 'antara X dan Y' when exactly two coordinated items are joined by 'dan' instead of 'dengan'; spares lists of three or more items joined by 'dan'.",
+   "note": "Untuk dua perkara sahaja, gunakan 'antara X dengan Y'. Gunakan 'dan' hanya untuk tiga perkara atau lebih.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Persetujuan antara kerajaan dan syarikat itu ditandatangani.",
+     "Antara Malaysia dan Indonesia terdapat banyak persamaan budaya."
+    ],
+    "clear": [
+     "Persetujuan antara kerajaan dengan syarikat itu ditandatangani.",
+     "Antara Ali, Abu dan Ahmad, Ali paling tinggi."
+    ]
+   },
+   "params": {
+    "judge": "The sentence must contain the word 'antara' followed later by ' dan '. Count the coordinated items between 'antara' and that 'dan'. If there are exactly TWO items (no comma-separated list before 'dan'), it is a violation — 'dengan' should be used instead of 'dan'. If there are THREE OR MORE items (a comma-separated list like 'X, Y dan Z'), it is correct and must NOT be flagged. Only flag when 'antara' is used as a preposition meaning 'between/among' coordinating items, not when 'antara' appears in other contexts.",
+    "trigger": "\\bantara\\b.{1,60}?\\bdan\\b",
+    "suggestion": "Gantikan 'dan' dengan 'dengan' apabila hanya dua perkara terlibat."
+   },
+   "impl": "Sentences matching the pre-filter regex (\\bantara\\b followed within 60 characters by \\bdan\\b) are sent to the LLM with the criterion: count items between 'antara' and 'dan'; flag only when exactly two items are joined by 'dan' instead of 'dengan', spare three-or-more-item lists. LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent."
   }
  ],
  "ms_id_suffix_map": [
