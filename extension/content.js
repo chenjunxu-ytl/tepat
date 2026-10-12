@@ -872,6 +872,54 @@ const safeStorageSet = (obj) => new Promise((res) => {
 
   function renderCheck(r, text) {
     panelBody().innerHTML = TepatResults.html(r);
+    // 卡片点击 → 页面上高亮该命中片段（用户裁决 2026-10-12：不再整页
+    // scan 铺高亮——检查面板里点哪张卡，页面就亮哪段）。
+    panelBody().querySelectorAll('.bmc-item').forEach(item => {
+      item.style.cursor = 'pointer';
+      item.title = 'Click to highlight this on the page';
+      item.addEventListener('click', e => {
+        // 右上角 icon 按钮的点击不触发高亮（它们有自己的动作）
+        if (e.target.closest('.bmc-item-corner')) return;
+        const word = item.querySelector('b')?.textContent;
+        if (word) highlightOnPage(word);
+      });
+    });
+  }
+
+  // ── 点击卡片 → 页面高亮（替代整页 scan 铺高亮，2026-10-12 用户裁决）──
+  // 在可见文本里找 spanText 的确切出现位置，包 mark 高亮 + 滚动到视野。
+  // 旧的 activeHighlights/clearPageHighlights 机制复用——Clear highlights
+  // 按钮和新的 mark 都走同一套。
+  function highlightOnPage(spanText) {
+    clearPageHighlights();
+    const needle = spanText.trim();
+    if (!needle) return;
+    // 遍历可见文本节点，找完整包含 needle 的节点（跨节点切分不管——
+    // 命中 span 来自 server 的句子切片，绝大多数落单节点内）
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const v = node.nodeValue;
+        if (!v || !v.includes(needle)) return NodeFilter.FILTER_REJECT;
+        const p = node.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        if (['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','SELECT'].includes(p.tagName)) return NodeFilter.FILTER_REJECT;
+        if (p.closest('.bmc-panel, .bmc-toast')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const target = walker.nextNode();
+    if (!target) { showToast(`"${needle.slice(0,40)}" not found on the page — it may be split across elements.`, 4000); return; }
+    const parent = target.parentElement;
+    const idx = target.nodeValue.indexOf(needle);
+    const range = document.createRange();
+    range.setStart(target, idx);
+    range.setEnd(target, idx + needle.length);
+    const mark = document.createElement('mark');
+    mark.className = 'bmc-hl bmc-hl-focus';
+    mark.style.cssText = 'background:#fde047;box-shadow:0 0 0 2px #fde047;border-radius:2px;';
+    range.surroundContents(mark);
+    activeHighlights.push(mark);
+    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   // Local evidence 按钮已删（用户裁决 2026-10-12）：无 evidence 库的部署
@@ -981,43 +1029,39 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }
   }
 
-  // 全页扫描（用户裁决 2026-10-08）：kind = 'word'（词级：词典/词表信号）或
-  // 'grammar'（规则级：Rule Book 语法命中）。两种互相独立——扫一种就清掉
-  // 另一种的 highlight（clearPageHighlights 按 kind 清理，保留另一种）。
-  async function scanFullPage(kind = 'word') {
-    clearPageHighlights(kind === 'word' ? 'grammar' : 'word');
-    showToast(kind === 'word' ? 'Scanning word signals…' : 'Scanning grammar rules…', 0);
 
-    // ── 文本收集（用户裁决 2026-10-12）：送检什么由三层定义 ──
-    // 1) 主体内容：main/article/[role=main] 优先，fallback body——导航、
-    //    页头页脚、侧边栏的 UI 文案不是"文章"，不送检
-    // 2) 可见性：hidden 属性 / aria-hidden / display:none / visibility:hidden
-    //    的子树全部跳过（现代网页的折叠菜单、弹窗、tooltip 里全是隐形文本）
-    // 3) UI/非正文：nav/header/footer/aside/button/pre/code 内的文本跳过
-    // 30k 截断在净文本上做——不再被页头导航吃掉配额截掉正文主体
+  // ── 检查此页正文（2026-10-12 用户裁决，替代整页 scan 铺高亮）──
+  // 收集正文文本（三层过滤：主体根/可见性/UI 容器）→ 走和右键检查完全
+  // 相同的面板流。不做 offset 映射回 DOM——命中卡片点击时才在页面上
+  // 高亮（highlightOnPage），SPA 的动态 DOM 不再是问题。
+  function collectArticleText() {
     const SKIP_TAGS = new Set(['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','SELECT','OPTION',
                                'PRE','CODE','SVG']);
-    // 容器类标签查祖先（nav > ul > li > a > 文本 这种深层嵌套直接父标签查不到）
     const SKIP_ANCESTORS = 'nav, header, footer, aside, button, form, [role="navigation"], [role="banner"], [role="complementary"]';
+    const visCache = new WeakMap();
     function isVisible(el) {
-      // checkVisibility：Chrome 105+，一行覆盖 display/visibility/hidden 等
-      if (el.checkVisibility && !el.checkVisibility()) return false;
-      if (el.hasAttribute?.('hidden')) return false;
-      if (el.getAttribute?.('aria-hidden') === 'true') return false;
+      for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+        if (visCache.has(e)) { if (!visCache.get(e)) return false; continue; }
+        const cs = getComputedStyle(e);
+        const visible = cs.display !== 'none' && cs.visibility !== 'hidden'
+          && !e.hasAttribute('hidden') && e.getAttribute('aria-hidden') !== 'true';
+        visCache.set(e, visible);
+        if (!visible) return false;
+      }
       return true;
     }
-    // 主体根：语义标签优先；多个候选取文本量最大的
     let root = document.body;
-    const mainCandidates = [...document.querySelectorAll('main, article, [role="main"]')]
-      .filter(el => el.closest('.bmc-panel, .bmc-toast') === null);
-    if (mainCandidates.length) {
-      root = mainCandidates.reduce((best, el) =>
-        (el.innerText || '').length > (best.innerText || '').length ? el : best);
-    }
-    const walker = document.createTreeWalker(
-      root,
-      NodeFilter.SHOW_TEXT,
-      {
+    try {
+      const cands = [...document.querySelectorAll('main, article, [role="main"]')]
+        .filter(el => el.closest('.bmc-panel, .bmc-toast') === null);
+      if (cands.length) {
+        root = cands.reduce((best, el) =>
+          (el.textContent || '').length > (best.textContent || '').length ? el : best);
+      }
+    } catch { /* 候选探测失败 → body */ }
+    const parts = [];
+    try {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           const val = node.nodeValue;
           if (!val || !val.trim() || val.trim().length < 2) return NodeFilter.FILTER_REJECT;
@@ -1029,66 +1073,24 @@ const safeStorageSet = (obj) => new Promise((res) => {
           if (!isVisible(parent)) return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
         }
+      });
+      let n, total = 0;
+      while ((n = walker.nextNode())) {
+        parts.push(n.nodeValue.trim());
+        total += n.nodeValue.length;
+        if (total >= 30000 || parts.length > 20000) break;
       }
-    );
-
-    const textNodes = [];
-    let n;
-    while ((n = walker.nextNode())) {
-      textNodes.push(n);
+    } catch (e) {
+      return { text: '', error: e.message || String(e) };
     }
+    return { text: parts.join('\n').slice(0, 30000) };
+  }
 
-    // Send raw text and retain exact UTF-16 ranges; do not mark identical words
-    // elsewhere on the page when only one occurrence needs review.
-    let fullText = '';
-    const nodes = [];
-    for (const node of textNodes) {
-      if (fullText.length >= 30000) break;
-      const start = fullText.length;
-      const raw = node.nodeValue.slice(0,30000-start);
-      nodes.push({node,start,raw});
-      fullText += raw + '\n';
-    }
-    fullText = fullText.slice(0,30000);
-    if (!fullText.trim()) { showToast('No suitable text found.',3000);return; }
-    let r;
-    try {
-      // word 扫描走 /api/scan-words（不依赖 evidence.sqlite，词表信号即可）；
-      // grammar 走完整 /api/scan 后在本地过滤 grammar 类别。
-      const ep = kind === 'word' ? '/api/scan-words' : '/api/scan';
-      r=await fetch(`${API}${ep}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fullText})}).then(x=>x.json());
-      if (r.error) throw new Error(r.error);
-    } catch (e) { showToast(esc(e.message || 'The check did not complete.'),4000);return; }
-    // grammar 模式本地过滤规则命中；word 模式 server 已只回词级类别
-    const isWordCat = c => c === 'terminology' || c === 'register' || c === 'spelling';
-    const issues = (r.issues || []).filter(i =>
-      kind === 'word' ? isWordCat(i.category) : i.category === 'grammar');
-    let hitCount=0;
-    for (const {node,start,raw} of nodes) {
-      if (!node.parentNode) continue;
-      const parts=TepatResults.segments(raw,issues,start);
-      if (!parts.some(p=>p.level)) continue;
-      const frag=document.createDocumentFragment();
-      for (const part of parts) {
-        if (!part.level) {frag.appendChild(document.createTextNode(part.text));continue;}
-        const span=document.createElement('span');
-        span.className='bmc-hl bmc-hl-'+kind+' '+({error:'bmc-hl-err',warning:'bmc-hl-warn',info:'bmc-hl-info'}[part.level]);
-        span.textContent=part.text;
-        span.title=part.notes.join(' · ');
-        span.onclick=e=>{e.stopPropagation();runCheck(part.text);};
-        frag.appendChild(span);activeHighlights.push(span);hitCount++;
-      }
-      // Preserve the unscanned tail of a node at the 30,000-character limit.
-      if (node.nodeValue.length>raw.length) frag.appendChild(document.createTextNode(node.nodeValue.slice(raw.length)));
-      node.parentNode.replaceChild(frag,node);
-    }
-    showToast(`<b>${kind === 'word' ? 'Word' : 'Grammar'}</b> scan: <b>${hitCount}</b> passages marked. Facts are not checked.
-      <button id="bmc-btn-clear-hl" style="margin-left:8px;padding:2px 8px;">Clear marks</button>`,12000);
-
-    setTimeout(() => {
-      const btn = document.querySelector('#bmc-btn-clear-hl');
-      if (btn) btn.onclick = () => clearPageHighlights(kind);
-    }, 50);
+  function checkPageText() {
+    const { text, error } = collectArticleText();
+    if (error) { showToast('Could not read this page: ' + error, 5000); return; }
+    if (!text.trim()) { showToast('No suitable text found on this page.', 3000); return; }
+    runCheck(text);
   }
 
   // grammar flag 弹窗：三 kind + optional note + submit → Issue [flag:grammar:kind]
@@ -1339,8 +1341,8 @@ const safeStorageSet = (obj) => new Promise((res) => {
         openBlankPanel();
       }
       sendResponse({ ok: true });
-    } else if (m.type === 'scan-page') {
-      scanFullPage(m.kind || 'word');
+    } else if (m.type === 'check-page-text') {
+      checkPageText();
       sendResponse({ ok: true });
     } else if (m.type === 'open-general-flag') {
       // general flag（右上角 ⚑）：页面级问题，可不选字；有选中内容则预填

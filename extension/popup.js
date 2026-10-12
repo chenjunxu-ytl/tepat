@@ -66,10 +66,10 @@ async function sendToActiveTab(msg) {
   }
 }
 
-// 三个页面动作（用户裁决 2026-10-08）：Word/Grammar 独立扫描——
-// 扫一个会清掉另一个的 highlight（content.js 侧按 kind 清理）。
-$('#opt-scan-word').onclick = () => sendToActiveTab({ type: 'scan-page', kind: 'word' });
-$('#opt-scan-grammar').onclick = () => sendToActiveTab({ type: 'scan-page', kind: 'grammar' });
+// 检查此页正文（用户裁决 2026-10-12）：不再整页铺高亮（收集→scan→offset
+// 映射在 SPA 上不可靠）——收集正文文本送检查面板，命中卡片点击时再在页面
+// 上高亮对应片段。
+$('#opt-scan-page').onclick = () => sendToActiveTab({ type: 'check-page-text' });
 $('#opt-clear-hl').onclick = () => sendToActiveTab({ type: 'clear-highlights' });
 
 // 右上角 ⟳：从 GitHub 拉最新规则/词表（复用 server 的 /api/sync——
