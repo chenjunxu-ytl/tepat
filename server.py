@@ -2871,15 +2871,16 @@ def main() -> int:
     import ctypes
     import socket as _socket
 
-    # bat/源码启动时控制台最小化到任务栏（2026-10-09 用户裁决）：tray 的
-    # tepat icon 才是常驻入口，控制台最小化但保留——需要看 log 时点任务栏
-    # 即可恢复。--no-tray 调试模式不最小化（看输出是调试的目的）。
+    # bat/源码启动时控制台整个隐藏（用户裁决 2026-10-12：SW_MINIMIZE 会在
+    # 任务栏占一格，taskbar 不该看到——tray 的 tepat icon 才是唯一常驻入口）。
+    # 想看 log 从 tray 菜单 "Tunjuk log" 恢复（SW_SHOW + 前置）。
+    # --no-tray 调试模式不隐藏（看输出是调试的目的）。
     # exe（--noconsole 打包）没有控制台句柄，自然跳过。
     if os.name == "nt" and not args.no_tray:
         try:
             hwnd = ctypes.windll.kernel32.GetConsoleWindow()
             if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE — 任务栏不占位
         except Exception:  # noqa: BLE001
             pass
 
@@ -3097,7 +3098,7 @@ def start_tray(url: str, port: int = 8377):
         WM_APP_STOP = 0x8000 + 1
         WM_APP_MENU = 0x8000 + 2
         WM_APP_OPEN = 0x8000 + 3
-        MENU_OPEN, MENU_EXIT = 100, 101
+        MENU_OPEN, MENU_LOG, MENU_EXIT = 100, 102, 101
 
         _taskbar_created_msg = [user32.RegisterWindowMessageW("TaskbarCreated")]
 
@@ -3129,6 +3130,7 @@ def start_tray(url: str, port: int = 8377):
             if msg == WM_APP_MENU:
                 menu = user32.CreatePopupMenu()
                 user32.AppendMenuW(menu, 0, MENU_OPEN, "Buka UI")
+                user32.AppendMenuW(menu, 0, MENU_LOG, "Tunjuk log")
                 user32.AppendMenuW(menu, 0x800, 0, None)  # MF_SEPARATOR
                 user32.AppendMenuW(menu, 0, MENU_EXIT, "Keluar")
                 user32.SetForegroundWindow(hwnd)
@@ -3141,6 +3143,16 @@ def start_tray(url: str, port: int = 8377):
                 user32.DestroyMenu(menu)
                 if cmd == MENU_OPEN:
                     threading.Thread(target=_open_ui, daemon=True).start()
+                elif cmd == MENU_LOG:
+                    # 恢复启动时隐藏的控制台（用户裁决 2026-10-12：tray 是
+                    # 唯一常驻入口，log 按需从 tray 唤出）
+                    try:
+                        con = ctypes.windll.kernel32.GetConsoleWindow()
+                        if con:
+                            user32.ShowWindow(con, 9)   # SW_RESTORE
+                            user32.SetForegroundWindow(con)
+                    except Exception:  # noqa: BLE001
+                        pass
                 elif cmd == MENU_EXIT:
                     state.stop = True
                     if state.nid:
