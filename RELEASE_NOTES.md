@@ -1,8 +1,17 @@
-# Tepat v0.4.1
+# Tepat v0.4.2
 
 Malay word/grammar checker: local Windows runtime + browser extension.
 Rules and word lists live in %APPDATA%/tepat and sync through this repo;
 PRPM is the online dictionary layer.
+
+## Highlights in 0.4.2
+
+- **Console fully hidden**: starting from bat/shortcut leaves nothing in
+  the taskbar — the tray icon is the only entry point, and its menu
+  gains "Tunjuk log" to bring the console back when needed.
+- **Env tab prefill**: fresh machines open the Env editor with sensible
+  defaults already filled in (repo, branch, auto-sync, LLM endpoint and
+  model — glm-5.2); only the secrets (GitHub PAT, LLM key) are blank.
 
 ## Highlights in 0.4.1
 

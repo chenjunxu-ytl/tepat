@@ -82,7 +82,7 @@ ENV_KEY_DEFAULTS = {
     "TEPAT_GH_REPO": "chenjunxu-ytl/tepat",
     "TEPAT_GH_BRANCH": "main",
     "TEPAT_AUTO_SYNC": "1",
-    "TEPAT_LLM_URL": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "TEPAT_LLM_URL": "https://api.z.ai/api/paas/v4/chat/completions",
     "TEPAT_LLM_MODEL": "glm-5.2",
 }
 
@@ -136,7 +136,7 @@ IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
 # server 版本（用户裁决 2026-10-12）：与 extension manifest / release tag 同步
 # 递增——/api/extension-update 对比它和 latest release，提示用户换新 exe。
-SERVER_VERSION = "0.4.1"
+SERVER_VERSION = "0.4.2"
 
 
 # llm_judge 规则的 LLM 判决函数（注入 checker，2026-10-10 用户裁决：更难的
@@ -614,7 +614,7 @@ def _gh_create_issue(title: str, body: str, labels: list[str],
 # 提供例句、人类发起 translate/enhance；LLM 只做"例句→规则规格"的翻译。
 # 产物默认 trial（conf 降半级），人审 accept/reject；行为规格（例句集）只增
 # 不减，每次纠正永久变成回归测试。API 配置走 .env（Env tab 可编辑）：
-#   TEPAT_LLM_URL   e.g. https://open.bigmodel.cn/api/paas/v4/chat/completions
+#   TEPAT_LLM_URL   e.g. https://api.z.ai/api/paas/v4/chat/completions
 #   TEPAT_LLM_KEY   API key
 #   TEPAT_LLM_MODEL e.g. glm-5.2
 
