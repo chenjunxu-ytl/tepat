@@ -196,6 +196,37 @@
     "suggestion": ""
    },
    "impl": "The regex matches three specific error patterns: 'dalam' directly followed by one of five time-point nouns (bulan, tahun, tarikh, saat, waktu), 'pada' directly followed by 'tempoh', and 'di' directly followed by one of the same five time nouns. No exceptions are defined."
+  },
+  {
+   "id": "RB-007",
+   "entry_id": "RB-007",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags the copula 'adalah' when directly followed by a verb phrase (passive verb, 'merupakan', or other verbs), which is ungrammatical in Malay.",
+   "note": "Adalah sebagai pemeri tidak boleh diikuti oleh frasa kerja. Buang 'adalah' atau ubah struktur ayat. Contoh: 'Dimaklumkan bahawa...' bukan 'Adalah dimaklumkan bahawa...'. Untuk 'adalah merupakan', gunakan 'merupakan' sahaja.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Adalah dimaklumkan bahawa majlis akan diadakan.",
+     "Ia adalah merupakan satu kejayaan.",
+     "Perkara ini adalah dilakukan oleh pihak pengurusan.",
+     "Hasilnya adalah disahkan oleh juruaudit."
+    ],
+    "clear": [
+     "Dimaklumkan bahawa majlis akan diadakan.",
+     "Ia merupakan satu kejayaan.",
+     "Tujuannya adalah untuk meningkatkan kualiti.",
+     "Ini adalah satu kejayaan besar."
+    ]
+   },
+   "params": {
+    "pattern": "\\badalah\\s+(?:merupakan|di\\w+(?:kan|h|i)\\b)",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches the word 'adalah' followed by whitespace and then either the word 'merupakan' or any word starting with 'di' and ending in 'kan', 'h', or 'i' (covering common passive verbs like dimaklumkan, dilakukan, diadakan, disahkan, dll). No exceptions are defined."
   }
  ],
  "ms_id_suffix_map": [
