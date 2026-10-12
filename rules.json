@@ -444,6 +444,35 @@
     "flags clear sentence: Di mana kamu tinggal?"
    ],
    "impl": "The regex matches 'yang mana' anywhere, and 'di mana' only when followed by whitespace and a word — then the exception suppresses the match when the sentence ends with a question mark immediately after 'di mana', so interrogative location questions are spared."
+  },
+  {
+   "id": "RB-015",
+   "entry_id": "RB-015",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags three Malay collocation errors: 'menggapai untung' (should be 'meraih untung'), 'terima kasih di atas' for gratitude (should be 'terima kasih atas'), and 'menyambungkan talian kepada' with non-living objects (should use 'dengan').",
+   "note": "Ralat kolokasi. Untung diraih/bukan digapai. Ucapan terima kasih menggunakan 'atas' (bukan 'di atas' yang hanya untuk ruang). Untuk objek bukan hidup guna 'dengan' bukan 'kepada'.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Syarikat itu berjaya menggapai untung besar.",
+     "Terima kasih di atas sokongan anda.",
+     "Syarikat itu menyambungkan talian kepada pelanggan."
+    ],
+    "clear": [
+     "Syarikat itu berjaya meraih untung besar.",
+     "Terima kasih atas sokongan anda.",
+     "Syarikat itu menyambungkan talian dengan pelanggan."
+    ]
+   },
+   "params": {
+    "pattern": "\\bmenggapai\\s+untung\\b|\\bterima\\s+kasih\\s+di\\s+atas\\b|\\bmenyambungkan\\s+talian\\s+kepada\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches three specific collocation patterns: 'menggapai untung', 'terima kasih di atas', and 'menyambungkan talian kepada' — each flagged as a collocation error with no exceptions."
   }
  ],
  "ms_id_suffix_map": [
