@@ -66,6 +66,26 @@
     100% { transform: scale(1.25); opacity: 0; }
   }
 
+  /* 主 CTA：打开浮动检查面板（唯一检查入口，2026-10-12） */
+  .cta-btn {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 13px 14px;
+    border: 1px solid #bfdbd1; border-radius: 12px;
+    background: #eef5f3; color: #0f172a;
+    cursor: pointer; text-align: left; font: inherit;
+    transition: all .15s ease;
+  }
+  .cta-btn:hover { background: #e2efe9; border-color: #256b58; }
+  .cta-btn:active { background: #d6e9e1; }
+  .cta-ic {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 9px;
+    background: #256b58; color: #fff; flex-shrink: 0;
+  }
+  .cta-ic svg { width: 15px; height: 15px; }
+  .cta-label { font-size: 13.5px; font-weight: 700; }
+  .cta-desc { font-size: 11px; color: #526273; margin-top: 1px; }
+
 </style>
 </head>
 <body>
@@ -82,9 +102,6 @@
     <button id="opt-sync" class="head-btn" title="Fetch the latest rules & word lists from GitHub">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
     </button>
-    <button id="opt-open-panel" class="head-btn" title="Open the floating check panel">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-    </button>
     <button id="opt-flag" class="head-btn" title="Report a subjective issue on this page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
     </button>
@@ -93,6 +110,16 @@
     </button>
   </div>
 </div>
+
+<button id="opt-open-panel" class="cta-btn" title="Open the floating check panel — right-click any selection or type into it">
+  <div class="cta-ic">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  </div>
+  <div>
+    <div class="cta-label">Open check panel</div>
+    <div class="cta-desc">Right-click a selection or type to check</div>
+  </div>
+</button>
 
 <script src="popup.js"></script>
 </body>
