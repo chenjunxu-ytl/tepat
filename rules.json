@@ -287,6 +287,34 @@
     "does not flag trigger: Ibu memberikan anaknya coklat."
    ],
    "impl": "The regex matches 'memberikan' followed by one of ~50 listed animate nouns (pelajar, guru, orang, anak, ibu, murid, etc.); the exceptions list covers common inanimate objects like sumbangan, pertolongan, pelajaran so those are not flagged."
+  },
+  {
+   "id": "RB-010",
+   "entry_id": "RB-010",
+   "plugin": "regex_match",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags coordinated lists where a bare noun (like kuih-muih) appears between me- prefixed verbs, breaking parallel verb-phrase structure.",
+   "note": "Struktur selari: dalam senarai frasa kerja, semua unsur mesti berbentuk kerja (ber- atau me-). Gantikan item bukan-kerja dengan kata kerja yang setara.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Aktiviti itu merangkumi bergotong-royong, kuih-muih, dan menyanyi."
+    ],
+    "clear": [
+     "Aktiviti itu merangkumi bergotong-royong, memasak, dan menyanyi."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(ber\\w+|me\\w+)\\s*,\\s*(kuih(?:-muih)?|makanan|pakaian|perabot|alat|barang|buku|kereta|rumah|sukan|permainan|muzik|tarian|lagu|seni|budaya|adat|kerja|tugas|tugas-tugas|aktiviti|program|projek|kemahiran|pengetahuan|maklumat|data|fakta|teori|konsep|idea|pendapat|cadangan|usul|rancangan|pelan|strategi|kaedah|sistem|proses|prosedur|langkah|tahap|peringatan|peringkat|peringkat-peringkat|aspek|faktor|sebab|punca|kesan|akibat|hasil|dapatan|kesimpulan|rumusan|penilaian|penilaian-penilaian|analisis|kajian|penyelidikan|pemerhatian|tinjauan|laporan|dokumen|fail|rekod|senarai|daftar|katalog|indeks|direktori|panduan|arahan|peraturan|undang-undang|akta|enakmen|ordinan|kanun|kod|fasal|seksyen|subseksyen|perenggan|subperenggan|klausa|subklausa|jadual|lampiran|gambarajah|graf|carta|rajah|peta|pelan|skema|bentuk|reka|rekabentuk|model|prototaip|sampel|contoh|spesifikasi|standard|piawaian|kriteria|indikator|penunjuk|ukuran|metrik|statistik|angka|nombor|jumlah|jumlah keseluruhan|jumlah keseluruhan|peratus|peratusan|nisbah|kadar|frekuensi|kekerapan|selang|tempoh|masa|tarikh|hari|bulan|tahun|dekad|abad|zaman|era|epok|tempat|lokasi|kedudukan|koordinat|latitud|longitud|altitud|ketinggian|kedalaman|jarak|panjang|lebar|luas|keluasan|isipadu|berat|jisim|suhu|cuaca|iklim|musim|angin|hujan|panas|sejuk|lembap|kering|basah|cerah|mendung|gelap|terang|gelap|warna|bentuk|saiz|jenis|jenis-jenis|kategori|kelas|kumpulan|set|koleksi|kumpulan-kumpulan|himunan|himpunan|kumpulan data|set data|pangkalan data|pangkalan data|fail data|rekod data|sumber data|sumber maklumat|sumber pengetahuan|sumber rujukan|sumber bacaan|bahan bacaan|bahan rujukan|bahan kajian|bahan penyelidikan|bahan mentah|bahan mentah|bahan api|bahan api|bahan bakar|bahan kimia|bahan buangan|sisa|sampah|kotoran|habuk|debu|asap|jerebu|kabus|kabut|awan|petir|kilat|guruh|halilintar|ribut|taufan|topan|puting beliung|angin puting beliung|angin ribut|angin kencang|angin perlahan|angin sepoi-sepoi bahasa|bayu|bayu sepoi-sepoi|angin bayu|angin laut|angin darat|angin musim|angin monsun|angin pasat|angin barat|angin timur|angin utara|angin selatan|angin tenggara|angin timur laut|angin barat laut|angin barat daya|angin tenggara|tiupan|hembusan|puff|sedutan|tarikan|tolakan|hentaman|ketukan|pukulan|hantukan|sepakan|tendangan|sentalan|gigitan|gigitan|patukan|patuk|cucukan|cucuk|tusukan|tusuk|tikaman|tikam|sabetan|sabet|tebasan|tebas|belaihan|belaih|lontaran|lontar|balingan|baling|lemparan|lempar|campak|campakan|lempar-lempar|baling-baling|lontar-lontar|baling-baling|campak-campak|lempar-lempar)\\s*,\\s*(?:dan\\s+)?(ber\\w+|me\\w+)\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "self_test_failures": [
+    "does not flag trigger: Aktiviti itu merangkumi bergotong-royong, kuih-muih, dan men"
+   ],
+   "impl": "The regex matches a verb starting with ber- or me- followed by a comma, then one of ~300 listed common Malay nouns (kuih-muih, makanan, pakaian, etc.), then a comma and optionally 'dan', then another ber-/me- verb — i.e. it flags a noun sandwiched between two prefixed verbs in a coordinated list. The noun list is the sole mechanism for distinguishing the wrong non-parallel structure from acceptable informal usage."
   }
  ],
  "ms_id_suffix_map": [
