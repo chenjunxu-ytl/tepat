@@ -76,6 +76,16 @@ ENV_KEY_DOCS = {
     "TEPAT_LLM_MODEL": "model id for rule translation",
 }
 
+# 非 secret key 的默认值（用户裁决 2026-10-12）：.env 还没建时 Env 编辑器
+# 预填这些——token 类（admin/gh/llm key）是秘密，永远不预填。
+ENV_KEY_DEFAULTS = {
+    "TEPAT_GH_REPO": "chenjunxu-ytl/tepat",
+    "TEPAT_GH_BRANCH": "main",
+    "TEPAT_AUTO_SYNC": "1",
+    "TEPAT_LLM_URL": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "TEPAT_LLM_MODEL": "glm-4.7",
+}
+
 
 def _load_dotenv() -> None:
     """启动时读 tepat 数据目录的 .env（KEY=VALUE 逐行），不覆盖已有环境变量。
@@ -1639,6 +1649,7 @@ class Handler(BaseHTTPRequestHandler):
                 ext_version = ""
             payload = {"path": _env_path(), "exists": exists,
                        "keys_set": keys_set, "key_docs": ENV_KEY_DOCS,
+                       "key_defaults": ENV_KEY_DEFAULTS,
                        "extension_version": ext_version,
                        "admin": IS_ADMIN_MACHINE}
             if IS_ADMIN_MACHINE:

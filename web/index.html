@@ -856,6 +856,7 @@ async function loadEnv(){
  try{
   const r=await fetch(API+'/api/env').then(async x=>{const j=await x.json();if(!x.ok)throw new Error(j.error);return j;});
   Object.assign(ENV_KEYS_DOC, r.key_docs||{});
+  const ENV_DEFAULTS=r.key_defaults||{};
   const isAdmin=!!r.admin;
   const locked=new Set(r.locked_keys||[]);
   $('#btn-env-add').style.display='';
@@ -888,10 +889,12 @@ async function loadEnv(){
   }
   bindEnvRowEvents(box);
   if(!r.exists){
-    // 还没有 .env：给 user 一排可填的空行（server 认识的 key）
+    // 还没有 .env：server 认识的 key 各一行（用户裁决 2026-10-12）——
+    // 非 secret key 预填默认值（repo/branch/auto-sync/LLM 端点和 model），
+    // token 类（admin/gh/llm key）留空待用户填
     for(const k of Object.keys(ENV_KEYS_DOC)){
       if(locked.has(k)) continue;
-      box.insertAdjacentHTML('beforeend', envRowHtml(k,'',true));
+      box.insertAdjacentHTML('beforeend', envRowHtml(k, ENV_DEFAULTS[k]||'', true));
     }
     bindEnvRowEvents(box);
   }
