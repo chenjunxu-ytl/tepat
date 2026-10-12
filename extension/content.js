@@ -955,7 +955,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
     const findings = r.findings || [];
     if (!findings.length) {
       return `<div class="bmc-clean-box"><b>No issues found.</b>
-        <div>The rules — including the deep-only sentence-structure rules — are clean on this text.</div></div>`;
+        <div>The rules are clean on this text.</div></div>`;
     }
     const cls = { error: 'miss', warning: 'warn', info: 'info' };
     const title = { error: 'Specific rules', warning: 'Needs review', info: 'Needs context' };
