@@ -167,6 +167,35 @@
     "suggestion": "bagi"
    },
    "impl": "The regex matches any of four benefit nouns (faedah, manfaat, habis, ruang) followed within 30 characters by kepada, then suppresses the match when the span also contains one of 5 listed giver verbs (memberi, memberikan, beri, berikan, mengurniakan) — i.e. legal 'X kepada Y' recipient constructions are recognised by that verb list only."
+  },
+  {
+   "id": "RB-006",
+   "entry_id": "RB-006",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags incorrect time prepositions: 'dalam' before specific time points (bulan/tahun/tarikh/saat/waktu), 'pada' before duration words (tempoh), and 'di' before time expressions (saat/waktu/bulan/tahun/tarikh).",
+   "note": "Kesalahan kata depan waktu. Gunakan 'pada' untuk titik masa (bulan/tahun/tarikh/saat/waktu), 'dalam' untuk tempoh, dan 'di' hanya untuk tempat.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Dalam bulan Mac kami berpindah.",
+     "Pada tempoh lima tahun itu.",
+     "Di saat dia sampai, semua diam."
+    ],
+    "clear": [
+     "Pada bulan Mac kami berpindah.",
+     "Dalam tempoh lima tahun itu.",
+     "Pada saat dia sampai, semua diam."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(?:dalam\\s+(?:bulan|tahun|tarikh|saat|waktu)|pada\\s+tempoh|di\\s+(?:saat|waktu|bulan|tahun|tarikh))\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches three specific error patterns: 'dalam' directly followed by one of five time-point nouns (bulan, tahun, tarikh, saat, waktu), 'pada' directly followed by 'tempoh', and 'di' directly followed by one of the same five time nouns. No exceptions are defined."
   }
  ],
  "ms_id_suffix_map": [
