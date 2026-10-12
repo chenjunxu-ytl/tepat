@@ -66,12 +66,8 @@ async function sendToActiveTab(msg) {
   }
 }
 
-// 两个页面动作（2026-10-12 改造）：Word/Grammar 都收集正文送检查面板——
-// 区别在结果过滤（word=词表信号卡，grammar=规则命中卡），面板卡片点击
-// 可在页面上高亮对应片段。
-$('#opt-scan-word').onclick = () => sendToActiveTab({ type: 'check-page-text', kind: 'word' });
-$('#opt-scan-grammar').onclick = () => sendToActiveTab({ type: 'check-page-text', kind: 'grammar' });
-$('#opt-clear-hl').onclick = () => sendToActiveTab({ type: 'clear-highlights' });
+// 页面整页扫描已砍（用户裁决 2026-10-12）：检查一律走浮动面板——右上 💬
+// 打开，右键选中文本或面板内输入均可；命中卡片点击可在页面上高亮对应片段。
 
 // 右上角 ⟳：从 GitHub 拉最新规则/词表（复用 server 的 /api/sync——
 // 拉 rules.json/indo_words.json/word-overrides.json 并热重载）。本按钮

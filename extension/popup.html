@@ -66,40 +66,6 @@
     100% { transform: scale(1.25); opacity: 0; }
   }
 
-  .section-label {
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px;
-    color: #94a3b8; text-transform: uppercase;
-    margin: 10px 0 6px;
-  }
-
-  /* 三个 scan 动作同一个 box（用户裁决 2026-10-08）：Word/Grammar 互相独立
-     ——扫一个就清掉另一个的 highlight；Clear 只做清除。 */
-  .scan-box {
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .scan-btn {
-    display: flex; align-items: center; gap: 11px;
-    width: 100%; padding: 10px 12px;
-    border: none; background: #fff;
-    color: #1e293b; cursor: pointer; text-align: left;
-    font: inherit;
-    transition: background .15s ease;
-  }
-  .scan-btn + .scan-btn { border-top: 1px solid #f1f5f9; }
-  .scan-btn:hover { background: #f8fafc; }
-  .scan-btn:active { background: #f1f5f9; }
-  .scan-ic {
-    display: flex; align-items: center; justify-content: center;
-    width: 26px; height: 26px; border-radius: 8px;
-    font-size: 13px; font-weight: 700; flex-shrink: 0;
-  }
-  .ic-word { background: #dbeafe; color: #2563eb; }
-  .ic-grammar { background: #fef3c7; color: #b45309; }
-  .ic-clear { background: #f1f5f9; color: #64748b; }
-  .scan-label { font-size: 13px; font-weight: 600; color: #0f172a; }
-  .scan-desc { font-size: 11px; color: #64748b; margin-top: 1px; }
 </style>
 </head>
 <body>
@@ -126,31 +92,6 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
-</div>
-
-<div class="section-label">On this page</div>
-<div class="scan-box">
-  <button id="opt-scan-word" class="scan-btn" title="Collect the article text and check word-level signals (dictionary, word lists)">
-    <div class="scan-ic ic-word">W</div>
-    <div>
-      <div class="scan-label">Scan words</div>
-      <div class="scan-desc">Dictionary + word-list signals</div>
-    </div>
-  </button>
-  <button id="opt-scan-grammar" class="scan-btn" title="Collect the article text and check grammar-rule hits">
-    <div class="scan-ic ic-grammar">G</div>
-    <div>
-      <div class="scan-label">Scan grammar</div>
-      <div class="scan-desc">Rule Book grammar checks</div>
-    </div>
-  </button>
-  <button id="opt-clear-hl" class="scan-btn" title="Remove all highlights from this page">
-    <div class="scan-ic ic-clear">✕</div>
-    <div>
-      <div class="scan-label">Clear highlights</div>
-      <div class="scan-desc">Remove all marks on this page</div>
-    </div>
-  </button>
 </div>
 
 <script src="popup.js"></script>

@@ -840,26 +840,20 @@ const safeStorageSet = (obj) => new Promise((res) => {
   }
 
   // ── 检查浮层 (Scan) ──
-  // kind: undefined（右键/搜索框——全量结果）| 'word'（页面扫描：词表信号）
-  // | 'grammar'（页面扫描：规则命中）
-  async function runCheck(text, shouldCreatePanel = true, kind) {
+  async function runCheck(text, shouldCreatePanel = true) {
     const cleanText = sanitizeText(text);
-    const title = kind === 'word' ? 'Word scan — this page'
-                : kind === 'grammar' ? 'Grammar scan — this page'
-                : 'Check results';
     if (shouldCreatePanel || !panel) {
-      panel = mkPanel(title, cleanText, 'check');
+      panel = mkPanel('Check results', cleanText, 'check');
     } else {
       currentMode = 'check';
-      panel.querySelector('.bmc-title-text').textContent = title;
+      panel.querySelector('.bmc-title-text').textContent = 'Check results';
       panel.querySelector('.bmc-search-input').value = cleanText;
     }
 
     panelBody().innerHTML = cuteLoader('Menganalisis teks…');
     let r;
     try {
-      const ep = kind === 'word' ? '/api/scan-words' : '/api/scan';
-      r = await fetch(`${API}${ep}`, {
+      r = await fetch(`${API}/api/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: cleanText })
@@ -872,12 +866,6 @@ const safeStorageSet = (obj) => new Promise((res) => {
         </div>
       `;
       return;
-    }
-    if (kind) {
-      // 页面扫描过滤：word=词级类别，grammar=规则命中
-      const isWordCat = c => c === 'terminology' || c === 'register' || c === 'spelling';
-      r = { ...r, issues: (r.issues || []).filter(i =>
-        kind === 'word' ? isWordCat(i.category) : i.category === 'grammar') };
     }
     renderCheck(r, cleanText);
   }
@@ -1114,72 +1102,6 @@ const safeStorageSet = (obj) => new Promise((res) => {
     }
   }
 
-
-  // ── 检查此页正文（2026-10-12 用户裁决，替代整页 scan 铺高亮）──
-  // 收集正文文本（三层过滤：主体根/可见性/UI 容器）→ 走和右键检查完全
-  // 相同的面板流。不做 offset 映射回 DOM——命中卡片点击时才在页面上
-  // 高亮（highlightOnPage），SPA 的动态 DOM 不再是问题。
-  function collectArticleText() {
-    const SKIP_TAGS = new Set(['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','SELECT','OPTION',
-                               'PRE','CODE','SVG']);
-    const SKIP_ANCESTORS = 'nav, header, footer, aside, button, form, [role="navigation"], [role="banner"], [role="complementary"]';
-    const visCache = new WeakMap();
-    function isVisible(el) {
-      for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
-        if (visCache.has(e)) { if (!visCache.get(e)) return false; continue; }
-        const cs = getComputedStyle(e);
-        const visible = cs.display !== 'none' && cs.visibility !== 'hidden'
-          && !e.hasAttribute('hidden') && e.getAttribute('aria-hidden') !== 'true';
-        visCache.set(e, visible);
-        if (!visible) return false;
-      }
-      return true;
-    }
-    let root = document.body;
-    try {
-      const cands = [...document.querySelectorAll('main, article, [role="main"]')]
-        .filter(el => el.closest('.bmc-panel, .bmc-toast') === null);
-      if (cands.length) {
-        root = cands.reduce((best, el) =>
-          (el.textContent || '').length > (best.textContent || '').length ? el : best);
-      }
-    } catch { /* 候选探测失败 → body */ }
-    const parts = [];
-    try {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-          const val = node.nodeValue;
-          if (!val || !val.trim() || val.trim().length < 2) return NodeFilter.FILTER_REJECT;
-          const parent = node.parentElement;
-          if (!parent) return NodeFilter.FILTER_REJECT;
-          if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-          if (parent.closest('.bmc-panel, .bmc-toast')) return NodeFilter.FILTER_REJECT;
-          if (parent.closest(SKIP_ANCESTORS)) return NodeFilter.FILTER_REJECT;
-          if (!isVisible(parent)) return NodeFilter.FILTER_REJECT;
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      });
-      let n, total = 0;
-      while ((n = walker.nextNode())) {
-        parts.push(n.nodeValue.trim());
-        total += n.nodeValue.length;
-        if (total >= 30000 || parts.length > 20000) break;
-      }
-    } catch (e) {
-      return { text: '', error: e.message || String(e) };
-    }
-    return { text: parts.join('\n').slice(0, 30000) };
-  }
-
-  function checkPageText(kind = 'word') {
-    // kind: 'word'（词表/词典信号卡）| 'grammar'（规则命中卡）。都收集正文
-    // 送检查面板——面板立刻打开（runCheck 先建面板再等 server），不会卡在
-    // 无反馈状态；区别只在结果过滤和端点。
-    const { text, error } = collectArticleText();
-    if (error) { showToast('Could not read this page: ' + error, 5000); return; }
-    if (!text.trim()) { showToast('No suitable text found on this page.', 3000); return; }
-    runCheck(text, true, kind);
-  }
 
   // grammar flag 弹窗：三 kind + optional note + submit → Issue [flag:grammar:kind]
   function openGrammarFlagDialog(rule, span, anchor) {
@@ -1428,9 +1350,6 @@ const safeStorageSet = (obj) => new Promise((res) => {
       } else {
         openBlankPanel();
       }
-      sendResponse({ ok: true });
-    } else if (m.type === 'check-page-text') {
-      checkPageText(m.kind || 'word');
       sendResponse({ ok: true });
     } else if (m.type === 'open-general-flag') {
       // general flag（右上角 ⚑）：页面级问题，可不选字；有选中内容则预填
