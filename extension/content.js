@@ -922,7 +922,13 @@ const safeStorageSet = (obj) => new Promise((res) => {
           deep.remove();
           const box = document.createElement('div');
           box.className = 'bmc-deep-results';
-          box.innerHTML = renderDeepFindings(r);
+          if (r.llm_configured === false) {
+            const note = document.createElement('div');
+            note.className = 'bmc-warn-note';
+            note.textContent = 'No LLM key configured on this machine — the deep-only sentence-structure rules are skipped. Set TEPAT_LLM_KEY in the Env tab to enable them.';
+            box.appendChild(note);
+          }
+          box.insertAdjacentHTML('beforeend', renderDeepFindings(r));
           panelBody().appendChild(box);
           // deep findings 卡片同样支持点击高亮
           box.querySelectorAll('.bmc-item').forEach(item => {

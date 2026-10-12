@@ -418,7 +418,8 @@ $('#btn-assist').onclick=async()=>{
   const r=await request('/api/assist',{text,register:$('#register').value});
   const box=$('#assist-body');
   const deepOnly=r.findings.filter(f=>f.deep_only);
-  $('#assist-msg').innerHTML=`<span class="ok">✓ ${r.findings.length} findings · ${deepOnly.length} from deep-only rules</span>`;
+  $('#assist-msg').innerHTML=`<span class="ok">✓ ${r.findings.length} findings · ${deepOnly.length} from deep-only rules</span>`
+   +(r.llm_configured===false?`<div style="color:#8a6a10;margin-top:4px">No LLM key configured on this machine — the deep-only sentence-structure rules are skipped. Set TEPAT_LLM_KEY in the Env tab to enable them.</div>`:'');
   if(!r.findings.length){
    box.innerHTML='<p class="sub" style="margin:0">No issues found — the rules (including the deep-only sentence-structure rules) are clean on this text.</p>';
    return;

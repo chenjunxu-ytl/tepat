@@ -172,6 +172,15 @@ def _llm_judge_fn(rule_id: str, judge: str, sentence: str) -> str:
         raise
 
 
+def _llm_judge_ready() -> bool:
+    """LLM 配置可用性探测（health/assist 暴露给前端提示用）。"""
+    try:
+        _llm_config()
+        return True
+    except RuntimeError:
+        return False
+
+
 def _inject_llm_judge() -> None:
     """有 LLM 配置才注入；checker 对 None 静默跳过 llm_judge 规则。"""
     try:
@@ -1534,6 +1543,7 @@ class Handler(BaseHTTPRequestHandler):
                              "config_warnings": _checker.config_warnings if _checker else [],
                              "admin": IS_ADMIN_MACHINE,
                              "server_version": SERVER_VERSION,
+                             "llm_configured": _llm_judge_ready(),
                              "tray": tray_icon is not None})
         elif self.path == "/api/extension-update":
             # 扩展更新检测（2026-10-09 用户裁决）：浏览器安全模型不允许网页
@@ -2018,7 +2028,8 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[assist] deep scan: {len(base)} base + "
                  f"{len(findings) - len(base)} deep-only findings")
             self._json(200, {"ok": True, "findings": findings,
-                             "engine": "rules-deep"})
+                             "engine": "rules-deep",
+                             "llm_configured": _llm_judge_ready()})
         elif self.path == "/api/rules/translate":
             # LLM 转译入口（admin 发起，用户裁决 2026-10-09）：人类用自己的
             # 话描述语言现象（哪些用法错、哪些对，可夹例句），server 取 PRPM
