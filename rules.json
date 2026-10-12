@@ -68,7 +68,8 @@
    },
    "params": {
     "judge": "Flag the sentence ONLY when 'kebiasaannya' appears mid-sentence AND the word immediately before it is a VERB (an action word like datang, makan, belajar, pergi, tidur, buat) — the adverb has been wrongly placed after the verb. When 'kebiasaannya' appears after a pronoun (dia, mereka, saya, kami, kita, awak, Ali, pelajar itu) or any noun acting as the subject — e.g. 'Dia kebiasaannya datang awal.' — that position is legal: the adverb modifies the whole predicate, do NOT flag. When 'kebiasaannya' is the first word of the sentence (with or without a following comma), do NOT flag. When 'kebiasaannya' follows a preposition or conjunction, treat it as clear. If the preceding word's word class is ambiguous, answer unsure. Example verdicts: 'Dia datang kebiasaannya.' = trigger; 'Mereka makan kebiasaannya pada waktu malam.' = trigger; 'Kebiasaannya, dia datang.' = clear; 'Dia kebiasaannya datang awal.' = clear; 'Pelajar itu belajar kebiasaannya di perpustakaan.' = trigger.",
-    "suggestion": "Pindahkan \"kebiasaannya\" ke awal ayat."
+    "suggestion": "Pindahkan \"kebiasaannya\" ke awal ayat.",
+    "trigger": "\\bkebiasaannya\\b"
    },
    "impl": "Every sentence is sent to the LLM with this rule's criterion: flag only when 'kebiasaannya' sits mid-sentence directly after a VERB; after a pronoun/noun subject ('Dia kebiasaannya datang awal.') or at the sentence start it is legal and must not be flagged; ambiguous word class answers unsure (never flagged). Flagged sentences get a whole-sentence note (LLM span localisation is not trusted)."
   },
