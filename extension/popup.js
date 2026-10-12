@@ -66,10 +66,11 @@ async function sendToActiveTab(msg) {
   }
 }
 
-// 检查此页正文（用户裁决 2026-10-12）：不再整页铺高亮（收集→scan→offset
-// 映射在 SPA 上不可靠）——收集正文文本送检查面板，命中卡片点击时再在页面
-// 上高亮对应片段。
-$('#opt-scan-page').onclick = () => sendToActiveTab({ type: 'check-page-text' });
+// 两个页面动作（2026-10-12 改造）：Word/Grammar 都收集正文送检查面板——
+// 区别在结果过滤（word=词表信号卡，grammar=规则命中卡），面板卡片点击
+// 可在页面上高亮对应片段。
+$('#opt-scan-word').onclick = () => sendToActiveTab({ type: 'check-page-text', kind: 'word' });
+$('#opt-scan-grammar').onclick = () => sendToActiveTab({ type: 'check-page-text', kind: 'grammar' });
 $('#opt-clear-hl').onclick = () => sendToActiveTab({ type: 'clear-highlights' });
 
 // 右上角 ⟳：从 GitHub 拉最新规则/词表（复用 server 的 /api/sync——

@@ -840,20 +840,26 @@ const safeStorageSet = (obj) => new Promise((res) => {
   }
 
   // ── 检查浮层 (Scan) ──
-  async function runCheck(text, shouldCreatePanel = true) {
+  // kind: undefined（右键/搜索框——全量结果）| 'word'（页面扫描：词表信号）
+  // | 'grammar'（页面扫描：规则命中）
+  async function runCheck(text, shouldCreatePanel = true, kind) {
     const cleanText = sanitizeText(text);
+    const title = kind === 'word' ? 'Word scan — this page'
+                : kind === 'grammar' ? 'Grammar scan — this page'
+                : 'Check results';
     if (shouldCreatePanel || !panel) {
-      panel = mkPanel('Check results', cleanText, 'check');
+      panel = mkPanel(title, cleanText, 'check');
     } else {
       currentMode = 'check';
-      panel.querySelector('.bmc-title-text').textContent = 'Check results';
+      panel.querySelector('.bmc-title-text').textContent = title;
       panel.querySelector('.bmc-search-input').value = cleanText;
     }
 
     panelBody().innerHTML = cuteLoader('Menganalisis teks…');
     let r;
     try {
-      r = await fetch(`${API}/api/scan`, {
+      const ep = kind === 'word' ? '/api/scan-words' : '/api/scan';
+      r = await fetch(`${API}${ep}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: cleanText })
@@ -866,6 +872,12 @@ const safeStorageSet = (obj) => new Promise((res) => {
         </div>
       `;
       return;
+    }
+    if (kind) {
+      // 页面扫描过滤：word=词级类别，grammar=规则命中
+      const isWordCat = c => c === 'terminology' || c === 'register' || c === 'spelling';
+      r = { ...r, issues: (r.issues || []).filter(i =>
+        kind === 'word' ? isWordCat(i.category) : i.category === 'grammar') };
     }
     renderCheck(r, cleanText);
   }
@@ -884,6 +896,79 @@ const safeStorageSet = (obj) => new Promise((res) => {
         if (word) highlightOnPage(word);
       });
     });
+    // 统一定位按钮（面板头部，pin 之前）：一次性高亮当前所有命中
+    const headControls = panel?.querySelector('.bmc-head-controls');
+    if (headControls && !headControls.querySelector('.bmc-locate-btn')) {
+      const btn = document.createElement('button');
+      btn.className = 'bmc-head-btn bmc-locate-btn';
+      btn.title = 'Highlight all hits on the page';
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+      btn.onclick = () => {
+        const hits = [...panelBody().querySelectorAll('.bmc-item b')]
+          .map(b => b.textContent).filter(Boolean);
+        if (!hits.length) { showToast('No hits to highlight.', 3000); return; }
+        highlightAllOnPage(hits);
+      };
+      headControls.insertBefore(btn, headControls.firstChild);
+    }
+  }
+
+  // 一次性高亮全部命中（统一定位按钮）：逐个 span 搜页面出现位置，全部
+  // mark 上色（同一段重复出现都标——定位用途，宁多勿漏）。
+  // 关键：先收集全部 (node, idx) 再统一改 DOM——边遍历边 surroundContents
+  // 会拆分文本节点，TreeWalker 和 DOM 修改互相打架 = 死循环（实测把
+  // 整个浏览器卡死，2026-10-12）。
+  function highlightAllOnPage(spans) {
+    clearPageHighlights();
+    const targets = [];  // {node, idx, len}
+    const seen = new Set();
+    for (const needleRaw of spans) {
+      const needle = needleRaw.trim();
+      if (!needle || seen.has(needle)) continue;
+      seen.add(needle);
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const v = node.nodeValue;
+          if (!v || !v.includes(needle)) return NodeFilter.FILTER_REJECT;
+          const p = node.parentElement;
+          if (!p) return NodeFilter.FILTER_REJECT;
+          if (['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','SELECT'].includes(p.tagName)) return NodeFilter.FILTER_REJECT;
+          if (p.closest('.bmc-panel, .bmc-toast')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let t;
+      while ((t = walker.nextNode())) {
+        let from = 0;
+        while (true) {
+          const idx = t.nodeValue.indexOf(needle, from);
+          if (idx < 0) break;
+          targets.push({node: t, idx, len: needle.length});
+          from = idx + needle.length;
+        }
+      }
+    }
+    let marked = 0;
+    for (const {node, idx, len} of targets) {
+      if (!node.parentNode || !node.nodeValue || idx + len > node.nodeValue.length) continue;
+      try {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + len);
+        const mark = document.createElement('mark');
+        mark.className = 'bmc-hl bmc-hl-all';
+        mark.style.cssText = 'background:#fde047;box-shadow:0 0 0 1px #fde047;border-radius:2px;';
+        range.surroundContents(mark);
+        activeHighlights.push(mark);
+        marked++;
+      } catch { /* 节点在前面 mark 后已变化 → 跳过 */ }
+    }
+    if (marked) {
+      activeHighlights[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast(`${marked} passage${marked > 1 ? 's' : ''} highlighted on the page.`, 4000);
+    } else {
+      showToast('None of the hits appear on the page as-is (text may be split across elements).', 5000);
+    }
   }
 
   // ── 点击卡片 → 页面高亮（替代整页 scan 铺高亮，2026-10-12 用户裁决）──
@@ -1086,11 +1171,14 @@ const safeStorageSet = (obj) => new Promise((res) => {
     return { text: parts.join('\n').slice(0, 30000) };
   }
 
-  function checkPageText() {
+  function checkPageText(kind = 'word') {
+    // kind: 'word'（词表/词典信号卡）| 'grammar'（规则命中卡）。都收集正文
+    // 送检查面板——面板立刻打开（runCheck 先建面板再等 server），不会卡在
+    // 无反馈状态；区别只在结果过滤和端点。
     const { text, error } = collectArticleText();
     if (error) { showToast('Could not read this page: ' + error, 5000); return; }
     if (!text.trim()) { showToast('No suitable text found on this page.', 3000); return; }
-    runCheck(text);
+    runCheck(text, true, kind);
   }
 
   // grammar flag 弹窗：三 kind + optional note + submit → Issue [flag:grammar:kind]
@@ -1342,7 +1430,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       }
       sendResponse({ ok: true });
     } else if (m.type === 'check-page-text') {
-      checkPageText();
+      checkPageText(m.kind || 'word');
       sendResponse({ ok: true });
     } else if (m.type === 'open-general-flag') {
       // general flag（右上角 ⚑）：页面级问题，可不选字；有选中内容则预填
