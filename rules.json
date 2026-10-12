@@ -315,6 +315,40 @@
     "does not flag trigger: Aktiviti itu merangkumi bergotong-royong, kuih-muih, dan men"
    ],
    "impl": "The regex matches a verb starting with ber- or me- followed by a comma, then one of ~300 listed common Malay nouns (kuih-muih, makanan, pakaian, etc.), then a comma and optionally 'dan', then another ber-/me- verb — i.e. it flags a noun sandwiched between two prefixed verbs in a coordinated list. The noun list is the sole mechanism for distinguishing the wrong non-parallel structure from acceptable informal usage."
+  },
+  {
+   "id": "RB-011",
+   "entry_id": "RB-011",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags doubled copulas (adalah merupakan, ialah merupakan, ialah ialah, adalah adalah) and double adversative conjunctions (tetapi ... namun, walaupun ... tetapi) in the same sentence.",
+   "note": "Penggunaan kata bersamaan secara berlebihan (kembar kata) tidak gramatis. Padam salah satu kata hubung/kopula yang berlebihan.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Ini adalah merupakan buku baru.",
+     "Ini ialah merupakan buku baru.",
+     "Ini ialah ialah buku baru.",
+     "Ini adalah adalah buku baru.",
+     "Dia datang tetapi dia tidak bercakap namun dia tersenyum.",
+     "Walaupun hujan, tetapi dia datang."
+    ],
+    "clear": [
+     "Ini merupakan buku baru.",
+     "Walaupun hujan, dia datang.",
+     "Ini adalah buku baru.",
+     "Dia datang tetapi dia tidak bercakap.",
+     "Walaupun hujan, namun dia datang."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(adalah merupakan|ialah merupakan|ialah ialah|adalah adalah)\\b|\\btetapi\\b[^.]*\\bnamun\\b|\\bnamun\\b[^.]*\\btetapi\\b|\\bwalaupun\\b[^.]*\\btetapi\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches four exact doubled-copula phrases (adalah merupakan, ialah merupakan, ialah ialah, adalah adalah) as contiguous word pairs, and also matches three cross-sentence double-conjunction patterns by searching for the first conjunction then any non-period characters then the second conjunction (tetapi…namun, namun…tetapi, walaupun…tetapi)."
   }
  ],
  "ms_id_suffix_map": [
