@@ -258,35 +258,34 @@
    "id": "RB-009",
    "entry_id": "RB-009",
    "plugin": "regex_match",
-   "conf": "low",
-   "conf_trial": "medium",
+   "conf": "medium",
+   "conf_trial": "high",
    "status": "trial",
-   "desc": "Flags 'memberikan' when directly followed by an animate recipient noun (pelajar, guru, orang, anak, ibu, etc.) — plain 'memberi' should be used for giving to people.",
-   "note": "Gunakan 'memberi' (tanpa -kan) apabila objeknya ialah manusia: 'memberi pelajar', bukan 'memberikan pelajar'. Imbuhan -kan untuk benefaktif seperti 'memberikan sumbangan'.",
+   "desc": "Flags 'memberikan' when directly followed by an animate recipient noun (with or without the -nya clitic) or 'mereka', since plain 'memberi' should be used for giving to people.",
+   "note": "Gunakan 'memberi' (bukan 'memberikan') apabila penerima adalah manusia: memberi pelajar, memberi anaknya, memberi mereka.",
    "source": "LLM-translated from human description (2026-10-12)",
    "examples": {
     "trigger": [
      "Guru memberikan pelajar sebuah buku.",
-     "Ibu memberikan anaknya coklat."
+     "Ibu memberikan anaknya coklat.",
+     "Dia memberikan mereka hadiah.",
+     "Guru memberikan gurunya sesuatu."
     ],
     "clear": [
      "Guru memberi pelajar sebuah buku.",
      "Ibu memberi anaknya coklat.",
      "Dia memberikan sumbangan kepada sekolah.",
-     "Dia memberikan sumbangan besar."
+     "Dia memberikan sumbangan besar.",
+     "Dia memberikan bantuan kepada mangsa banjir."
     ]
    },
    "params": {
-    "pattern": "\\bmemberikan\\s+(?:pelajar|guru|orang|anak|ibu|murid|siswa|pelatih|kawan|rakan|sahabat|isteri|suami|nenek|datuk|abang|kakak|adik|bayi|kanak-kanak|remaja|pekerja|kakitangan|tetamu|tamu|jiran|pesakit|doktor|jururawat|pegawai|ketua|presiden|raja|sultan|perdana\\s+menteri|menteri|wakil|utusan|pemandu|pekerja|buruh|petani|nelayan|peniaga|penjual|pembeli|penumpang|penonton|pendengar|pembaca|penulis|pencipta|perekacipta|pereka|arkitek|jurutera|ahli\\s+fizik|ahli\\s+kimia|ahli\\s+biologi|ahli\\s+matematik|ahli\\s+sains|ahli\\s+sejarah|ahli\\s+geografi|ahli\\s+ekonomi|ahli\\s+sosiologi|ahli\\s+antropologi|ahli\\s+psikologi|ahli\\s+falsafah|ahli\\s+politik|ahli\\s+hukum|ahli\\s+undang-undang|ahli\\s+parlimen|ahli\\s+majlis|ahli\\s+jawatankuasa|ahli\\s+panel|ahli\\s+juri|ahli\\s+court|ahli\\s+bank|ahli\\s+koperasi|ahli\\s+persatuan|ahli\\s+kelab|ahli\\s+sukan|ahli\\s+muzik|ahli\\s+kumpulan|ahli\\s+pasukan|ahli\\s+tentera|ahli\\s+polis|ahli\\s+bomba|ahli\\s+pengakap|ahli\\s+puteri|ahli\\s+pengakap\\s+kanak-kanak|ahli\\s+pengakap\\s+remaja|ahli\\s+pengakap\\s+muda|ahli\\s+pengakap\\s+senior|ahli\\s+pengakap\\s+rendah|ahli\\s+pengakap\\s+tinggi|ahli\\s+pengakap\\s+king|ahli\\s+pengakap\\s+queen|ahli\\s+pengakap\\s+presiden|ahli\\s+pengakap\\s+sultan|ahli\\s+pengakap\\s+raja|ahli\\s+pengakap\\s+perdana\\s+menteri|ahli\\s+pengakap\\s+menteri|ahli\\s+pengakap\\s+wakil|ahli\\s+pengakap\\s+utusan|ahli\\s+pengakap\\s+pemandu|ahli\\s+pengakap\\s+pekerja|ahli\\s+pengakap\\s+buruh|ahli\\s+pengakap\\s+petani|ahli\\s+pengakap\\s+nelayan|ahli\\s+pengakap\\s+peniaga|ahli\\s+pengakap\\s+penjual|ahli\\s+pengakap\\s+pembeli|ahli\\s+pengakap\\s+penumpang|ahli\\s+pengakap\\s+penonton|ahli\\s+pengakap\\s+pendengar|ahli\\s+pengakap\\s+pembaca|ahli\\s+pengakap\\s+penulis|ahli\\s+pengakap\\s+pencipta|ahli\\s+pengakap\\s+perekacipta|ahli\\s+pengakap\\s+pereka|ahli\\s+pengakap\\s+arkitek|ahli\\s+pengakap\\s+jurutera)\\b",
-    "exceptions": [
-     "\\bmemberikan\\s+(?:sumbangan|pertolongan|pelajaran|layanan|taklimat|nasihat|ajaran|bantuan|cadangan|komen|ulasan|pendapat|sokongan|kerjasama|kebenaran|peluang|ruang|masa|waktu|peluang|tumpuan|perhatian|fokus|penekanan|tekanan|keutamaan|prioriti|tugas|tanggungjawab|amanah|kuasa|hak|wewenang|kewenangan|autoriti|wibawa|kemuliaan|kehormatan|maruah|harga\\s+diri|jati\\s+diri|identiti|personaliti|karakter|sifat|ciri|atribut|kualiti|kuantiti|jumlah|bilangan|saiz|bentuk|rupa|warna|rasa|bau|bunyi|suara|nada|pic|melodi|irama|rentak|tempo|laju|kelajuan|laju\\s+lari|kelajuan\\s+lari|kelajuan\\s+jalan|kelajuan\\s+bas|kelajuan\\s+kereta|kelajuan\\s+kapal|kelajuan\\s+pesawat|kelajuan\\s+kereta\\s+api|kelajuan\\s+basikal|kelajuan\\s+motosikal|kelajuan\\s+lori|kelajuan\\s+van|kelajuan\\s+teksi|kelajuan\\s+teksi\\s+udara|kelajuan\\s+teksi\\s+laut|kelajuan\\s+bot|kelajuan\\s+saman|kelajuan\\s+perahu|kelajuan\\s+rakit|kelajuan\\s+jong|kelajuan\\s+kapal\\s+layar|kelajuan\\s+kapal\\s+perang|kelajuan\\s+kapal\\s+selam|kelajuan\\s+kapal\\s+terbang|kelajuan\\s+roket|kelajuan\\s+satelit|kelajuan\\s+peluru|kelajuan\\s+anak\\s+panah|kelajuan\\s+tombak|kelajuan\\s+lembing|kelajuan\\s+cakera|kelajuan\\s+tukul|kelajuan\\s+bola|kelajuan\\s+pingpong|kelajuan\\s+tenis|kelajuan\\s+bola\\s+tampar|kelajuan\\s+bola\\s+jaring|kelajuan\\s+bola\\s+keranjang|kelajuan\\s+bola\\s+sepak|kelajuan\\s+ragbi|kelajuan\\s+hoki|kelajuan\\s+kriket|kelajuan\\s+golf|kelajuan\\s+snuker|kelajuan\\s+biliard|kelajuan\\s+pool|kelajuan\\s+bowling|kelajuan\\s+skittels|kelajuan\\s+dart|kelajuan\\s+panah|kelajuan\\s+menembak|kelajuan\\s+memanah|kelajuan\\s+lawan\\s+pedang|kelajuan\\s+lawan\\s+samurai|kelajuan\\s+lawan\\s+katana|kelajuan\\s+lawan\\s+keris|kelajuan\\s+lawan\\s+lembing|kelajuan\\s+lawan\\s+tombak|kelajuan\\s+lawan\\s+pedang\\s+pendek|kelajuan\\s+lawan\\s+pedang\\s+panjang|kelajuan\\s+lawan\\s+perisai|kelajuan\\s+lawan\\s+helm|kelajuan\\s+lawan\\s+zirah|kelajuan\\s+lawan\\s+baju\\s+besi|kelajuan\\s+lawan\\s+baju\\s+rantai|kelajuan\\s+lawan\\s+baju\\s+sisik|kelajuan\\s+lawan\\s+baju\\s+kulit|kelajuan\\s+lawan\\s+baju\\s+kain|kelajuan\\s+lawan\\s+baju\\s+kapas|kelajuan\\s+lawan\\s+baju\\s+sutera|kelajuan\\s+lawan\\s+baju\\s+linen|kelajuan\\s+lawan\\s+baju\\s+polister|kelajuan\\s+lawan\\s+baju\\s+naylon|kelajuan\\s+lawan\\s+baju\\s+akrilik|kelajuan\\s+lawan\\s+baju\\s+spandeks|kelajuan\\s+lawan\\s+baju\\s+elastan|kelajuan\\s+lawan\\s+baju\\s+lycra|kelajuan\\s+lawan\\s+baju\\s+rayon|kelajuan\\s+lawan\\s+baju\\s+viskos|kelajuan\\s+lawan\\s+baju\\s+modal|kelajuan\\s+lawan\\s+baju\\s+tenun|kelajuan\\s+lawan\\s+baju\\s+songket|kelajuan\\s+lawan\\s+baju\\s+batik|kelajuan\\s+lawan\\s+baju\\s+brokat|kelajuan\\s+lawan\\s+baju\\s+sulam|kelajuan\\s+lawan\\s+baju\\s+jahit|kelajuan\\s+lawan\\s+baju\\s+jahit\\s+mesin|kelajuan\\s+lawan\\s+baju\\s+jahit\\s+tangan|kelajuan\\s+lawan\\s+baju\\s+jahit\\s+sulam|kelajuan\\s+lawan\\s+baju\\s+crochet|kelajuan\\s+lawan\\s+baju\\s+knit|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+mesin|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+tangan|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+kapas|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+sutera|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+linen|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+polister|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+naylon|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+akrilik|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+spandeks|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+elastan|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+lycra|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+rayon|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+viskos|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+modal|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+songket|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+batik|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+brokat|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+sulam|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+jahit|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+jahit\\s+mesin|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+jahit\\s+tangan|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+jahit\\s+sulam|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+crochet|kelajuan\\s+lawan\\s+baju\\s+tenun\\s+knit)\\b"
-    ],
+    "pattern": "\\bmemberikan\\s+(?:pelajar(?:nya)?|guru(?:nya)?|orang(?:nya)?|anak(?:nya)?|ibu(?:nya)?|bapa(?:nya)?|ayah(?:nya)?|rakan(?:\\-rakan)?(?:nya)?|kawan(?:\\-kawan)?(?:nya)?|sahabat(?:nya)?|murid(?:nya)?|penuntut(?:nya)?|pekerja(?:nya)?|majikan(?:nya)?|tetamu(?:nya)?|jiran(?:nya)?|mereka|isteri(?:nya)?|suami(?:nya)?|adik(?:nya)?|kakak(?:nya)?|abang(?:nya)?|nenek(?:nya)?|datuk(?:nya)?|paman(?:nya)?|bibi(?:nya)?|sepupu(?:nya)?|menantu(?:nya)?|ipar(?:nya)?|anak\\-anak(?:nya)?)\\b",
+    "exceptions": [],
     "suggestion": "memberi"
    },
-   "self_test_failures": [
-    "does not flag trigger: Ibu memberikan anaknya coklat."
-   ],
-   "impl": "The regex matches 'memberikan' followed by one of ~50 listed animate nouns (pelajar, guru, orang, anak, ibu, murid, etc.); the exceptions list covers common inanimate objects like sumbangan, pertolongan, pelajaran so those are not flagged."
+   "impl": "The regex matches the word 'memberikan' followed by whitespace and then one of ~40 listed animate nouns (each optionally carrying the -nya clitic, e.g. anaknya, gurunya) or the pronoun 'mereka'. No exception pattern is needed because the listed nouns are all animate recipients; inanimate objects like 'sumbangan' or 'bantuan' simply do not appear in the list and are never matched.",
+   "enhanced_from": "RB-009"
   },
   {
    "id": "RB-010",
