@@ -582,6 +582,35 @@
     "suggestion": ""
    },
    "impl": "Sentences matching the pre-filter regex (a time/sequence word directly followed by a di- verb) are sent to the LLM with the criterion: flag only when the main-clause subject is a person who could not logically be the actor of the passive verb; sentences without the pre-filter match are never sent."
+  },
+  {
+   "id": "RB-020",
+   "entry_id": "RB-020",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags three Malay collocation/word-choice errors: 'tali pikat' (should be 'tali anjing' or 'cawak'), 'bunyi amaran' for a device tone (should be 'bunyi isyarat'), and 'nasihat tidak diundang' (should be 'nasihat tidak diminta').",
+   "note": "Pilihan kata tidak tepat. Sila gunakan: 'tali anjing' atau 'cawak' (bukan 'tali pikat'); 'bunyi isyarat' (bukan 'bunyi amaran' untuk nada pemberitahuan); 'nasihat tidak diminta' (bukan 'nasihat tidak diundang').",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Dia menarik anjing itu dengan tali pikat.",
+     "Telefon itu mengeluarkan bunyi amaran.",
+     "Dia memberi nasihat tidak diundang."
+    ],
+    "clear": [
+     "Dia menarik anjing itu dengan cawak.",
+     "Telefon itu mengeluarkan bunyi isyarat.",
+     "Dia memberi nasihat tidak diminta."
+    ]
+   },
+   "params": {
+    "pattern": "\\btali\\s+pikat\\b|\\bbunyi\\s+amaran\\b|\\bnasihat\\s+tidak\\s+diundang\\b",
+    "exceptions": [],
+    "suggestion": ""
+   },
+   "impl": "The regex matches any of three exact multi-word phrases — 'tali pikat', 'bunyi amaran', or 'nasihat tidak diundang' — using case-insensitive word-boundary alternation; no exceptions are defined, so every match is flagged."
   }
  ],
  "ms_id_suffix_map": [
