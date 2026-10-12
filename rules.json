@@ -530,17 +530,20 @@
   {
    "id": "RB-018",
    "entry_id": "RB-018",
-   "plugin": "llm_judge",
+   "plugin": "regex_match",
    "conf": "low",
    "conf_trial": "medium",
    "status": "trial",
-   "desc": "Flags 'antara X dan Y' with exactly two coordinated items joined by 'dan' instead of 'dengan', but spares relational/temporal/spatial idioms (perbezaan, hubungan, pukul, terletak, etc.) where 'dan' is natural even with two items.",
-   "note": "Untuk hubungan timbal balik dua pihak, gunakan 'antara X dengan Y' mengikut Tatabahasa Dewan. Namun, corak idiom seperti 'perbezaan antara X dan Y', 'hubungan antara X dan Y', 'antara pukul X dan Y', dan 'terletak antara X dan Y' adalah betul dengan 'dan'.",
+   "desc": "Flags 'antara X dan Y' in reciprocal two-party agreement/arrangement contexts (perjanjian, persetujuan, kerjasama, rundingan, persefahaman) where Tatabahasa Dewan prescribes 'dengan' instead of 'dan'.",
+   "note": "Untuk perjanjian/persetujuan/kerjasama antara dua pihak, gunakan 'dengan' mengikut Tatabahasa Dewan, bukan 'dan'.",
    "source": "LLM-translated from human description (2026-10-12)",
    "examples": {
     "trigger": [
      "Persetujuan antara kerajaan dan syarikat itu ditandatangani.",
-     "Antara Malaysia dan Indonesia terdapat banyak persamaan budaya."
+     "Antara Malaysia dan Indonesia terdapat banyak persamaan budaya.",
+     "Kerjasama antara pihak sekolah dan ibu bapa perlu dieratkan.",
+     "Perjanjian antara Malaysia dan Indonesia akan ditandatangani esok.",
+     "Rundingan antara pihak pekerja dan pengurusan berjalan lancar."
     ],
     "clear": [
      "Persetujuan antara kerajaan dengan syarikat itu ditandatangani.",
@@ -548,18 +551,21 @@
      "Perbezaan antara bandar dan kampung semakin ketara.",
      "Dia datang antara pukul tiga dan empat petang.",
      "Hubungan antara Malaysia dan Indonesia erat.",
-     "Buku itu terletak antara meja dan kerusi."
+     "Buku itu terletak antara meja dan kerusi.",
+     "Antara Malaysia dan Indonesia terdapat banyak persamaan budaya."
     ]
    },
    "params": {
-    "judge": "Flag the sentence ONLY when it contains 'antara X dan Y' expressing a reciprocal/complementary relationship of exactly two parties (e.g. agreement, treaty, contract, cooperation between two entities) where Tatabahasa Dewan prescribes 'dengan' instead of 'dan'. Do NOT flag when 'antara X dan Y' appears in: (a) relational idioms like 'perbezaan antara X dan Y' (difference between), 'hubungan antara X dan Y' (relations between), 'persamaan antara X dan Y' (similarity between), 'pertandingan antara X dan Y' (contest between); (b) temporal ranges like 'antara pukul X dan Y' (between time X and time Y); (c) spatial location like 'terletak antara X dan Y' (located between X and Y); (d) lists of three or more items joined by 'dan'. When in doubt, do not flag.",
-    "trigger": "\\bantara\\b[^.]{0,60}\\bdan\\b",
-    "suggestion": "Gantikan 'dan' dengan 'dengan' untuk hubungan timbal balik dua pihak: antara X dengan Y"
+    "pattern": "\\b(?:perjanjian|persetujuan|kerjasama|rundingan|persepahaman|persekutuan|pakatan)\\s+antara\\s+\\S+(?:\\s+\\S+){0,3}?\\s+dan\\s+",
+    "exceptions": [
+     "\\b(?:perbezaan|persamaan|hubungan|pertalian|perhubungan|jurang|konflik|pertentangan|persaingan)\\s+antara\\s+\\S+(?:\\s+\\S+){0,3}?\\s+dan\\s",
+     "\\bantara\\s+pukul\\s+\\S+\\s+dan\\s",
+     "\\bterletak\\s+(?:di\\s+)?antara\\s+\\S+(?:\\s+\\S+){0,3}?\\s+dan\\s",
+     "\\b(?:terdapat|ada)\\s+\\S*\\s*\\S*\\s*antara\\s+\\S+\\s+dan\\s"
+    ],
+    "suggestion": "dengan"
    },
-   "self_test_failures": [
-    "judge does not flag trigger: Antara Malaysia dan Indonesia terdapat banyak persamaan buda"
-   ],
-   "impl": "Sentences matching the pre-filter regex (the word 'antara' followed within 60 characters by 'dan') are sent to the LLM with the criterion: flag only reciprocal/complementary two-party relationships where Tatabahasa Dewan prescribes 'dengan', sparing relational/temporal/spatial idioms and lists of three or more; LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent.",
+   "impl": "The regex matches agreement nouns (perjanjian, persetujuan, kerjasama, rundingan, persefahaman, persekutuan, pakatan) followed within 0–3 words by 'antara … dan', then three exception patterns suppress matches when the same span is preceded by relational nouns (perbezaan, persamaan, hubungan, etc.), by 'pukul' for temporal ranges, by 'terletak' for spatial location, or by 'terdapat/ada' for existential statements.",
    "enhanced_from": "RB-018"
   },
   {
