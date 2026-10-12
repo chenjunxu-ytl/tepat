@@ -1,12 +1,39 @@
-# Tepat v0.3.0
+# Tepat v0.4.0
 
 Malay word/grammar checker: local Windows runtime + browser extension.
 Rules and word lists live in %APPDATA%/tepat and sync through this repo;
 PRPM is the online dictionary layer.
 
+## Highlights in 0.4.0
+
+- **Fifteen new rules from the settled Rule Book**: comparative
+  dari/daripada, berbanding, beneficiary bagi, time prepositions,
+  adalah+verb, mensetujui, memberikan+animate, parallel verb series,
+  doubled copulas, plural+reduplication, English calques, collocations,
+  spelling, lepas/lepaskan — translated by the server's own agent,
+  each with example sentences and a self-test (33-sentence regression
+  clean). Two of them run as agent rules (llm_judge) where regex cannot
+  judge: parallel verb series and animate recipients.
+- **Agent rules (llm_judge)**: language points regex cannot express
+  (word order, sentence structure, animacy) run as LLM-judged rules —
+  the criterion and its examples are human-reviewed rule data, unsure
+  never flags.
+- **Rule detail views** show how each rule actually works (impl field),
+  and settled rules are editable: Enhance (natural-language correction),
+  Edit code (direct plugin/params with example self-test).
+- **Wrong-flag feedback loop**: every hit card carries a flag button;
+  the report opens a GitHub issue titled with the rule id, and the
+  review console jumps straight to the enhance dialog for that rule.
+- **Update detection**: the popup pulses a download button when a new
+  release exists (extension or server), and the Env tab shows both
+  versions.
+- **Panel redesign**: check panel and flag panel coexist, hit cards
+  carry "Is X correct?" search icons, and clicking a card highlights
+  the passage on the page.
+
 ## What's in this release
 
-- **All-in-one download** (`tepat-v0.3.0-all-in-one.zip`): runtime and
+- **All-in-one download** (`tepat-v0.4.0-all-in-one.zip`): runtime and
   extension in one archive — unpack, run `tepat/tepat-v2/tepat-v2.exe`,
   load `tepat/extension/` as an unpacked extension. No separate downloads.
 - **Rule Book pipeline**: describe a language point in plain words, the
