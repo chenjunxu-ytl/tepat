@@ -167,6 +167,10 @@ def set_llm_judge(fn):
 def _plugin_llm_judge(text, sents, rule, add):
     """llm_judge：LLM 按规则的判据分类句子。params:
       judge（必需）——自然语言判据，说明什么算错什么算对；
+      trigger（可选，强烈建议）——regex 预筛（用户裁决 2026-10-12：不是
+      每句都跑 LLM——句子命中 trigger 才送判决，否则直接 clear。成本从
+      "每句一次 LLM" 降到 "含关键词的句子一次"。缺 trigger = 全句判决
+      （向后兼容老规则；deep scan 场景）；
       例句用规则条目自己的 examples（trigger/clear），与 Rule Book 一致。
     产出：trigger 的整句标注（category/level 随规则 conf），note/suggestion
     用规则自己的字段。整句标注而非 span——LLM 定位不可信，句级锚定最稳。"""
@@ -176,6 +180,10 @@ def _plugin_llm_judge(text, sents, rule, add):
         raise ValueError(f"llm_judge rule {rule.get('id', '?')} missing params.judge")
     if _llm_judge_fn is None:
         return  # 机器没配 LLM——规则可用性由部署形态决定，跳过不报错
+    trigger_rx = None
+    trigger_pat = str(params.get('trigger') or '').strip()
+    if trigger_pat:
+        trigger_rx = re.compile(trigger_pat, re.IGNORECASE)
     ex = rule.get('examples') or {}
     judge_key = hashlib.sha256(
         json.dumps({'judge': judge, 'trigger': ex.get('trigger'),
@@ -184,6 +192,9 @@ def _plugin_llm_judge(text, sents, rule, add):
     conf = rule.get('conf', 'low')
     level = {'high': 'error', 'medium': 'warning', 'low': 'info'}[conf]
     for start, end, sent in sents:
+        # regex 预筛：句子不含触发词 → 直接 clear，不打 LLM
+        if trigger_rx is not None and not trigger_rx.search(sent):
+            continue
         key = (judge_key, sent)
         if key not in _llm_judge_cache:
             try:

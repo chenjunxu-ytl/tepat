@@ -650,7 +650,7 @@ Rules for the regex:
 - Use \\b word boundaries around words; keep the pattern as narrow as the examples justify.
 - exceptions patterns suppress matches inside their span — use them for legal contexts visible in clear examples.
 - If the distinction cannot be expressed by regex (word order, sentence structure, counting items, clause analysis), use the llm_judge form instead:
-  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "suggestion": "<replacement guidance or empty>"}. In that case "impl" describes the judge: 'Every sentence is sent to the LLM with the criterion: <one-line summary of the judge>; sentences the LLM calls trigger are flagged as a whole-sentence note.'
+  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "trigger": "<a NARROW python regex pre-filter — sentences must match this before the LLM is consulted, e.g. one required keyword or short phrase; keep it cheap and permissive (the judge refines, the trigger only gates)", "suggestion": "<replacement guidance or empty>"}. In that case "impl" describes both layers: 'Sentences matching the pre-filter regex are sent to the LLM with the criterion: <one-line summary>; LLM trigger verdicts are flagged as whole-sentence notes; sentences without the pre-filter match are never sent.'
   The judge runs sentence-by-sentence against an LLM; write it so that borderline sentences read as clear, not trigger.
 Spelling/conf guidance:
 - conf high = structural error with no legal context.
@@ -741,9 +741,26 @@ Return the JSON object only."""
         judge = str(params.get("judge") or "").strip()
         if not judge:
             raise ValueError("llm_judge requires params.judge")
+        # trigger 预筛（用户裁决 2026-10-12）：llm_judge 不是每句跑——句子
+        # 命中 trigger regex 才送 LLM。translate 产物必须自带（缺了补默认：
+        # 从例句 trigger 提取关键词做宽松 OR）。
+        trigger_pat = str(params.get("trigger") or "").strip()
+        if not trigger_pat:
+            ex_pre = spec.get("examples") or {}
+            kws = set()
+            for t in (ex_pre.get("trigger") or []):
+                for w in re.findall(r"[a-zA-Z]{4,}", str(t).lower()):
+                    kws.add(w)
+            # 去掉 clear 例句里也出现的词（它们不是区分性关键词）
+            for c in (ex_pre.get("clear") or []):
+                for w in re.findall(r"[a-zA-Z]{4,}", str(c).lower()):
+                    kws.discard(w)
+            if kws:
+                params["trigger"] = "|".join(sorted(kws)[:8])
+                spec["params"] = params
         if not str(spec.get("impl") or "").strip():
-            spec["impl"] = (f"Every sentence is sent to the LLM with the "
-                            f"criterion: {judge[:200]}")
+            spec["impl"] = (f"Sentences matching the pre-filter regex are sent "
+                            f"to the LLM with the criterion: {judge[:200]}")
         ex = spec.get("examples") or {}
         triggers = [str(t).strip()[:300] for t in (ex.get("trigger") or []) if str(t).strip()]
         clears = [str(c).strip()[:300] for c in (ex.get("clear") or []) if str(c).strip()]
@@ -965,6 +982,18 @@ def _selftest_rule(rule: dict) -> list[str]:
             return ["llm_judge requires params.judge"]
         if not triggers:
             return ["no trigger sentences to test against"]
+        # trigger 预筛层验证（2026-10-12）：trigger 例句必须被预筛命中（否则
+        # 规则在线上永远沉睡）；预筛本身合法 regex。
+        trigger_pat = str(params.get("trigger") or "").strip()
+        if trigger_pat:
+            try:
+                trx = re.compile(trigger_pat, re.IGNORECASE)
+            except re.error as e:
+                return [f"trigger regex invalid: {e}"]
+            miss = [t for t in triggers if not trx.search(t)]
+            if miss:
+                return [f"trigger pre-filter misses its own trigger example: "
+                        f"{miss[0][:60]}"]
         try:
             _llm_config()
         except RuntimeError:
