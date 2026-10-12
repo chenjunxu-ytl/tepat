@@ -1,8 +1,28 @@
-# Tepat v0.4.2
+# Tepat v0.4.3
 
 Malay word/grammar checker: local Windows runtime + browser extension.
 Rules and word lists live in %APPDATA%/tepat and sync through this repo;
 PRPM is the online dictionary layer.
+
+## Highlights in 0.4.3
+
+- **Rule Book fully covered**: the remaining settled language points are
+  live — antara with two items (with idiomatic uses learned live: only
+  reciprocal agreements take dengan), dangling modifiers with passive
+  clauses, and three collocation errors. All 22 retired language-point
+  groups are now rules (RB-001 to RB-020).
+- **Deep check is rule-driven now**: the LLM's free-form opinion pass
+  is gone. Deep check runs the deep-only llm_judge rules —
+  sentence-structure checks that cannot name a pre-filter keyword —
+  alongside the normal scan, and every finding cites its rule.
+- **Cheaper agent rules**: llm_judge rules carry a regex pre-filter;
+  only sentences containing the rule's keyword go to the LLM. Sentences
+  without it run at regex speed (six clean sentences scan in 0.08s
+  where every-sentence judging made up to eighteen LLM calls).
+- **Cycling highlights**: clicking a hit card repeatedly cycles through
+  every occurrence of the phrase ("Occurrence 2 of 5").
+- **No-LLM hint**: machines without an LLM key get one explanatory
+  sentence on the deep check instead of a silent gap.
 
 ## Highlights in 0.4.2
 
