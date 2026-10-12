@@ -1172,6 +1172,7 @@ const safeStorageSet = (obj) => new Promise((res) => {
       </div>
       ${clean ? `
         <div class="bmc-flag-target">${esc(shown)}</div>` : ''}
+      <input class="bmc-flag-rule" value="${esc(panel?.dataset?.flagRule || '')}" placeholder="Rule id (optional, e.g. RB-001)" spellcheck="false" style="width:100%;font:12px/1.4 system-ui;padding:6px 9px;border:1px solid #c4ced8;border-radius:7px;margin-top:8px">
       ${kinds.map(([v, label]) => `
         <label class="bmc-flag-opt"><input type="radio" name="bmc-fk" value="${v}"> ${esc(label)}</label>`).join('')}
       <textarea class="bmc-flag-note bmc-flag-note-area" rows="3" placeholder="Explanation (optional)"></textarea>
@@ -1205,10 +1206,12 @@ const safeStorageSet = (obj) => new Promise((res) => {
       }
       go.disabled = true; go.textContent = 'Submitting…';
       try {
+        const rule = panel?.dataset?.flagRule ||
+          (panel?.querySelector('.bmc-flag-rule')?.value || '').trim();
         const r = await fetch(`${API}/api/flag`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: clean || 'page', kind, note, scope })
+          body: JSON.stringify({ word: clean || 'page', kind, note, scope, rule })
         }).then(x => x.json());
         if (!r.ok) throw new Error(r.error || 'flag failed');
         removeUI();
@@ -1226,6 +1229,28 @@ const safeStorageSet = (obj) => new Promise((res) => {
     if (!clean) return;
     openFlagPanel(/\s/.test(clean) ? 'grammar' : 'word', clean);
   }
+
+  // Wrong? 按钮（scan 命中项）：用户认为这条判定不对 → grammar flag 预填。
+  // rule（origin）随 flag 提交，审核台据此显示 "enhance this rule" 直达入口。
+  document.addEventListener('click', e => {
+    const btn = e.target.closest?.('.bmc-wrong-btn');
+    if (!btn) return;
+    const word = btn.dataset.word || '';
+    openFlagPanel('grammar', word);
+    // 面板是异步同步渲染的——下一帧再预选 overflag（"这个判错了"最常见立场）
+    setTimeout(() => {
+      if (!panel) return;
+      const kindInput = panel.querySelector('.bmc-flag-body input[name="bmc-fk"][value="overflag"]');
+      if (kindInput) {
+        kindInput.checked = true;
+        kindInput.dispatchEvent(new Event('change'));
+      }
+      const noteEl = panel.querySelector('.bmc-flag-note');
+      if (noteEl) noteEl.placeholder = 'What is wrong with this flag? (which rule, what should it do?)';
+      // rule 记到面板 dataset，提交时随 /api/flag 一起发
+      if (btn.dataset.rule) panel.dataset.flagRule = btn.dataset.rule;
+    }, 50);
+  });
 
   // ── 消息监听与快捷键 ──
   chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {

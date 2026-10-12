@@ -419,10 +419,12 @@ $('#output').onclick=async e=>{
 // ── Server Rules tab ──
 let cfgAdmin=false;  // health 探测时写入；trial 规则的 Accept/Reject 只给 admin
 let cfgConfFilter='';  // pill filter: '' | high | medium | low
+let cfgRulesCache=[];  // /api/config 的 rule_views 全量（Enhance this rule 查条目用）
 async function loadConfig(){
  try{
   const r=await fetch(API+'/api/config').then(x=>x.json());
   const all=r.rule_views||[];
+  cfgRulesCache=all;
   const views=cfgConfFilter?all.filter(v=>v.conf===cfgConfFilter):all;
   const active=all.filter(v=>v.enabled!==false).length;
   const trials=all.filter(v=>v.status==='trial').length;
@@ -985,14 +987,31 @@ async function loadFlagsView(which){
       ? (which==='wf' ? open.map(decideRow).join('') : open.map(f=>`
         <div style="border:1px solid #dbe1e7;border-radius:8px;padding:9px 11px;margin:7px 0;font-size:13px">
           <b>${esc(f.target)}</b> ${kindBadge(f.kind)}
+          ${f.rule?`<span class="lvl lvl-warn" title="the reported rule">${esc(f.rule)}</span>`:''}
           <span style="font-size:11px;color:#5d6977">#${f.number} · ${esc((f.created_at||'').slice(0,10))}</span>
           <a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;margin-left:8px">issue ↗</a>
-          ${f.user_note && f.user_note !== '-' ? `<div style="font-size:12px;color:#526273;margin:5px 0 0">${esc(f.user_note.slice(0,300))}</div>` : ''}
+          ${which==='gf'&&f.rule&&/^RB-\d+$/i.test(f.rule)?`<button class="act" data-enhance-rule="${esc(f.rule)}" style="font-size:11.5px;padding:2px 10px;margin-left:6px">Enhance this rule</button>`:''}
+          ${f.user_note && f.user_note !== '-' ? `<div style="font-size:12px;color:#526273;margin:5px 0 0">${esc(f.user_note.slice(0,300))}</div>`:''}
         </div>`).join(''))
       : '<p class="sub" style="margin:0">No open flags.</p>')
     + (showClosed && closed.length
         ? `<div class="bmc-sec-title">Closed</div>` + closed.map(row).join('')
         : '');
+  // Grammar flags 的 "Enhance this rule"：带 rule 的 flag 直连规则修正——
+  // 切到 Server Rules、等列表加载、打开该规则详情、自动弹 Enhance 对话框。
+  list.querySelectorAll('[data-enhance-rule]').forEach(btn => btn.onclick = async () => {
+    const rid = btn.dataset.enhanceRule;
+    const navBtn = document.querySelector('#nav-serverrules');
+    if (navBtn) navBtn.click();
+    await loadConfig();
+    const row = document.querySelector(`#cfg-rules tbody tr[data-entry="${CSS.escape(rid)}"]`);
+    if (!row) { const m=$(`#${which}-msg`); if(m)m.innerHTML=`<span class="bad">✗ rule ${esc(rid)} not found in Server Rules</span>`; return; }
+    const v = cfgRulesCache.find(r => r.entry_id === rid);
+    if (!v) return;
+    showCfgDetail(v);
+    const enhanceBtn = document.querySelector('[data-op="enhance"]');
+    if (enhanceBtn) enhanceBtn.click();
+  });
   if (which==='wf') {
    // Accept / Reject（definition 已预填在 textarea，admin 自由编辑）
    list.querySelectorAll('[data-decide]').forEach(btn => btn.onclick = async () => {

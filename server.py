@@ -1755,6 +1755,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "scope": m.group(1) if m else "legacy",
                                 "kind": m.group(2) if m else "",
                                 "target": m.group(3) if m else it.get("title", ""),
+                                "rule": body_field("rule"),
                                 "definition": body_field("definition"),
                                 "user_note": body_field("user_note"),
                                 "prpm_status": body_field("prpm_status"),
@@ -2389,6 +2390,10 @@ class Handler(BaseHTTPRequestHandler):
             if scope == "word":
                 scope = "prpm"
             rule_id = str(req.get("rule") or "").strip()[:40]
+            if rule_id:
+                # 带 rule 的 grammar flag（Wrong? 按钮 / 面板手填）：title 用
+                # 规则号做 target——审核台一眼看出哪条规则被投诉，直连 enhance。
+                word = rule_id
             if scope == "general":
                 # general 不绑词/规则：note 是主体，不查 PRPM
                 if not word:
