@@ -1031,12 +1031,25 @@ const safeStorageSet = (obj) => new Promise((res) => {
   // 在可见文本里找 spanText 的确切出现位置，包 mark 高亮 + 滚动到视野。
   // 旧的 activeHighlights/clearPageHighlights 机制复用——Clear highlights
   // 按钮和新的 mark 都走同一套。
+  // 卡片点击 → 循环定位（用户裁决 2026-10-12）：同一 span 重复出现时，
+  // 连续点击同卡循环跳到下一个出现处（第 1 → 第 2 → … → 回到第 1）。
+  // 上次点击的 (span, 出现序号) 记在 _hlFocusState；换卡点击从头开始。
+  const _hlFocusState = { needle: null, idx: -1 };
+
   function highlightOnPage(spanText) {
-    clearPageHighlights();
     const needle = spanText.trim();
     if (!needle) return;
-    // 遍历可见文本节点，找完整包含 needle 的节点（跨节点切分不管——
-    // 命中 span 来自 server 的句子切片，绝大多数落单节点内）
+    // 同卡连点 → 序号 +1；新卡 → 从 0 开始
+    if (_hlFocusState.needle === needle) {
+      _hlFocusState.idx += 1;
+    } else {
+      clearPageHighlights();
+      _hlFocusState.needle = needle;
+      _hlFocusState.idx = 0;
+    }
+    // 先收集全部出现位置（node + offset），再统一包裹——边遍历边改 DOM
+    // 会拆文本节点导致 TreeWalker 死循环（highlightAllOnPage 同款教训）
+    const targets = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         const v = node.nodeValue;
@@ -1048,19 +1061,45 @@ const safeStorageSet = (obj) => new Promise((res) => {
         return NodeFilter.FILTER_ACCEPT;
       }
     });
-    const target = walker.nextNode();
-    if (!target) { showToast(`"${needle.slice(0,40)}" not found on the page — it may be split across elements.`, 4000); return; }
-    const parent = target.parentElement;
-    const idx = target.nodeValue.indexOf(needle);
-    const range = document.createRange();
-    range.setStart(target, idx);
-    range.setEnd(target, idx + needle.length);
-    const mark = document.createElement('mark');
-    mark.className = 'bmc-hl bmc-hl-focus';
-    mark.style.cssText = 'background:#fde047;box-shadow:0 0 0 2px #fde047;border-radius:2px;';
-    range.surroundContents(mark);
-    activeHighlights.push(mark);
-    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    let t;
+    while ((t = walker.nextNode())) {
+      let from = 0;
+      while (true) {
+        const i = t.nodeValue.indexOf(needle, from);
+        if (i < 0) break;
+        targets.push({node: t, idx: i, len: needle.length});
+        from = i + needle.length;
+      }
+    }
+    if (!targets.length) {
+      showToast(`"${needle.slice(0,40)}" not found on the page — it may be split across elements.`, 4000);
+      _hlFocusState.needle = null;
+      return;
+    }
+    // 循环：越界回卷
+    if (_hlFocusState.idx >= targets.length) _hlFocusState.idx = 0;
+    const pos = targets[_hlFocusState.idx];
+    try {
+      const range = document.createRange();
+      range.setStart(pos.node, pos.idx);
+      range.setEnd(pos.node, pos.idx + pos.len);
+      const mark = document.createElement('mark');
+      mark.className = 'bmc-hl bmc-hl-focus';
+      mark.style.cssText = 'background:#fde047;box-shadow:0 0 0 2px #fde047;border-radius:2px;';
+      range.surroundContents(mark);
+      activeHighlights.push(mark);
+      mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (targets.length > 1) {
+        showToast(`Occurrence ${_hlFocusState.idx + 1} of ${targets.length} — click again for the next`, 3500);
+      }
+    } catch {
+      // 该出现位置包裹失败（跨节点等）→ 试下一个
+      _hlFocusState.idx += 1;
+      if (_hlFocusState.idx < targets.length) {
+        clearPageHighlights();
+        return highlightOnPage(needle);
+      }
+    }
   }
 
   // Local evidence 按钮已删（用户裁决 2026-10-12）：无 evidence 库的部署
