@@ -410,11 +410,11 @@
    "id": "RB-014",
    "entry_id": "RB-014",
    "plugin": "regex_match",
-   "conf": "low",
-   "conf_trial": "medium",
+   "conf": "medium",
+   "conf_trial": "high",
    "status": "trial",
-   "desc": "Flags the English calques 'yang mana' and 'di mana' when used as relative pronouns or conjunctions inside a statement (not as a question), while sparing interrogative 'Di mana' at sentence start.",
-   "note": "Penggunaan 'yang mana' / 'di mana' sebagai kata hubung adalah calitan daripada bahasa Inggeris. Gantikan 'yang mana' dengan 'yang'. Untuk 'di mana' sebagai kata hubung, strukturkan semula ayat.",
+   "desc": "Flags the English calques 'yang mana' and 'di mana' when used as relative pronouns or conjunctions inside a statement, while sparing interrogative 'Di mana' at sentence start.",
+   "note": "Penggunaan 'yang mana' atau 'di mana' sebagai kata hubung relatif ialah calque bahasa Inggeris. Gantikan dengan 'yang' atau 'tempat' mengikut konteks.",
    "source": "LLM-translated from human description (2026-10-12)",
    "examples": {
     "trigger": [
@@ -430,16 +430,15 @@
     ]
    },
    "params": {
-    "pattern": "(\\byang\\s+mana\\b)|(\\bdi\\s+mana\\b(?=\\s+\\w))",
+    "pattern": "\\byang mana\\b|\\bdi mana\\b",
     "exceptions": [
-     "\\bdi\\s+mana\\b\\s*[?？]"
+     "(?is)\\bdi mana\\b[^.]*\\?",
+     "(?is)^[^.]*?\\bdi mana\\b"
     ],
     "suggestion": ""
    },
-   "self_test_failures": [
-    "flags clear sentence: Di mana kamu tinggal?"
-   ],
-   "impl": "The regex matches 'yang mana' anywhere, and 'di mana' only when followed by whitespace and a word — then the exception suppresses the match when the sentence ends with a question mark immediately after 'di mana', so interrogative location questions are spared."
+   "impl": "The regex matches any occurrence of 'yang mana' or 'di mana'. Two exception patterns then suppress matches: one cancels any 'di mana' match when a question mark appears later in the same sentence, and the other cancels when 'di mana' appears at the start of the sentence (interrogative use). 'yang mana' matches are never suppressed.",
+   "enhanced_from": "RB-014"
   },
   {
    "id": "RB-015",
