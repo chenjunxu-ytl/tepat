@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent  # 项目根（本文件在 tools/）
-TAG = 'v0.3.0'
+TAG = 'v0.4.0'
 CHUNK = 4 * 1024 * 1024
 
 

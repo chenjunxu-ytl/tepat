@@ -125,7 +125,7 @@ IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
 # server 版本（用户裁决 2026-10-12）：与 extension manifest / release tag 同步
 # 递增——/api/extension-update 对比它和 latest release，提示用户换新 exe。
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.4.0"
 
 
 # llm_judge 规则的 LLM 判决函数（注入 checker，2026-10-10 用户裁决：更难的
