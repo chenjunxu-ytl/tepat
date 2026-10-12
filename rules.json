@@ -71,6 +71,38 @@
     "suggestion": "Pindahkan \"kebiasaannya\" ke awal ayat."
    },
    "impl": "Every sentence is sent to the LLM with this rule's criterion: flag only when 'kebiasaannya' sits mid-sentence directly after a VERB; after a pronoun/noun subject ('Dia kebiasaannya datang awal.') or at the sentence start it is legal and must not be flagged; ambiguous word class answers unsure (never flagged). Flagged sentences get a whole-sentence note (LLM span localisation is not trusted)."
+  },
+  {
+   "id": "RB-003",
+   "entry_id": "RB-003",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags 'dari' used after comparison words (lebih/kurang/paling) or 'berasal' for origin, where 'daripada' is required; spares 'dari segi/sudut/aspek/perspektif' (point of view).",
+   "note": "Gunakan 'daripada' untuk perbandingan (lebih/kurang/paling) dan asal usul (berasal). Contoh: 'lebih tinggi daripada', 'berasal daripada Johor'. Kecualian: 'dari segi/sudut/aspek/perspektif' (sudut pandang) tetap menggunakan 'dari'.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Harga ini lebih tinggi dari yang itu.",
+     "Dia berasal dari Johor.",
+     "lebih besar dari rumah itu",
+     "berasal dari Kelantan"
+    ],
+    "clear": [
+     "Harga ini lebih tinggi daripada yang itu.",
+     "Dia berasal daripada Johor.",
+     "Dari segi kualiti, barang ini bagus."
+    ]
+   },
+   "params": {
+    "pattern": "\\b(?:lebih|kurang|paling)\\s+(?:\\w+\\s+)*?dari\\b|\\bberasal\\s+dari\\b",
+    "exceptions": [
+     "\\b(?:lebih|kurang|paling)\\s+(?:\\w+\\s+)*?dari\\s+(?:segi|sudut|aspek|perspektif)\\b"
+    ],
+    "suggestion": "daripada"
+   },
+   "impl": "The regex matches 'lebih/kurang/paling' optionally followed by intervening words then 'dari', or 'berasal dari'; the exception pattern suppresses matches when the word after 'dari' is one of 4 listed point-of-view nouns (segi, sudut, aspek, perspektif)."
   }
  ],
  "ms_id_suffix_map": [
