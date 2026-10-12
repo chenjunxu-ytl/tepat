@@ -988,9 +988,34 @@ const safeStorageSet = (obj) => new Promise((res) => {
     clearPageHighlights(kind === 'word' ? 'grammar' : 'word');
     showToast(kind === 'word' ? 'Scanning word signals…' : 'Scanning grammar rules…', 0);
 
-    // 收集页面文本节点（放宽限制，只要含字母或符号且非脚本/系统控件即可）
+    // ── 文本收集（用户裁决 2026-10-12）：送检什么由三层定义 ──
+    // 1) 主体内容：main/article/[role=main] 优先，fallback body——导航、
+    //    页头页脚、侧边栏的 UI 文案不是"文章"，不送检
+    // 2) 可见性：hidden 属性 / aria-hidden / display:none / visibility:hidden
+    //    的子树全部跳过（现代网页的折叠菜单、弹窗、tooltip 里全是隐形文本）
+    // 3) UI/非正文：nav/header/footer/aside/button/pre/code 内的文本跳过
+    // 30k 截断在净文本上做——不再被页头导航吃掉配额截掉正文主体
+    const SKIP_TAGS = new Set(['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','SELECT','OPTION',
+                               'PRE','CODE','SVG']);
+    // 容器类标签查祖先（nav > ul > li > a > 文本 这种深层嵌套直接父标签查不到）
+    const SKIP_ANCESTORS = 'nav, header, footer, aside, button, form, [role="navigation"], [role="banner"], [role="complementary"]';
+    function isVisible(el) {
+      // checkVisibility：Chrome 105+，一行覆盖 display/visibility/hidden 等
+      if (el.checkVisibility && !el.checkVisibility()) return false;
+      if (el.hasAttribute?.('hidden')) return false;
+      if (el.getAttribute?.('aria-hidden') === 'true') return false;
+      return true;
+    }
+    // 主体根：语义标签优先；多个候选取文本量最大的
+    let root = document.body;
+    const mainCandidates = [...document.querySelectorAll('main, article, [role="main"]')]
+      .filter(el => el.closest('.bmc-panel, .bmc-toast') === null);
+    if (mainCandidates.length) {
+      root = mainCandidates.reduce((best, el) =>
+        (el.innerText || '').length > (best.innerText || '').length ? el : best);
+    }
     const walker = document.createTreeWalker(
-      document.body,
+      root,
       NodeFilter.SHOW_TEXT,
       {
         acceptNode(node) {
@@ -998,9 +1023,10 @@ const safeStorageSet = (obj) => new Promise((res) => {
           if (!val || !val.trim() || val.trim().length < 2) return NodeFilter.FILTER_REJECT;
           const parent = node.parentElement;
           if (!parent) return NodeFilter.FILTER_REJECT;
-          const tag = parent.tagName;
-          if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
+          if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
           if (parent.closest('.bmc-panel, .bmc-toast')) return NodeFilter.FILTER_REJECT;
+          if (parent.closest(SKIP_ANCESTORS)) return NodeFilter.FILTER_REJECT;
+          if (!isVisible(parent)) return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
         }
       }
