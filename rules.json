@@ -227,6 +227,32 @@
     "suggestion": ""
    },
    "impl": "The regex matches the word 'adalah' followed by whitespace and then either the word 'merupakan' or any word starting with 'di' and ending in 'kan', 'h', or 'i' (covering common passive verbs like dimaklumkan, dilakukan, diadakan, disahkan, dll). No exceptions are defined."
+  },
+  {
+   "id": "RB-008",
+   "entry_id": "RB-008",
+   "plugin": "regex_match",
+   "conf": "medium",
+   "conf_trial": "high",
+   "status": "trial",
+   "desc": "Flags the incorrect meN- prefix realisation 'mensetujui' before a root starting with 's', where the correct form is 'menyetujui' (meN- + s-root → meny- + s-root).",
+   "note": "Bentuk yang betul ialah 'menyetujui' (meN- + kata dasar bermula dengan s → meny-). Anda juga boleh menggunakan 'bersetuju dengan'.",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Mereka mensetujui cadangan itu."
+    ],
+    "clear": [
+     "Mereka menyetujui cadangan itu.",
+     "Mereka bersetuju dengan cadangan itu."
+    ]
+   },
+   "params": {
+    "pattern": "\\bmensetujui\\b",
+    "exceptions": [],
+    "suggestion": "menyetujui"
+   },
+   "impl": "The regex matches the exact word 'mensetujui' (case-insensitive, with word boundaries on both sides) and suggests replacing it with 'menyetujui'."
   }
  ],
  "ms_id_suffix_map": [
