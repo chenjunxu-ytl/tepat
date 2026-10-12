@@ -42,6 +42,37 @@
    },
    "self_test_failures": [],
    "enabled": true
+  },
+  {
+   "id": "RB-002",
+   "entry_id": "RB-002",
+   "plugin": "llm_judge",
+   "conf": "low",
+   "conf_trial": "medium",
+   "status": "trial",
+   "desc": "Flags \"kebiasaannya\" appearing mid-sentence after a verb, where it should be moved to the front of the sentence.",
+   "note": "\"kebiasaannya\" sepatutnya berada di awal ayat, bukan selepas kata kerja. Contoh: \"Kebiasaannya, dia datang.\"",
+   "source": "LLM-translated from human description (2026-10-12)",
+   "examples": {
+    "trigger": [
+     "Dia datang kebiasaannya.",
+     "Mereka makan kebiasaannya pada waktu malam.",
+     "Pelajar itu belajar kebiasaannya di perpustakaan."
+    ],
+    "clear": [
+     "Kebiasaannya, dia datang.",
+     "Kebiasaannya dia datang.",
+     "Dia kebiasaannya datang awal.",
+     "Kebiasaannya, mereka makan pada waktu malam."
+    ]
+   },
+   "params": {
+    "judge": "Flag the sentence if \"kebiasaannya\" appears mid-sentence (not at the very start) AND follows a verb. If \"kebiasaannya\" is at the start of the sentence (possibly followed by a comma), the sentence is clear and must NOT be flagged. If \"kebiasaannya\" appears mid-sentence but does not directly follow a verb, treat it as clear.",
+    "suggestion": "Pindahkan \"kebiasaannya\" ke awal ayat."
+   },
+   "self_test_failures": [
+    "judge flags clear sentence: Dia kebiasaannya datang awal."
+   ]
   }
  ],
  "ms_id_suffix_map": [
