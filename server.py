@@ -605,6 +605,7 @@ Output: ONE JSON object, no prose, in exactly this shape:
  "conf": "high|medium|low",
  "plugin": "regex_match",
  "params": {"pattern": "<python regex>", "exceptions": ["<regex>"], "suggestion": "<replacement text or empty>"},
+ "impl": "<one or two sentences in plain English describing HOW the rule actually works at the code level — e.g. for a pattern that whitelists common adjectives, name the count and the mechanism: 'The regex matches any word directly followed by sangat, then only skips the match when the NEXT word is one of 60 listed common adjectives (murah, mahal, …) — i.e. correct order is recognised by that list only.' Never invent details; every claim must be readable from your params.",
  "examples": {"trigger": ["<wrong sentence>", ...], "clear": ["<right sentence>", ...]}
 }
 Rules for the regex:
@@ -613,7 +614,7 @@ Rules for the regex:
 - Use \\b word boundaries around words; keep the pattern as narrow as the examples justify.
 - exceptions patterns suppress matches inside their span — use them for legal contexts visible in clear examples.
 - If the distinction cannot be expressed by regex (word order, sentence structure, counting items, clause analysis), use the llm_judge form instead:
-  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "suggestion": "<replacement guidance or empty>"}.
+  set "plugin" to "llm_judge" and "params" to {"judge": "<the criterion, in plain words precise enough that a careful reader can classify any sentence: exactly what makes a sentence violate the rule and what makes it fine>", "suggestion": "<replacement guidance or empty>"}. In that case "impl" describes the judge: 'Every sentence is sent to the LLM with the criterion: <one-line summary of the judge>; sentences the LLM calls trigger are flagged as a whole-sentence note.'
   The judge runs sentence-by-sentence against an LLM; write it so that borderline sentences read as clear, not trigger.
 Spelling/conf guidance:
 - conf high = structural error with no legal context.
@@ -704,6 +705,9 @@ Return the JSON object only."""
         judge = str(params.get("judge") or "").strip()
         if not judge:
             raise ValueError("llm_judge requires params.judge")
+        if not str(spec.get("impl") or "").strip():
+            spec["impl"] = (f"Every sentence is sent to the LLM with the "
+                            f"criterion: {judge[:200]}")
         ex = spec.get("examples") or {}
         triggers = [str(t).strip()[:300] for t in (ex.get("trigger") or []) if str(t).strip()]
         clears = [str(c).strip()[:300] for c in (ex.get("clear") or []) if str(c).strip()]
@@ -867,7 +871,98 @@ def _spawn_trial_rule(spec: dict, triggers: list[str], clears: list[str],
     }
     if spec.get("_self_test") != "pass":
         entry["self_test_failures"] = spec["_self_test"]
+    entry["impl"] = _impl_from_spec(spec)
     return entry
+
+
+def _impl_from_params(plugin: str | None, params: dict) -> str:
+    """params → 人话实现描述（兜底生成器，用户裁决 2026-10-12）：翻译产物
+    缺 impl 字段时的机械拆解——regex 至少交代 pattern/exceptions/suggestion
+    的存在与形状，llm_judge 交代判据全句交 LLM。答不上来的细节就说答不上来
+    （"not revealed by the pattern"），绝不编造。"""
+    params = params or {}
+    try:
+        if plugin == "llm_judge":
+            out = "Each sentence goes to the LLM with this rule's criterion: " \
+                  f"\"{(params.get('judge') or '')[:220]}\""
+            if params.get("suggestion"):
+                out += f" Suggestion offered: {params['suggestion'][:120]}"
+            return out
+        pattern = str(params.get("pattern") or "")
+        if not pattern:
+            return "(no pattern found — rule entry may be broken)"
+        n_groups = len(re.compile(pattern).groups)
+        out = f"Regex pattern — {pattern[:400]}"
+        exc = params.get("exceptions") or []
+        if exc:
+            out += f" — except when the sentence also matches: {'; '.join(str(e)[:120] for e in exc)}"
+        sugg = str(params.get("suggestion") or "")
+        if sugg:
+            if n_groups and "\\" in sugg:
+                out += (f". Suggestion replaces the match with '{sugg}' "
+                        f"(\\1 = the first bracketed group)")
+            else:
+                out += f". Suggestion offered: '{sugg}'"
+        return out
+    except Exception:  # noqa: BLE001 — 兜底描述宁可降级不可崩
+        return "(implementation summary unavailable)"
+
+
+def _impl_from_spec(spec: dict) -> str:
+    """LLM 产物 spec → impl 字段（LLM 写的优先，缺了走兜底生成器）。"""
+    impl = str(spec.get("impl") or "").strip()
+    return impl or _impl_from_params(spec.get("plugin"), spec.get("params"))
+
+
+def _selftest_rule(rule: dict) -> list[str]:
+    """对任意规则条目跑行为自测（server 侧，edit-code 用）：trigger 例句
+    必命中、clear 例句必不中，返回失败列表。regex 直接编 pattern（忽略
+    exceptions 之外的引擎细节）；llm_judge 用真判决函数（LLM 未配置时
+    返回单条提示——trial/edit 的 self-test 语义是"没验过"，不是 pass）。"""
+    params = rule.get("params") or {}
+    ex = rule.get("examples") or {}
+    triggers = [str(t).strip() for t in (ex.get("trigger") or []) if str(t).strip()]
+    clears = [str(c).strip() for c in (ex.get("clear") or []) if str(c).strip()]
+    if rule.get("plugin") == "llm_judge":
+        judge = str(params.get("judge") or "").strip()
+        if not judge:
+            return ["llm_judge requires params.judge"]
+        if not triggers:
+            return ["no trigger sentences to test against"]
+        try:
+            _llm_config()
+        except RuntimeError:
+            return ["judge untested — LLM not configured on this machine"]
+        fails = []
+        for t in triggers:
+            try:
+                if _llm_judge_fn(str(rule.get("id") or "?"), judge, t) != "trigger":
+                    fails.append(f"judge does not flag trigger: {t[:60]}")
+            except Exception:  # noqa: BLE001
+                fails.append(f"judge unreachable for trigger: {t[:60]}")
+        for c in clears:
+            try:
+                if _llm_judge_fn(str(rule.get("id") or "?"), judge, c) == "trigger":
+                    fails.append(f"judge flags clear sentence: {c[:60]}")
+            except Exception:  # noqa: BLE001
+                pass
+        return fails
+    pattern = str(params.get("pattern") or "")
+    try:
+        rx = re.compile(pattern, re.IGNORECASE)
+    except re.error as e:
+        return [f"regex invalid: {e}"]
+    if not triggers:
+        return ["no trigger sentences to test against"]
+    exc = [re.compile(x, re.IGNORECASE) for x in (params.get("exceptions") or [])]
+    fails = []
+    for t in triggers:
+        if not rx.search(t):
+            fails.append(f"does not flag trigger: {t[:60]}")
+    for c in clears:
+        if rx.search(c) and not any(e.search(c) for e in exc):
+            fails.append(f"flags clear sentence: {c[:60]}")
+    return fails
 
 
 _words: set[str] = set()
@@ -1550,10 +1645,11 @@ class Handler(BaseHTTPRequestHandler):
                                        "desc": r.get("desc", r.get("note", "")),
                                        "plugin": r.get("plugin"),
                                        "note": r.get("note"),
+                                       "impl": r.get("impl"),
                                        "category": r.get("category"),
                                        "source": r.get("source"),
                                        "examples": r.get("examples", {}),
-                                       "self_test": r.get("self_test_failures", "pass"),
+                                       "self_test": r.get("self_test_failures") or "pass",
                                        "params": r.get("params"),
                                        "register": r.get("register", "any"),
                                        "valid": ok, "error": err})
@@ -1991,10 +2087,6 @@ class Handler(BaseHTTPRequestHandler):
             if target is None:
                 self._json(404, {"error": f"entry_id {entry_id} not found"})
                 return
-            if target.get("status") != "trial":
-                self._json(400, {"error": "only trial rules can be enhanced "
-                                          "(settled rules are updated via /api/rules/update)"})
-                return
             ex = target.get("examples") or {}
             old_triggers = [str(t) for t in (ex.get("trigger") or [])]
             old_clears = [str(c) for c in (ex.get("clear") or [])]
@@ -2060,14 +2152,15 @@ class Handler(BaseHTTPRequestHandler):
             conf = req.get("conf")
             desc = str(req.get("desc") or "").strip()
             note = str(req.get("note") or "").strip()
+            impl = str(req.get("impl") or "").strip()
             if not entry_id:
                 self._json(400, {"error": "entry_id required"})
                 return
             if conf is not None and conf not in ("high", "medium", "low"):
                 self._json(400, {"error": "conf must be high/medium/low"})
                 return
-            if not conf and not desc and not note:
-                self._json(400, {"error": "nothing to update (conf/desc/note)"})
+            if not conf and not desc and not note and not impl:
+                self._json(400, {"error": "nothing to update (conf/desc/note/impl)"})
                 return
             rules_data = _load_rules_json()
             if rules_data is None:
@@ -2090,6 +2183,8 @@ class Handler(BaseHTTPRequestHandler):
                 target["desc"] = desc
             if note:
                 target["note"] = note
+            if impl:
+                target["impl"] = impl
             path = Path(_config_path("rules.json"))
             path.write_text(json.dumps(rules_data, ensure_ascii=False, indent=1) + "\n",
                             encoding="utf-8")
@@ -2106,8 +2201,96 @@ class Handler(BaseHTTPRequestHandler):
             except GHPushError as e:
                 push_err = str(e)
                 _log(f"[rules] GitHub push failed: {e!r}")
-            _log(f"[rules] updated {entry_id} fields={list(filter(None, ['conf' if conf else '', 'desc' if desc else '', 'note' if note else '']))}")
+            _log(f"[rules] updated {entry_id} fields={list(filter(None, ['conf' if conf else '', 'desc' if desc else '', 'note' if note else '', 'impl' if impl else '']))}")
             self._json(200, {"ok": True, "entry_id": entry_id, "pushed": bool(pushed),
+                             **({"push_error": push_err} if push_err else {})})
+        elif self.path == "/api/rules/edit-code":
+            # Edit code（admin，用户裁决 2026-10-12）：直改规则行为——plugin +
+            # params JSON。与 enhance（自然语言→LLM 重译）相对，这里是懂 regex
+            # 的人类直接修代码。落盘前跑行为自测（trigger 必中/clear 必不中）；
+            # fail 默认拒绝，force=true 才落盘（修到一半的规则也能救回来）。
+            # impl 同步直改（可选）——改了实现，人话描述跟上是编辑者的责任。
+            if not IS_ADMIN_MACHINE:
+                self._json(403, {"error": "admin machine required"})
+                return
+            entry_id = str(req.get("entry_id") or "")
+            plugin = str(req.get("plugin") or "").strip()
+            params_raw = str(req.get("params") or "").strip()
+            impl = str(req.get("impl") or "").strip()
+            force = bool(req.get("force"))
+            if not entry_id or not plugin or not params_raw:
+                self._json(400, {"error": "entry_id, plugin and params are required"})
+                return
+            if plugin not in ("regex_match", "llm_judge"):
+                self._json(400, {"error": "plugin must be regex_match or llm_judge"})
+                return
+            try:
+                params = json.loads(params_raw)
+            except json.JSONDecodeError as e:
+                self._json(400, {"error": f"params is not valid JSON: {e}"})
+                return
+            if not isinstance(params, dict):
+                self._json(400, {"error": "params must be a JSON object"})
+                return
+            rules_data = _load_rules_json()
+            if rules_data is None:
+                self._json(500, {"error": "rules.json not found or broken"})
+                return
+            target = next((r for r in rules_data.get("rules", [])
+                           if r.get("entry_id") == entry_id), None)
+            if target is None and entry_id.startswith("idx:"):
+                try:
+                    target = rules_data["rules"][int(entry_id[4:])]
+                except (ValueError, IndexError):
+                    target = None
+            if target is None:
+                self._json(404, {"error": f"entry_id {entry_id} not found"})
+                return
+            if plugin == "regex_match" and not str(params.get("pattern") or "").strip():
+                self._json(400, {"error": "regex_match requires params.pattern"})
+                return
+            if plugin == "llm_judge" and not str(params.get("judge") or "").strip():
+                self._json(400, {"error": "llm_judge requires params.judge"})
+                return
+            probe = {"id": target.get("id"), "plugin": plugin, "params": params,
+                     "examples": target.get("examples") or {}}
+            fails = _selftest_rule(probe)
+            if fails and not force:
+                self._json(409, {"error": "self-test failed — fix the rule or "
+                                          "tick 'save anyway'", "self_test_failures": fails})
+                return
+            old_plugin = target.get("plugin")
+            target["plugin"] = plugin
+            target["params"] = params
+            if impl:
+                target["impl"] = impl
+            elif not target.get("impl") or old_plugin != plugin:
+                target["impl"] = _impl_from_params(plugin, params)
+            if fails:
+                target["self_test_failures"] = fails
+            else:
+                target.pop("self_test_failures", None)
+            path = Path(_config_path("rules.json"))
+            path.write_text(json.dumps(rules_data, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8")
+            if _checker is not None:
+                try:
+                    _checker.reload()
+                except Exception as e:  # noqa: BLE001
+                    _log(f"[rules] hot-reload after edit-code failed: {e!r}")
+            pushed = None
+            push_err = None
+            try:
+                pushed = _gh_push_file("rules.json", path.read_text(encoding="utf-8"),
+                                       f"rules: edit code {target.get('id')}")
+            except GHPushError as e:
+                push_err = str(e)
+                _log(f"[rules] GitHub push failed: {e!r}")
+            _log(f"[rules] edited code {entry_id} plugin={plugin} "
+                 f"self_test={'fail' if fails else 'pass'} force={force}")
+            self._json(200, {"ok": True, "entry_id": entry_id,
+                             "self_test_failures": fails or None,
+                             "pushed": bool(pushed),
                              **({"push_error": push_err} if push_err else {})})
         elif self.path == "/api/sync":
             # 手动拉 GitHub 规则文件：全员可用（用户裁决 2026-10-08）——

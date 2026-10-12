@@ -475,18 +475,23 @@ function showCfgDetail(v){
  const trig=(ex.trigger||[]).map(t=>`<div>✗ <i>${esc(t)}</i></div>`).join('');
  const clear=(ex.clear||[]).map(t=>`<div style="color:#526273">✓ <i>${esc(t)}</i></div>`).join('');
  let ops='';
+ const hasCode=v.plugin||v.params;
  if(cfgAdmin&&v.status==='trial'){
   ops+=`<button class="act primary" data-op="accept">Accept</button>
         <button class="act" data-op="enhance">Enhance…</button>
         <button class="act" data-op="reject">Reject</button>`;
  }else if(cfgAdmin){
-  ops+=`<button class="act" data-op="update">Update…</button>`;
+  ops+=`<button class="act" data-op="enhance">Enhance…</button>
+        <button class="act" data-op="update">Update…</button>`;
  }
+ if(cfgAdmin&&hasCode)ops+=`<button class="act" data-op="editcode">Edit code…</button>`;
  const selfOk=v.self_test==='pass'||v.self_test===undefined;
- const hasCode=v.plugin||v.params;
+ const implHtml=v.impl?`
+  <p style="margin:0 0 10px;font-size:13px"><b>How it works:</b> ${esc(v.impl)}</p>`:'';
  const nlBody=`
   <p style="margin:0 0 10px;font-size:13px"><b>What it flags:</b> ${esc(v.desc||'—')}</p>
-  <p style="margin:0 0 10px;font-size:13px"><b>Shown to users:</b> ${esc(v.note||'—')}</p>`;
+  <p style="margin:0 0 10px;font-size:13px"><b>Shown to users:</b> ${esc(v.note||'—')}</p>
+  ${implHtml}`;
  const codeBody=`
   <pre style="margin:0 0 10px;font-size:11.5px;line-height:1.5;background:#0f1c17;color:#cde3d8;border:1px solid #24382f;border-radius:8px;padding:10px 12px;overflow:auto">${esc(JSON.stringify({id:v.id,entry_id:v.entry_id,plugin:v.plugin,register:v.register,conf:v.conf,status:v.status,params:v.params},null,2))}</pre>`;
  list.innerHTML=`
@@ -530,6 +535,7 @@ function showCfgDetail(v){
   }
   else if(op==='enhance')ruleEnhanceDialog(v);
   else if(op==='update')ruleUpdateDialog(v);
+  else if(op==='editcode')ruleEditCodeDialog(v);
  });
 }
 const confMapLvl=v=>({high:'lvl-error',medium:'lvl-warn',low:'lvl-note'}[v.conf]||'');
@@ -575,7 +581,7 @@ async function ruleEnhanceDialog(v){
   await loadConfig();
  }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
-// Update 对话框：非行为字段直改（conf/desc/note）——一个表单一次提交
+// Update 对话框：非行为字段直改（conf/desc/note/impl）——一个表单一次提交
 async function ruleUpdateDialog(v){
  const msgEl=$('#cfg-msg')||$('#prop-msg');
  const values=await openModal({
@@ -585,17 +591,66 @@ async function ruleUpdateDialog(v){
    {name:'conf',label:'Confidence level',type:'select',value:v.conf,
      options:[{value:'',label:'(unchanged)'},{value:'high',label:'high — error'},{value:'medium',label:'medium — warn'},{value:'low',label:'low — note'}]},
    {name:'desc',label:'Description (shown to reviewers)',type:'textarea',rows:3,value:v.desc,placeholder:'(unchanged)'},
-   {name:'note',label:'User note (shown when flagged)',type:'textarea',rows:3,value:v.note,placeholder:'(unchanged)'}],
+   {name:'note',label:'User note (shown when flagged)',type:'textarea',rows:3,value:v.note,placeholder:'(unchanged)'},
+   {name:'impl',label:'How it works (plain-English implementation summary)',type:'textarea',rows:3,value:v.impl,placeholder:'(unchanged)'}],
   submit:'Save'});
  if(values===null)return;
- const conf=values.conf.trim(),desc=values.desc.trim(),note=values.note.trim();
- const cur={conf:v.conf||'',desc:v.desc||'',note:v.note||''};
- if((!conf||conf===cur.conf)&&(!desc||desc===cur.desc)&&(!note||note===cur.note)){
+ const conf=values.conf.trim(),desc=values.desc.trim(),note=values.note.trim(),impl=values.impl.trim();
+ const cur={conf:v.conf||'',desc:v.desc||'',note:v.note||'',impl:v.impl||''};
+ if((!conf||conf===cur.conf)&&(!desc||desc===cur.desc)&&(!note||note===cur.note)&&(!impl||impl===cur.impl)){
   if(msgEl)msgEl.innerHTML='<span class="bad">✗ nothing to update</span>';return;
  }
  try{const res=await request('/api/rules/update',{entry_id:v.entry_id,
-   conf:conf&&conf!==cur.conf?conf:undefined,desc:desc&&desc!==cur.desc?desc:undefined,note:note&&note!==cur.note?note:undefined});
+   conf:conf&&conf!==cur.conf?conf:undefined,desc:desc&&desc!==cur.desc?desc:undefined,
+   note:note&&note!==cur.note?note:undefined,impl:impl&&impl!==cur.impl?impl:undefined});
   if(msgEl)msgEl.innerHTML=`<span class="ok">✓ updated${res.pushed?' · pushed':''}</span>`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
+  await loadConfig();
+ }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
+}
+// Edit code 对话框：直改 plugin + params（admin，懂 regex 的人类）。
+// 落盘前 server 跑行为自测，fail 时带原因返回——这里给"save anyway"一次
+// 二次确认机会，确认后带 force 重发。
+async function ruleEditCodeDialog(v){
+ const msgEl=$('#cfg-msg')||$('#prop-msg');
+ const curPlugin=v.plugin||'regex_match';
+ const values=await openModal({
+  title:`Edit code — ${v.id}`,
+  sub:'Edit the rule\'s actual behaviour. The server re-runs the self-test against the rule\'s example sentences before saving.',
+  fields:[
+   {name:'plugin',label:'Plugin',type:'select',value:curPlugin,
+     options:[{value:'regex_match',label:'regex_match — pattern + exceptions + suggestion'},
+              {value:'llm_judge',label:'llm_judge — LLM judges each sentence by params.judge'}]},
+   {name:'params',label:'params (JSON)',type:'textarea',rows:10,
+     value:JSON.stringify(v.params||{},null,2),placeholder:'{}'},
+   {name:'impl',label:'How it works (plain English, shown in the detail view)',type:'textarea',rows:3,
+     value:v.impl||'',placeholder:'e.g. matches any word before sangat, skips only when the next word is one of 60 listed adjectives'}],
+  submit:'Save rule'});
+ if(values===null)return;
+ const plugin=values.plugin.trim(),paramsRaw=values.params.trim(),impl=values.impl.trim();
+ let params;
+ try{params=JSON.parse(paramsRaw||'{}');}
+ catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ params is not valid JSON: '+esc(e.message)+'</span>';return;}
+ if(paramsRaw===JSON.stringify(v.params||{},null,2)&&plugin===curPlugin&&(!impl||impl===(v.impl||''))){
+  if(msgEl)msgEl.innerHTML='<span class="bad">✗ nothing changed</span>';return;
+ }
+ const send=async force=>{
+  return request('/api/rules/edit-code',{entry_id:v.entry_id,plugin,params:paramsRaw,impl:impl||undefined,force});
+ };
+ if(msgEl)msgEl.textContent='Saving… running self-test…';
+ try{
+  let res;
+  try{res=await send(false);}
+  catch(e){
+   if(e.message.startsWith('self-test failed')){
+    const ok=await openConfirm({title:'Self-test failed — save anyway?',
+      sub:'This rule will not behave as its examples say:\n'+e.message.replace('self-test failed — fix the rule or tick \'save anyway\'','').trim(),
+      confirmText:'Save anyway'});
+    if(!ok){if(msgEl)msgEl.innerHTML='<span class="bad">✗ not saved — fix the rule and try again</span>';return;}
+    res=await send(true);
+   }else throw e;
+  }
+  const st=res.self_test_failures?` — <span class="bad">self-test ✗ (${esc(String(res.self_test_failures).slice(0,120))})</span>`:' — self-test ✓';
+  if(msgEl)msgEl.innerHTML=`<span class="ok">✓ code updated${res.pushed?' · pushed':''}</span>${st}`+(res.push_error?`<div class="bad" style="margin-top:4px">⚠ not synced to GitHub: ${esc(res.push_error)}</div>`:'');
   await loadConfig();
  }catch(e){if(msgEl)msgEl.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
