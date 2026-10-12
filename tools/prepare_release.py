@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent  # 项目根（本文件在 tools/）
-TAG = 'v0.4.0'
+TAG = 'v0.4.1'
 CHUNK = 4 * 1024 * 1024
 
 
@@ -116,7 +116,8 @@ def prepare(app_dir, output):
         # else: 文档（tepat-v2/INSTALL.md 等）——留在根，下面 documents 补
     bundle += [(BASE / name, 'tepat/source/' + name)
                for name in ('server.py', 'checker.py', 'evidence.py',
-                            'text_units.py', 'start.bat')]
+                            'text_units.py', 'start.bat',
+                            'create-shortcut.bat', 'create-shortcut.ps1')]
     bundle += [(BASE / 'web' / 'index.html', 'tepat/source/web/index.html')]
     bundle += [(source, 'tepat/' + name) for source, name in documents]
     archive(output / f'tepat-{TAG}-all-in-one.zip', bundle)
@@ -127,7 +128,8 @@ def prepare(app_dir, output):
     # sync 拉（单份原则，不进包）。
     source_files = git(BASE, 'ls-files', '--',
                        'server.py', 'checker.py', 'evidence.py', 'text_units.py',
-                       'start.bat', 'assets/', 'web/', 'extension/').splitlines()
+                       'start.bat', 'create-shortcut.bat', 'create-shortcut.ps1',
+                       'assets/', 'web/', 'extension/').splitlines()
     source = [(BASE / name, 'tepat-source/' + name) for name in source_files]
     source += [(path, 'tepat-source/' + name) for path, name in documents]
     archive(output / f'tepat-{TAG}-source.zip', source)

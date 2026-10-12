@@ -1,4 +1,4 @@
-# Tepat 0.4.0
+# Tepat 0.4.1
 
 This preview is intended for evaluation. Word and grammar checks run from the
 bundled rule files plus PRPM lookups; flags always need context review, and
@@ -8,9 +8,9 @@ factuality has no automated check.
 
 Two ways to run the local service — pick whichever your machine allows:
 
-**A. Exe** (no Python needed): download `tepat-v0.4.0-all-in-one.zip` (recommended — runtime + extension in one archive) or `tepat-v0.4.0-win64.zip`, extract the whole archive, open `tepat-v2/tepat-v2.exe` (keep `_internal` beside it). The executable is unsigned — if Windows shows "cannot access the file", right-click it → Properties → check **Unblock**.
+**A. Exe** (no Python needed): download `tepat-v0.4.1-all-in-one.zip` (recommended — runtime + extension in one archive) or `tepat-v0.4.1-win64.zip`, extract the whole archive, open `tepat-v2/tepat-v2.exe` (keep `_internal` beside it). The executable is unsigned — if Windows shows "cannot access the file", right-click it → Properties → check **Unblock**.
 
-**B. Source** (no exe — use this when antivirus/SmartScreen blocks the exe): download `tepat-v0.4.0-source.zip`, install Python 3.10+ (Microsoft Store works), extract, double-click `start.bat`. Nothing to pip install — the server is pure standard library.
+**B. Source** (no exe — use this when antivirus/SmartScreen blocks the exe): download `tepat-v0.4.1-source.zip`, install Python 3.10+ (Microsoft Store works), extract, double-click `start.bat`. Nothing to pip install — the server is pure standard library.
 
 Then: open http://127.0.0.1:8377 (or right-click the tray icon → Buka UI), enter Malay text, choose the register, **Semak**.
 
@@ -24,7 +24,7 @@ use **Keluar** to exit.
 
 ## Chrome extension
 
-1. Download and extract `tepat-v0.4.0-chrome.zip`.
+1. Download and extract `tepat-v0.4.1-chrome.zip`.
 2. Open `chrome://extensions`, enable **Developer mode**, then **Load unpacked**.
 3. Select the extracted `extension` folder that contains `manifest.json`.
 4. Keep the Windows app running. Refresh a normal webpage, select Malay text,

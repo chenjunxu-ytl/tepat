@@ -910,17 +910,38 @@ async function loadExtUpdate(){
   if(r.error){el.innerHTML='<span class="bad">✗ '+esc(r.error)+'</span>';return;}
   const local=r.local_version||'?';
   const srv=r.server_version||'?';
+  // server 更新行：有新版 → "Update now"（self-update，自动完成）；无新版 → up to date
   const srvLine=r.server_update_available
-   ?`<div style="margin-top:4px">server <b>${esc(srv)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span>: download the new exe from <a href="${esc(r.release_url)}" target="_blank" rel="noopener">the release</a> and replace your copy (rules & word lists hot-sync on their own)</div>`
+   ?`<div style="margin-top:4px">server <b>${esc(srv)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span> <button class="act primary" id="btn-self-update" style="font-size:11.5px;padding:2px 10px">Update now</button> <span style="font-size:11px;color:#5d6977">or <a href="${esc(r.release_url)}" target="_blank" rel="noopener">download from the release</a></span></div>`
    :`<div style="margin-top:4px;color:#5d6977">server <b>${esc(srv)}</b> — up to date</div>`;
+  const bindSelfUpdate=()=>{
+   const btn=$('#btn-self-update');
+   if(!btn)return;
+   btn.onclick=async()=>{
+    btn.disabled=true;btn.textContent='Updating…';
+    try{
+     const res=await request('/api/self-update',{version:r.latest_version});
+     if(!res.ok)throw new Error(res.error||'self-update unavailable');
+     btn.textContent='Restarting…';
+     for(let i=0;i<30;i++){
+      await new Promise(rs=>setTimeout(rs,1000));
+      try{await fetch(API+'/api/health').then(x=>x.json());
+       $('#env-msg').innerHTML=`<span class="ok">✓ server updated to ${esc(r.latest_version)} and restarted</span>`;
+       loadEnv();return;}catch{}
+     }
+     $('#env-msg').innerHTML='<span class="ok">✓ files replaced — server still restarting, refresh in a few seconds</span>';
+    }catch(e){btn.disabled=false;btn.textContent='Update now';$('#env-msg').innerHTML='<span class="bad">✗ '+esc(e.message)+' — <a href="'+esc(r.release_url)+'" target="_blank" rel="noopener">manual download</a></span>';}
+   };
+  };
   if(!r.latest_version){el.innerHTML=`installed <b>${esc(local)}</b> — latest unknown (no release found)${srvLine}`;return;}
   if(!r.update_available){
-   el.innerHTML=`installed <b>${esc(local)}</b> — up to date${srvLine}`;return;
+   el.innerHTML=`installed <b>${esc(local)}</b> — up to date${srvLine}`;
+   bindSelfUpdate();return;
   }
   const zip=(r.assets||[]).find(a=>/chrome\.zip$/.test(a.name))||(r.assets||[])[0];
   el.innerHTML=`installed <b>${esc(local)}</b> — <span class="bad">update available: ${esc(r.latest_version)}</span>${srvLine}<br>`+
-   `<span style="color:#5d6977">1. download ${zip?`<a href="${esc(zip.url)}" target="_blank" rel="noopener">${esc(zip.name)}</a>`:`from <a href="${esc(r.release_url)}" target="_blank" rel="noopener">the release page</a>`} and unzip over your extension folder<br>`+
-   `2. open <b>chrome://extensions</b> and click ⟳ on the Tepat card (browsers block pages from doing this for you)</span>`;
+   `<span style="color:#5d6977">extension: download ${zip?`<a href="${esc(zip.url)}" target="_blank" rel="noopener">${esc(zip.name)}</a>`:`from <a href="${esc(r.release_url)}" target="_blank" rel="noopener">the release page</a>`} and unzip over your extension folder, then open <b>chrome://extensions</b> and click ⟳ on the Tepat card (browsers block pages from doing this for you)</span>`;
+  bindSelfUpdate();
  }catch(e){el.innerHTML='<span class="bad">✗ '+esc(e.message)+'</span>';}
 }
 function bindEnvRowEvents(box){

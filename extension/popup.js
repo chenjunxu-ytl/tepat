@@ -12,8 +12,10 @@ fetch(API + '/api/health')
 
 // ── update 按钮（用户裁决 2026-10-12）：popup 打开时问 server 有没有新
 // release（/api/extension-update，server 端 60s 缓存）。extension 或 server
-// 有新版 → 最左侧脉冲下载 icon → 点击开 release 页（浏览器不允许网页代点
-// chrome://extensions 的刷新，装包/重载仍需手动）。title 带版本对比。
+// 有新版 → 最左侧脉冲下载 icon → 点击：
+//   1. 先尝试 server 自更新（/api/self-update，源码/bat 部署）——成功则
+//      server 自动重启到新版，本页只提示 extension 是否还需手动重载
+//   2. exe 部署/自更新失败 → 回退打开 release 页手动下载
 fetch(API + '/api/extension-update')
   .then((r) => r.json())
   .then((r) => {
@@ -23,9 +25,41 @@ fetch(API + '/api/extension-update')
     if (!what.length) return;
     const btn = $('#opt-update');
     if (!btn) return;
+    const latest = r.latest_version;
+    const extNeedsManual = !!r.update_available;  // 浏览器不许代点重载
     btn.classList.add('show');
-    btn.title = `Update available: ${what.join(' · ')} — click to open the release`;
-    btn.onclick = () => {
+    btn.title = `Update available: ${what.join(' · ')} — click to update now`;
+    btn.onclick = async () => {
+      btn.title = 'Updating…';
+      try {
+        const res = await fetch(API + '/api/self-update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: latest })
+        }).then(x => x.json());
+        if (res.ok) {
+          // server 正在替换文件并重启（start.bat 循环拉起新版）——
+          // 几秒后 health 探测确认回来
+          btn.title = 'Server updated — restarting…';
+          for (let i = 0; i < 30; i++) {
+            await new Promise(rs => setTimeout(rs, 1000));
+            try {
+              await fetch(API + '/api/health').then(x => x.json());
+              btn.title = `Server updated to ${latest}`;
+              alert(`Server updated to ${latest} and restarted.` +
+                (extNeedsManual ? `\n\nThe extension also needs a manual reload: open chrome://extensions and click ⟳ on the Tepat card.` : ''));
+              window.close();
+              return;
+            } catch { /* 还没起来，继续等 */ }
+          }
+          alert('Server is still restarting — give it a few more seconds, then reload this popup.');
+          return;
+        }
+        // 自更新不可用（exe 部署等）→ 打开 release 页
+        alert(`${res.error || 'Self-update unavailable.'}\n\nOpening the release page for manual update.`);
+      } catch {
+        alert('Could not reach the server for self-update.\n\nOpening the release page.');
+      }
       chrome.tabs.create({ url: r.release_url || `https://github.com/chenjunxu-ytl/tepat/releases` });
       window.close();
     };

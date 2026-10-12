@@ -10,6 +10,7 @@ requires it (2026-10-09 user decision: corpus evidence retired).
 import argparse
 import base64
 import hashlib
+import io
 import json
 import os
 import re
@@ -125,7 +126,7 @@ IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
 # server 版本（用户裁决 2026-10-12）：与 extension manifest / release tag 同步
 # 递增——/api/extension-update 对比它和 latest release，提示用户换新 exe。
-SERVER_VERSION = "0.4.0"
+SERVER_VERSION = "0.4.1"
 
 
 # llm_judge 规则的 LLM 判决函数（注入 checker，2026-10-10 用户裁决：更难的
@@ -2711,6 +2712,86 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[proposals] accepted {rid} -> rules.json ({len(rules_data['rules'])} rules)")
             self._json(200, {"ok": True, "accepted": rid,
                              "rules": len(rules_data["rules"])})
+        elif self.path == "/api/self-update":
+            # 手动触发的 server 自更新（用户裁决 2026-10-12：不自动，点了
+            # update 按钮才跑；过程全自动）。仅源码/bat 部署——exe 文件被
+            # 锁不可替换（本部署已弃 exe）。流程：拉 latest release 的
+            # source zip → 解压 → 原子替换 py/web/extension → 写重启标记 →
+            # 退出进程（start.bat 的循环看到标记后用新代码重启）。
+            # 信任模型与 rules.json 自动同步同链：GitHub repo 是分发源。
+            latest = str(req.get("version") or "").strip()
+            if not latest:
+                self._json(400, {"error": "version required (from /api/extension-update)"})
+                return
+            if getattr(sys, "frozen", False):
+                self._json(400, {"error": "exe builds cannot self-update — replace "
+                                          "the exe manually from the release"})
+                return
+            # 下载 source zip 到临时文件
+            import tempfile
+            import urllib.request as _rq
+            import zipfile as _zf
+            asset = (f"https://github.com/{GH_PROPOSAL_REPO}/releases/download/"
+                     f"v{latest}/tepat-v{latest}-source.zip")
+            try:
+                with _rq.urlopen(_rq.Request(asset), timeout=60) as resp:
+                    blob = resp.read()
+            except OSError as e:
+                self._json(502, {"error": f"download failed: {e}"})
+                return
+            # 解压到同级临时目录，前缀 tepat-source/
+            try:
+                staging = Path(tempfile.mkdtemp(prefix="tepat-update-"))
+                with _zf.ZipFile(io.BytesIO(blob)) as z:
+                    z.extractall(staging)
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"error": f"unzip failed: {e}"})
+                return
+            src_root = staging / "tepat-source"
+            if not (src_root / "server.py").is_file():
+                self._json(500, {"error": "source zip has unexpected layout "
+                                          "(no tepat-source/server.py)"})
+                return
+            # 先答复前端（浏览器要拿到 200 才显示"重启中"），再替换 + 退出。
+            # 替换清单：py / web / extension / assets——即 source zip 的全部
+            # 运行文件；不碰 .bat（用户自己放的）和 APPDATA。
+            self._json(200, {"ok": True, "version": latest,
+                             "note": "files replaced, server restarting…"})
+
+            def _apply_and_exit():
+                import shutil
+                time.sleep(0.5)  # 让响应先送达
+                root = Path(_ROOT)  # _ROOT 是 str——Path 运算需要 Path
+                replaced = skipped = 0
+                for f in src_root.rglob("*"):
+                    if not f.is_file():
+                        continue
+                    rel = f.relative_to(src_root)
+                    # 运行中的 server.py 在 Windows 上不可覆盖——先改名让路
+                    dst = root / rel
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        if dst.name == "server.py" and dst.exists():
+                            os.replace(dst, dst.with_suffix(".py.old"))
+                        shutil.copyfile(f, dst)
+                        replaced += 1
+                    except OSError as e:
+                        _log(f"[self-update] skip {rel}: {e!r}")
+                        skipped += 1
+                # 清理旧 server.py.old（下次启动不留尸体；失败也无妨）
+                try:
+                    os.remove(root / "server.py.old")
+                except OSError:
+                    pass
+                (root / ".restart-pending").write_text(
+                    f"self-update v{latest}\n", encoding="utf-8")
+                _log(f"[self-update] v{latest} applied ({replaced} files, "
+                     f"{skipped} skipped) — exiting for restart")
+                # 触发退出：主线程 sys.exit 不可达（serve_forever 在别的路径），
+                # 用 os._exit 保持简单粗暴（所有状态都已在磁盘）。
+                os._exit(0)
+
+            threading.Thread(target=_apply_and_exit, daemon=True).start()
         elif self.path == "/api/env":
             # Env tab 保存（2026-10-12 user 也可写）：整文件覆盖写回磁盘 .env。
             # admin 专属的是 TEPAT_ADMIN_TOKEN（提权通道）——user 保存时该 key

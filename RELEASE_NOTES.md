@@ -1,8 +1,22 @@
-# Tepat v0.4.0
+# Tepat v0.4.1
 
 Malay word/grammar checker: local Windows runtime + browser extension.
 Rules and word lists live in %APPDATA%/tepat and sync through this repo;
 PRPM is the online dictionary layer.
+
+## Highlights in 0.4.1
+
+- **One-click self-update**: the update button now updates the server
+  itself — download the new source, replace the files, restart
+  (start.bat relaunches automatically). Manual trigger, automatic
+  process; exe builds fall back to the release page.
+- **Env tab for everyone**: users can configure their own machine's
+  keys (LLM, GitHub, auto-sync) with the same editor as the admin;
+  only the admin token stays locked away.
+- **Desktop shortcut**: run `create-shortcut.bat` once to get a Tepat
+  icon on the desktop that starts the server minimized.
+- Fixed the update button lighting up on fresh 0.4.0 installs
+  (missing manifest in the exe, plus a server-side fallback).
 
 ## Highlights in 0.4.0
 

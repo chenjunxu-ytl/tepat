@@ -13,5 +13,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem 循环运行（2026-10-12 self-update）：server 更新自身后写 .restart-pending
+rem 再退出——这里看到标记就删标记并用新代码重启；正常退出（用户关）则结束。
+:run
 echo [tepat] starting... UI at http://127.0.0.1:8377 (tray icon appears; right-click to open)
 python server.py %*
+if exist ".restart-pending" (
+  del ".restart-pending"
+  echo [tepat] update applied — restarting with the new version...
+  timeout /t 2 /nobreak >nul
+  goto run
+)
