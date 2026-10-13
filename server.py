@@ -1329,23 +1329,31 @@ def prpm_lookup(word: str) -> dict:
         except PrpmUnavailable as e:
             return {"word": word, "status": "unreachable", "note": str(e)[:150]}
 
-        parsed = parse_prpm(page)
+        parsed = parse_prpm(page, word)
         status = parsed["status"]
         definition = parsed.get("definition", "")
         if status in {"hit", "miss", "warn"}:
             cache_put(word, status, definition)
         time.sleep(0.2)  # 槽内小间隔：3 并发 × 0.2s ≈ 均匀 15 req/s 以下
     # 词根重查在信号量外（用户裁决 2026-10-08，77/258 卡死根因）：root retry
-    # 递归调用 prpm_lookup，若在槽内递归，外层持槽等内层、内层排队等槽，
+    # 递归调用 prpm_lookup，若在槽内递归，外层持槽等内层排队等槽，
     # 3 个并发递归即占满全部槽 → 永久死锁。
     if status in {"miss", "warn"}:
-        # 剥 partikel/akhiran/awalan 后重查词根（PRPM 不收组合形）
+        # 剥 partikel/akhiran/awalan 后重查词根（PRPM 不收组合形）。
+        # 词根命中 = 词根存在，不是原词存在（用户裁决 2026-10-13：
+        # berkerjasama 词根 kerjasama 命中曾被当作 berkerjasama 存在 →
+        # 假绿 chip + 假词条头）。返回 root 提示（warn 级），不亮绿；
+        # 也不再 cache_put 原词为 hit——词根命中不写缓存，DBP 真值说了算。
         root_hit = _prpm_root_retry(word)
         if root_hit:
-            return {"word": word, "url": url, "status": "hit",
+            note = (f"Akar kata '{root_hit['root']}' wujud dalam PRPM — "
+                    f"bentuk penuh '{word}' tiada sebagai entri tersendiri.")
+            # 词根命中缓存为 warn + 提示语（后续查询结果一致，不再打 DBP）
+            cache_put(word, "warn", note)
+            return {"word": word, "url": url, "status": "warn",
                     "definition": root_hit["definition"],
                     "root": root_hit["root"],
-                    "root_note": f"entri untuk akar kata '{root_hit['root']}' (bentuk penuh = {root_hit['root']} + imbuhan)"}
+                    "note": note}
     return {"word": word, "url": url, **parsed}
 
 
@@ -1425,13 +1433,11 @@ def _prpm_root_retry_inner(word: str, FUNCTION_WORDS) -> dict | None:
             if all(r["status"] == "hit" for r in results):
                 defs = " | ".join(f"{p}: {(r.get('definition') or '')[:60]}"
                                   for p, r in zip(parts, results))
-                cache_put(word, "hit", defs)
                 return {"root": " + ".join(parts), "definition": defs}
     # B. 英文复数：cycle-s
     if word.endswith("s") and len(word) > 4 and not word.endswith("ss"):
         result = prpm_lookup(word[:-1])
         if result["status"] == "hit":
-            cache_put(word, "hit", result.get("definition", ""))
             return {"root": word[:-1], "definition": result.get("definition", "")}
     for root in _strip_particles_suffix(word):
         result = prpm_lookup(root)
@@ -1445,18 +1451,30 @@ def _prpm_root_retry_inner(word: str, FUNCTION_WORDS) -> dict | None:
                 pass  # 合法构词，放行
             else:
                 continue
-        cache_put(word, "hit", result.get("definition", ""))
         return {"root": root, "definition": result.get("definition", "")}
     return None
 
 
-def parse_prpm(page: str) -> dict:
+def parse_prpm(page: str, word: str = "") -> dict:
     # Missing/challenge/changed dictionary markup is not a dictionary miss.
     match = re.search(r"class=[\"'](?:[^\"']*\s)?tdclass(?:\s[^\"']*)?[\"'][^>]*>(.*?)</td>", page, re.DOTALL | re.IGNORECASE)
     if not match:
         return {"status": "unreachable", "note": "Dictionary section could not be verified"}
     from html import unescape
     body = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", match[1]))).strip()
+    # 词条头提取（用户裁决 2026-10-13）："Kamus Bahasa Melayu" 与音标
+    # [x.x.x] 之间的词是页面实际命中的词条——hit 判定必须词条头 == 查询词
+    # （大小写不敏感），否则 DBP 返回的是别的词条（词根/交叉引用），不算
+    # 查询词存在。词条头回传给前端显示真实命中内容，不假装是查询词。
+    entry = ""
+    m_head = re.search(r"Kamus Bahasa Melayu\s+(.+?)(?:\s*\[|\s*Definisi)", body)
+    if m_head:
+        entry = m_head.group(1).strip()
+        # DBP 词条常重复显示两次（表格两个单元格）——token 全同则去重
+        # （"murah murah" → "murah"）；不同 token 保留原样。
+        toks = entry.split()
+        if len(toks) > 1 and len(set(toks)) == 1:
+            entry = toks[0]
     if "Adakah anda bermaksud" in body:
         m_sug = re.search(r"(Adakah anda bermaksud\s*:?[^.\n]*)", body, re.IGNORECASE)
         sug_text = m_sug.group(1).strip() if m_sug else body[:200]
@@ -1480,7 +1498,16 @@ def parse_prpm(page: str) -> dict:
     definition = re.split(r"Definisi\s*:", body, maxsplit=1)[-1].strip()
     if not definition:
         return {"status": "unreachable", "note": "Dictionary definition was empty"}
-    return {"status": "hit", "definition": definition[:4000]}
+    # 精确命中检查（用户裁决 2026-10-13）：词条头 ≠ 查询词 → DBP 返回的是
+    # 别的词条（如 berkerjasama 查询命中 kerjasama 词条）。降级 warn——
+    # 不算存在（不亮绿），但保留释义和真实词条头供用户参考。
+    if word and entry and entry.lower() != word.lower():
+        return {"status": "warn", "definition": definition[:4000],
+                "entry": entry,
+                "note": f"PRPM menunjukkan entri '{entry}', bukan '{word}' — "
+                        f"kata ini tiada sebagai entri tersendiri."}
+    return {"status": "hit", "definition": definition[:4000],
+            "entry": entry or word}
 
 
 
