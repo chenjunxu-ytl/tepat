@@ -1,8 +1,28 @@
-# Tepat v0.4.3
+# Tepat v0.4.4
 
 Malay word/grammar checker: local Windows runtime + browser extension.
 Rules and word lists live in %APPDATA%/tepat and sync through this repo;
 PRPM is the online dictionary layer.
+
+## Highlights in 0.4.4
+
+- **Update & restart controls everywhere**: the server web UI gets a
+  brand-row with the connection dot, an update pill, and a restart
+  button; the extension popup gets the same restart plus a sync cloud,
+  flag, and dashboard buttons. Update, on both surfaces, is one shape:
+  a pulsing blue pill with a down-arrow and the word "Update", shown
+  only when a release check finds something new.
+- **The icons finally render**: the sidebar's global button rule was
+  squashing the brand-row icons to zero width (and injecting its nav
+  dot into them) — what looked like "yet another circle" was an empty
+  hover block. Fixed; every control now has a distinct non-circular
+  glyph with its own semantic colour.
+- **Desktop entry with the Tepat icon**: first launch now seeds a
+  Tepat desktop shortcut (.lnk) carrying the penguin icon instead of
+  a bare bat file (which Windows cannot give an icon). Falls back to
+  the plain bat launcher only if PowerShell is unavailable.
+- **Penguin assets served locally**: the web UI can load the icon
+  PNGs through a whitelisted /assets/ route.
 
 ## Highlights in 0.4.3
 
