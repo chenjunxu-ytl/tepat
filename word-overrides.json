@@ -14,5 +14,13 @@
   "source_issue": 31,
   "decided_at": 1791536584,
   "decided_by": "admin"
+ },
+ "katanya": {
+  "status": "hit",
+  "definition": "root word is \"kata\"",
+  "flag_kind": "underflag",
+  "source_issue": 46,
+  "decided_at": 1791955600,
+  "decided_by": "admin"
  }
 }
