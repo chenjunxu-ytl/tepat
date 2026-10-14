@@ -136,7 +136,7 @@ IS_ADMIN_MACHINE = _decide_admin_machine()  # _load_dotenv 之后立即判定
 
 # server 版本（用户裁决 2026-10-12）：与 extension manifest / release tag 同步
 # 递增——/api/extension-update 对比它和 latest release，提示用户换新 exe。
-SERVER_VERSION = "0.4.3"
+SERVER_VERSION = "0.4.4"
 
 
 # llm_judge 规则的 LLM 判决函数（注入 checker，2026-10-10 用户裁决：更难的
@@ -1561,6 +1561,13 @@ class Handler(BaseHTTPRequestHandler):
             self._file(os.path.join(WEB_DIR, "index.html"), "text/html; charset=utf-8")
         elif self.path == "/results.js":
             self._file(os.path.join(_ROOT, "extension", "results.js"), "text/javascript; charset=utf-8")
+        elif self.path.startswith("/assets/"):
+            # 静态资源（企鹅 logo 等，与 extension/tray 同源图标）
+            name = os.path.basename(self.path[len("/assets/"):])
+            if name in ("icon16.png", "icon32.png", "icon48.png", "icon256.png", "icon.ico"):
+                self._file(os.path.join(_ROOT, "assets", name), "image/png" if name.endswith(".png") else "image/x-icon")
+            else:
+                self._json(404, {"error": "not found"})
         elif self.path == "/api/health":
             self._json(200, {"ok": _checker is not None, "engine": "evidence-v2",
                              "grammar": _checker is not None,

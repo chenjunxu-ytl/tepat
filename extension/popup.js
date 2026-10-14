@@ -103,17 +103,14 @@ async function sendToActiveTab(msg) {
 // 页面整页扫描已砍（用户裁决 2026-10-12）：检查一律走浮动面板——右上 💬
 // 打开，右键选中文本或面板内输入均可；命中卡片点击可在页面上高亮对应片段。
 
-// 右上角 ⟳：从 GitHub 拉最新规则/词表（复用 server 的 /api/sync——
+// 右上角云下载：从 GitHub 拉最新规则/词表（复用 server 的 /api/sync——
 // 拉 rules.json/indo_words.json/word-overrides.json 并热重载）。本按钮
-// 只触发拉取，结果反馈靠 title + 图标短暂旋转。
+// 只触发拉取，结果反馈靠 title + 箭头下弹动画。
 $('#opt-sync').onclick = async (e) => {
   const btn = e.currentTarget;
-  btn.style.transition = 'none';
-  btn.style.transform = 'rotate(0deg)';
-  requestAnimationFrame(() => {
-    btn.style.transition = 'transform .7s cubic-bezier(.3,.6,.2,1)';
-    btn.style.transform = 'rotate(360deg)';
-  });
+  btn.classList.remove('syncing');
+  requestAnimationFrame(() => btn.classList.add('syncing'));
+  setTimeout(() => btn.classList.remove('syncing'), 800);
   try {
     const r = await fetch(API + '/api/sync', { method: 'POST' }).then(x => x.json());
     const ok = Object.values(r.files || {}).every(f => f.ok);
@@ -123,7 +120,6 @@ $('#opt-sync').onclick = async (e) => {
   } catch (err) {
     btn.title = `Sync failed: ${err.message || 'server unreachable'}`;
   }
-  setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 800);
 };
 
 // 右上角 💬：打开浮动检查面板（选中文字直接送查，没选中开空面板）

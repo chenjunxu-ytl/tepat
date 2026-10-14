@@ -116,32 +116,44 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 .wl-kv{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #eef2f5;font-size:13px}
 .wl-kv b{min-width:110px}
 .wl-kv span{color:#5d6977}
-/* 品牌行（h1 Tepat 右侧）：连接点 + 全局 update / restart */
+/* 品牌行：左 = 连接点 + Tepat，右 = update / restart 两个常驻 icon button */
 .brand-row{display:flex;align-items:center;justify-content:space-between;margin:18px 18px 6px}
+.brand-id{display:flex;align-items:center;gap:7px;min-width:0}
 .brand-row h1{margin:0}
-.brand-actions{display:flex;align-items:center;gap:4px}
-.brand-dot{width:9px;height:9px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px #fee2e2;transition:all .25s ease}
+.brand-dot{width:9px;height:9px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px #fee2e2;transition:all .25s ease;flex-shrink:0}
 .brand-dot.ok{background:#22c55e;box-shadow:0 0 0 3px #dcfce7}
-.brand-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:none;background:transparent;cursor:pointer;color:#c8d3dd;transition:all .15s ease;position:relative}
+.brand-actions{display:flex;align-items:center;gap:1px}
+/* padding:0 必须显式写——aside button 全局规则带 padding:10px 18px，
+   30px 宽的 border-box 按钮内容区会被压成负数，svg 塌成 0 宽（图标整个消失）。
+   ::before 也必须关——全局圆点指示灯（8×8 灰圆）会挤进按钮，把 svg 压到
+   12px，用户看到的就是"又一个圆圈"。导航按钮的圆点保留。 */
+.brand-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border-radius:8px;border:none;background:transparent;cursor:pointer;color:#c8d3dd;transition:all .15s ease;position:relative}
+.brand-btn::before{content:none}
 .brand-btn:hover{background:#3a4d5f;color:#fff}
+.brand-btn svg{width:17px;height:17px;flex-shrink:0}
 .brand-btn-restart{color:#7fd4a8}
 .brand-btn-restart:hover{background:#2a5c45;color:#c9f2dd}
-.brand-btn-update{color:#7fb3f5}
-.brand-btn-update:hover{background:#2a4d6f;color:#dbeafe}
-.brand-btn.update-on{color:#7fb3f5;background:transparent}
-.brand-btn.update-on::after{content:'';position:absolute;inset:-3px;border-radius:10px;border:2px solid #7fb3f5;animation:brandpulse 1.6s ease-out infinite;pointer-events:none}
-@keyframes brandpulse{0%{transform:scale(.75);opacity:.9}70%{transform:scale(1.25);opacity:0}100%{transform:scale(1.25);opacity:0}}
+/* update = 蓝色药丸，与 extension popup .update-btn 同款（用户裁决
+   2026-10-14）：display:none 默认，.show 出现 + 呼吸光晕脉冲 */
+.brand-btn-update{display:none;width:auto;height:24px;padding:0 10px 0 9px;gap:5px;border-radius:12px;background:#2563eb;color:#fff;font-size:11px;font-weight:700}
+.brand-btn-update.show{display:inline-flex;animation:brandglow 2s ease-in-out infinite}
+.brand-btn-update:hover{background:#1d4ed8;color:#fff}
+.brand-btn-update svg{width:13px;height:13px;flex-shrink:0}
+@keyframes brandglow{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.45)}50%{box-shadow:0 0 0 5px rgba(37,99,235,0)}}
 </style></head><body>
 <aside>
  <div class="brand-row">
-  <h1>Tepat</h1>
-  <span class="brand-actions">
+  <div class="brand-id">
    <span id="brand-dot" class="brand-dot" title="server connection — green = up"></span>
-   <button class="brand-btn brand-btn-update" id="btn-global-update" title="Update available — click to update the server" style="display:none">
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+   <h1>Tepat</h1>
+  </div>
+  <span class="brand-actions">
+   <button class="brand-btn brand-btn-update" id="btn-global-update" title="Update available — click to update now">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    Update
    </button>
    <button class="brand-btn brand-btn-restart" id="btn-global-restart" title="Restart the server (applies saved .env changes)">
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
    </button>
   </span>
  </div>
@@ -1009,38 +1021,42 @@ $('#btn-global-restart').onclick=async()=>{
  }
  btn.title='Still restarting — refresh in a few seconds';
 };
-// 全局 update 按钮（h1 右侧）：/api/extension-update 探测，有新版才显示并脉冲
+// 全局 update 按钮（h1 右侧）：只在检测到新版时出现（蓝色药丸脉冲），
+// 更新完自动消失；平时只有 restart 常驻。
 (async()=>{
+ const btn=$('#btn-global-update');
+ let info=null;  // {latest_version, update_available, server_update_available, release_url}
  try{
   const r=await fetch(API+'/api/extension-update').then(x=>x.json());
-  if(!r.server_update_available&&!r.update_available)return;
-  const btn=$('#btn-global-update');
-  btn.style.display='';
-  btn.classList.add('update-on');
-  const what=[];
-  if(r.update_available)what.push(`extension ${r.local_version||'?'} → ${r.latest_version}`);
-  if(r.server_update_available)what.push(`server ${r.server_version||'?'} → ${r.latest_version}`);
-  btn.title=`Update available: ${what.join(' · ')} — click to update now`;
-  btn.onclick=async()=>{
-   btn.title='Updating…';
-   try{
-    const res=await request('/api/self-update',{version:r.latest_version});
-    if(!res.ok)throw new Error(res.error||'self-update unavailable');
-    btn.title='Restarting…';
-    for(let i=0;i<60;i++){
-     await new Promise(rs=>setTimeout(rs,1000));
-     try{
-      await fetch(API+'/api/health').then(x=>x.json());
-      btn.classList.remove('update-on');btn.style.display='none';
-      return;
-     }catch{}
-    }
-   }catch(e){
-    btn.title=(e.message||'update failed')+' — open the release page';
-    btn.onclick=()=>{window.open(r.release_url||'https://github.com/chenjunxu-ytl/tepat/releases','_blank');};
+  if(r.server_update_available||r.update_available){
+   info=r;
+   const what=[];
+   if(r.update_available)what.push(`extension ${r.local_version||'?'} → ${r.latest_version}`);
+   if(r.server_update_available)what.push(`server ${r.server_version||'?'} → ${r.latest_version}`);
+   btn.title=`Update available: ${what.join(' · ')} — click to update now`;
+   btn.classList.add('show');
+  }
+ }catch{/* 探测失败 → 按钮不出现 */}
+ btn.onclick=async()=>{
+  if(!info)return;
+  btn.title='Updating…';
+  try{
+   const res=await request('/api/self-update',{version:info.latest_version});
+   if(!res.ok)throw new Error(res.error||'self-update unavailable');
+   btn.title='Restarting…';
+   for(let i=0;i<60;i++){
+    await new Promise(rs=>setTimeout(rs,1000));
+    try{
+     await fetch(API+'/api/health').then(x=>x.json());
+     btn.classList.remove('show');
+     return;
+    }catch{}
    }
-  };
- }catch{/* server 没跑 → 不显示 */}
+  }catch(e){
+   btn.title=(e.message||'update failed')+' — open the release page';
+   btn.onclick=()=>{window.open(info.release_url||'https://github.com/chenjunxu-ytl/tepat/releases','_blank');};
+  }
+ };
 })();
 // 全局连接点：health 探测（与 popup 同语义）
 (async()=>{
