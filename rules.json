@@ -35,14 +35,14 @@
     ]
    },
    "params": {
-    "pattern": "\\b(\\w+)\\s+sangat\\b(?!\\s+(?:murah|mahal|besar|kecil|tinggi|rendah|baik|buruk|cantik|hodoh|pandai|bodoh|cepat|lambat|panas|sejuk|panjang|pendek|berat|ringan|kuat|lemah|lapar|kenyang|letih|sihat|sakit|sedap|banyak|sedikit|lama|baru|indah|teruk|bagus|menarik|mudah|susah|senang|payah|kaya|miskin|tebal|nipis|basah|kering|bersih|kotor|jelas|kabur|senyap|bising|laju|perlahan|awal|lewat|dekat|jauh)\\b)",
+    "pattern": "\\b(?!yang|dan|atau|tetapi|namun|kerana|sebab|jika|kalau|apabila|bila|sedangkan|manakala|walaupun|walau|sementara|sebelum|selepas|semasa|ketika|sambil|supaya|agar|hingga|sampai|seperti|sebagai|ialah|adalah|juga|hanya|masih|sudah|telah|akan|sedang|dapat|boleh|harus|patut|wajib|mesti|ini|itu|tersebut|berikut|dia|mereka|kita|kami|saya|awak|anda|kamu|kau\\b)(\\w+)\\s+sangat\\b(?!\\s+(?:murah|mahal|besar|kecil|tinggi|rendah|baik|buruk|cantik|hodoh|pandai|bodoh|cepat|lambat|panas|sejuk|panjang|pendek|berat|ringan|kuat|lemah|lapar|kenyang|letih|sihat|sakit|sedap|banyak|sedikit|lama|baru|indah|teruk|bagus|menarik|mudah|susah|senang|payah|kaya|miskin|tebal|nipis|basah|kering|bersih|kotor|jelas|kabur|senyap|bising|laju|perlahan|awal|lewat|dekat|jauh)\\b)",
     "exceptions": [
      "\\bsangat[\\s-]+sangat\\b"
     ],
     "suggestion": "sangat \\1"
    },
    "enabled": true,
-   "impl": "The regex matches any single word directly followed by 'sangat' (wrong order, e.g. 'murah sangat'), then cancels the match only when the NEXT word after 'sangat' is one of 60 listed common adjectives (murah, mahal, besar, …) — i.e. correct order ('sangat murah') is recognised by that list alone; an unlisted adjective in correct order (e.g. 'sangat lasak') is a known blind spot that this pattern will wrongly flag. Suggestion swaps the match to 'sangat <matched word>'. Exception: 'sangat sangat' is never flagged."
+   "impl": "The regex matches a word directly followed by 'sangat' (wrong order), but skips matches when the preceding word is a function word — yang, conjunctions, pronouns, auxiliaries, demonstratives ('murid yang sangat rajin' is correct: sangat modifies the following adjective inside a relative clause) — and cancels when the word after sangat is one of 60 listed common adjectives (correct order recognised by that list alone). Suggestion swaps the match to 'sangat <matched word>'."
   },
   {
    "id": "RB-002",
