@@ -50,20 +50,24 @@
     display: none; /* 默认隐藏——只有检测到新版才出现 */
     position: relative;
     color: #2563eb;
+    background: #dbeafe; /* 底色让按钮成块——黑色圆点观感的根因是透明底
+                            只剩脉冲光圈；给个蓝色底块，箭头清晰浮在上面 */
   }
   .update-btn.show { display: flex; }
+  .update-btn:hover { background: #bfdbfe; }
   .update-btn::after {
     content: '';
     position: absolute; inset: -3px;
     border-radius: 10px;
-    background: rgba(37, 99, 235, .25);
+    border: 2px solid #2563eb;  /* 脉冲改成描边扩散——实心光圈在小按钮上
+                                    淹没 icon，看着就是一个黑/蓝圆 */
     animation: pulse 1.6s ease-out infinite;
     pointer-events: none;
   }
   @keyframes pulse {
-    0%   { transform: scale(.75); opacity: .9; }
-    70%  { transform: scale(1.25); opacity: 0; }
-    100% { transform: scale(1.25); opacity: 0; }
+    0%   { transform: scale(.75); opacity: 1; }
+    70%  { transform: scale(1.4); opacity: 0; }
+    100% { transform: scale(1.4); opacity: 0; }
   }
 
   /* 主 CTA：打开浮动检查面板（唯一检查入口，2026-10-12） */
@@ -97,7 +101,7 @@
   </div>
   <div class="head-actions">
     <button id="opt-update" class="head-btn update-btn" title="A new Tepat release is available">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
     </button>
     <button id="opt-sync" class="head-btn" title="Fetch the latest rules & word lists from GitHub">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
