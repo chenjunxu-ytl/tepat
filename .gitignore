@@ -28,3 +28,4 @@ exe_icon_check.png
 # OneDrive / OS noise
 ~$*
 desktop.ini
+.restart-pending
