@@ -1525,6 +1525,21 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # 安静模式
         pass
 
+    # ── CORS 白名单（2026-10-14 安全收紧）──
+    # 旧版 Allow-Origin: * 允许用户浏览的【任意网页】跨源读 /api/env（含
+    # GitHub PAT/LLM key 全文）和调用全部端点。收紧为：
+    #   - chrome-extension://* ：Tepat 扩展（开发模式 ID 各机不同，放行前缀）
+    #   - 无 Origin 头          ：同源页面（web 前端）和非浏览器客户端
+    #     （curl 等）——CORS 本来就不约束它们，直接放行
+    #   - 其他 Origin 一律不带 Allow-Origin 头 → 浏览器拦截响应
+    def _cors_origin(self) -> str | None:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return None
+        if origin.startswith("chrome-extension://"):
+            return origin
+        return None  # 恶意网页：不给 Allow-Origin，浏览器丢弃响应
+
     def _json(self, code: int, obj: dict):
         # Browser page truncation can leave a lone UTF-16 surrogate; escaping
         # preserves it safely rather than failing the whole scan response.
@@ -1532,7 +1547,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        allow = self._cors_origin()
+        if allow:
+            self.send_header("Access-Control-Allow-Origin", allow)
         self.end_headers()
         self.wfile.write(body)
 
@@ -1551,7 +1568,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):  # noqa: N802
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        allow = self._cors_origin()
+        if allow:
+            self.send_header("Access-Control-Allow-Origin", allow)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -1660,13 +1679,34 @@ class Handler(BaseHTTPRequestHandler):
                        "key_defaults": ENV_KEY_DEFAULTS,
                        "extension_version": ext_version,
                        "admin": IS_ADMIN_MACHINE}
+            # 值脱敏（2026-10-14 安全收紧）：admin 视图也不再回传完整值——
+            # 旧版把 PAT/LLM key 全文发进浏览器，XSS/恶意扩展一锅端。改为
+            # 掩码（••••尾4）；保存时掩码值原样回来 = 保留磁盘原值（见 POST）。
+            MASK = "\u2022\u2022\u2022\u2022"
+
+            def masked(env_text: str) -> str:
+                out_lines = []
+                for line in env_text.splitlines():
+                    s = line.strip()
+                    if s.startswith("#") or "=" not in s:
+                        out_lines.append(line)
+                        continue
+                    key, _, val = s.partition("=")
+                    if key.strip() not in secret_keys or not val.strip():
+                        out_lines.append(line)  # 非秘密 key / 空值：原样
+                    else:
+                        tail = val[-4:] if len(val) > 8 else ""
+                        out_lines.append(f"{key}={MASK}{tail}")
+                return "\n".join(out_lines)
+
+            secret_keys = {"TEPAT_ADMIN_TOKEN", "TEPAT_GH_TOKEN", "TEPAT_LLM_KEY"}
             if IS_ADMIN_MACHINE:
-                payload["content"] = content
+                payload["content"] = masked(content)
+                payload["masked_keys"] = sorted(secret_keys)
             else:
                 # user 视图（2026-10-12 用户裁决：user 也能配置自己的机器）：
-                # 非 admin key 的行原样给出（可编辑），admin key 的行只保留
-                # key 名（值是提权秘密，user 端不可见不可改）。admin key 是否
-                # set 已由 keys_set 表达。
+                # 非 admin key 的行可编辑（token 类掩码），admin key 的行只保留
+                # key 名（值是提权秘密，user 端不可见不可改）。
                 user_lines = []
                 for line in content.splitlines():
                     s = line.strip()
@@ -1674,8 +1714,9 @@ class Handler(BaseHTTPRequestHandler):
                         user_lines.append("TEPAT_ADMIN_TOKEN=")
                     else:
                         user_lines.append(line)
-                payload["content"] = "\n".join(user_lines)
+                payload["content"] = masked("\n".join(user_lines))
                 payload["locked_keys"] = ["TEPAT_ADMIN_TOKEN"]
+                payload["masked_keys"] = sorted(secret_keys - {"TEPAT_ADMIN_TOKEN"})
             self._json(200, payload)
         elif self.path == "/api/config":
             # 每个 rule 植入的直观视图（用户裁决 2026-10-02）：配置文件原文
@@ -2850,14 +2891,32 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": f"lines without '=': {bad[:3]}"})
                 return
             path = _env_path()
+            try:
+                disk_lines = Path(path).read_text(
+                    encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                disk_lines = []
+            disk_by_key = {}
+            for ln in disk_lines:
+                s = ln.strip()
+                if s and not s.startswith("#") and "=" in s:
+                    k, _, v = s.partition("=")
+                    disk_by_key[k.strip()] = v
+            # 掩码还原（2026-10-14 脱敏配套）：值含 •••• 掩码 = 用户没改这行
+            # → 从磁盘原值恢复；只有全新值才真写入。
+            MASK = "\u2022\u2022\u2022\u2022"
+            restored_lines = []
+            for ln in content.splitlines():
+                s = ln.strip()
+                if s and not s.startswith("#") and "=" in s:
+                    k, _, v = s.partition("=")
+                    if MASK in v and k.strip() in disk_by_key:
+                        ln = f"{k}={disk_by_key[k.strip()]}"
+                restored_lines.append(ln)
+            content = "\n".join(restored_lines)
             # user 权限护栏：TEPAT_ADMIN_TOKEN 行替换回磁盘原值（user 视图
             # 看不到原值，直接采用提交值 = 静默清权）。admin 机器不受限。
             if not IS_ADMIN_MACHINE:
-                try:
-                    disk_lines = Path(path).read_text(
-                        encoding="utf-8", errors="replace").splitlines()
-                except OSError:
-                    disk_lines = []
                 disk_admin = next((ln for ln in disk_lines
                                    if ln.strip().startswith("TEPAT_ADMIN_TOKEN=")), None)
                 out_lines = []

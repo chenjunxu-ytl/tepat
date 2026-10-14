@@ -884,14 +884,15 @@ const envRows = [];
 const ENV_KEYS_DOC = {};
 function envRowHtml(key, value, isNew, comments='') {
   const known = ENV_KEYS_DOC[key];
+  const masked = value.includes('\u2022\u2022\u2022\u2022');
   return `
   <div class="env-row${isNew ? ' env-row-new' : ''}">
     <input type="hidden" class="env-comments" value="${esc(comments)}">
     <input type="text" class="env-key" value="${esc(key)}" placeholder="KEY" spellcheck="false" ${isNew ? '' : 'readonly'}>
     <span class="wl-arrow">=</span>
-    <input type="text" class="env-value" value="${esc(value)}" placeholder="value" spellcheck="false">
+    <input type="text" class="env-value" value="${esc(value)}" placeholder="value" spellcheck="false"${masked ? ' title="secret is masked — leave as-is to keep the current value, or type a new one to replace it"' : ''}>
     <button class="act env-del" title="Remove this key">✕</button>
-    ${known ? `<div class="env-doc">${esc(known)}</div>` : ''}
+    ${known ? `<div class="env-doc">${esc(known)}${masked ? ' — <i>masked: leave as-is to keep, type to replace</i>' : ''}</div>` : ''}
   </div>`;
 }
 async function loadEnv(){
