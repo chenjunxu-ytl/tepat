@@ -132,6 +132,27 @@ $('#opt-open-panel').onclick = () => sendToActiveTab({ type: 'open-panel' });
 // 右上角 ⚑：报告本页主观问题（general flag，区别于词/规则级 flag）
 $('#opt-flag').onclick = () => sendToActiveTab({ type: 'open-general-flag' });
 
+// 右上角 restart：server 退出并由 launcher 循环拉回（.env 改动生效场景）
+$('#opt-restart').onclick = async (e) => {
+  const btn = e.currentTarget;
+  btn.title = 'Restarting…';
+  try { await fetch(API + '/api/restart', { method: 'POST' }).then(x => x.json()); } catch { /* 进程退出可能断连 */ }
+  for (let i = 0; i < 60; i++) {
+    await new Promise(rs => setTimeout(rs, 1000));
+    try {
+      const h = await fetch(API + '/api/health').then(x => x.json());
+      btn.title = `Server restarted (v${h.server_version || '?'})`;
+      // 状态点也刷新
+      fetch(API + '/api/health').then(r => r.json()).then(() => {
+        const dot = $('#dot'); if (dot) dot.classList.add('ok');
+      });
+      setTimeout(window.close, 800);
+      return;
+    } catch { /* 还没起来 */ }
+  }
+  btn.title = 'Still restarting — try again in a few seconds';
+};
+
 // Dashboard = server frontend（settings icon）
 $('#opt-open-dashboard').onclick = () => {
   chrome.tabs.create({ url: API + '/' });

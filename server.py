@@ -2724,6 +2724,22 @@ class Handler(BaseHTTPRequestHandler):
             _log(f"[proposals] accepted {rid} -> rules.json ({len(rules_data['rules'])} rules)")
             self._json(200, {"ok": True, "accepted": rid,
                              "rules": len(rules_data["rules"])})
+        elif self.path == "/api/restart":
+            # 手动重启（用户裁决 2026-10-14）：写 .restart-pending 标记 → 退出
+            # → start.bat/run.bat 的循环看到标记用同代码重启（与 self-update
+            # 同一机制，只是不换文件）。改了 .env 之类的重启场景用。
+            # exe 形态没有 bat 循环——标记写上但进程退出后不会自动回来，
+            # 明确告知。
+            def _exit_for_restart():
+                time.sleep(0.5)  # 让响应先送达
+                Path(_ROOT, ".restart-pending").write_text(
+                    "manual restart\n", encoding="utf-8")
+                _log("[restart] requested via API — exiting for restart")
+                os._exit(0)
+            self._json(200, {"ok": True,
+                             "note": "restart pending" if not getattr(sys, "frozen", False)
+                                     else "exe has no launcher loop — restart manually"})
+            threading.Thread(target=_exit_for_restart, daemon=True).start()
         elif self.path == "/api/self-update":
             # 手动触发的 server 自更新（用户裁决 2026-10-12：不自动，点了
             # update 按钮才跑；过程全自动）。仅源码/bat 部署——exe 文件被
@@ -3110,7 +3126,7 @@ def start_tray(url: str, port: int = 8377):
         WM_APP_STOP = 0x8000 + 1
         WM_APP_MENU = 0x8000 + 2
         WM_APP_OPEN = 0x8000 + 3
-        MENU_OPEN, MENU_LOG, MENU_EXIT = 100, 102, 101
+        MENU_OPEN, MENU_LOG, MENU_RESTART, MENU_EXIT = 100, 102, 103, 101
 
         _taskbar_created_msg = [user32.RegisterWindowMessageW("TaskbarCreated")]
 
@@ -3143,6 +3159,7 @@ def start_tray(url: str, port: int = 8377):
                 menu = user32.CreatePopupMenu()
                 user32.AppendMenuW(menu, 0, MENU_OPEN, "Buka UI")
                 user32.AppendMenuW(menu, 0, MENU_LOG, "Tunjuk log")
+                user32.AppendMenuW(menu, 0, MENU_RESTART, "Restart")
                 user32.AppendMenuW(menu, 0x800, 0, None)  # MF_SEPARATOR
                 user32.AppendMenuW(menu, 0, MENU_EXIT, "Keluar")
                 user32.SetForegroundWindow(hwnd)
@@ -3165,6 +3182,22 @@ def start_tray(url: str, port: int = 8377):
                             user32.SetForegroundWindow(con)
                     except Exception:  # noqa: BLE001
                         pass
+                elif cmd == MENU_RESTART:
+                    # Restart（用户裁决 2026-10-14）：写标记退出，bat 循环
+                    # 用同代码重启——.env 改动等场景。exe 无循环，标记写上
+                    # 但不自动回来。
+                    _log("[tray] restart requested from tray menu")
+                    try:
+                        if state.nid:
+                            shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(state.nid))
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        Path(_ROOT, ".restart-pending").write_text(
+                            "manual restart (tray)\n", encoding="utf-8")
+                    except OSError:
+                        pass
+                    os._exit(0)
                 elif cmd == MENU_EXIT:
                     state.stop = True
                     if state.nid:

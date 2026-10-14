@@ -199,6 +199,9 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    <button class="head-btn head-btn-save" id="btn-env-save" title="Save to disk" style="display:none">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
    </button>
+   <button class="head-btn" id="btn-env-restart" title="Restart the server (applies saved .env changes)">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+   </button>
    <span id="env-msg" class="msg"></span>
  </span></h2>
  <div class="card" id="env-ext-card" style="margin-bottom:10px">
@@ -964,6 +967,23 @@ $('#btn-env-add').onclick=()=>{
   last.querySelector('.env-del').onclick=()=>last.remove();
 };
 $('#btn-env-reload').onclick=loadEnv;
+$('#btn-env-restart').onclick=async()=>{
+ const msg=$('#env-msg');
+ if(!await openConfirm({title:'Restart the server?',
+   sub:'The server exits and relaunches with the saved .env (the launcher loop brings it back). This page keeps polling until it is up again.',
+   confirmText:'Restart'}))return;
+ msg.textContent='Restarting…';
+ try{await request('/api/restart',{});}catch(e){/* 进程可能先断连接 */}
+ for(let i=0;i<60;i++){
+  await new Promise(r=>setTimeout(r,1000));
+  try{
+   const h=await fetch(API+'/api/health').then(x=>x.json());
+   msg.innerHTML=`<span class="ok">✓ server restarted (v${esc(h.server_version||'?')})</span>`;
+   loadEnv();return;
+  }catch{/* 还没起来 */}
+ }
+ msg.innerHTML='<span class="bad">✗ still restarting — refresh in a few seconds</span>';
+};
 $('#btn-env-save').onclick=async()=>{
  // 行 → content：每行前面回填它的注释；非法行（无 key）拦下
  const parts=[];
