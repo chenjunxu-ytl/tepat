@@ -3,17 +3,19 @@ rem Dev fast-run: start server.py straight from source, no PyInstaller.
 setlocal
 
 rem 桌面入口（用户裁决 2026-10-14）：首次启动自动在桌面放 Tepat 快捷方式——
-rem bat 无法自带图标，所以放 .lnk（指向 start.bat，带 assets\icon.ico 企鹅图标），
-rem 双击即启动本目录的 server。已存在则不覆盖。
+rem bat 无法自带图标，所以放 .lnk（带 assets\icon.ico 企鹅图标）。
+rem 两级回退：Tepat.lnk 名字被云同步 tombstone 卡住（建了又删过的名字会这样）
+rem 时换 Tepat App.lnk；PowerShell 完全不可用才落到无图标的 bat。
 for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "TEPAT_DESKTOP=%%D"
 if not defined TEPAT_DESKTOP set "TEPAT_DESKTOP=%USERPROFILE%\Desktop"
-if not exist "%TEPAT_DESKTOP%\Tepat.lnk" (
+if not exist "%TEPAT_DESKTOP%\Tepat.lnk" if not exist "%TEPAT_DESKTOP%\Tepat App.lnk" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$ws = New-Object -ComObject WScript.Shell; $lnk = $ws.CreateShortcut((Join-Path $env:TEPAT_DESKTOP 'Tepat.lnk')); $lnk.TargetPath = '%~dp0start.bat'; $lnk.WorkingDirectory = '%~dp0.'; $lnk.IconLocation = '%~dp0assets\icon.ico'; $lnk.Description = 'Tepat - Malay language checker (local server)'; $lnk.WindowStyle = 7; $lnk.Save()" 2>nul
+    "$ws = New-Object -ComObject WScript.Shell; foreach ($n in 'Tepat.lnk','Tepat App.lnk') { $lnk = $ws.CreateShortcut((Join-Path $env:TEPAT_DESKTOP $n)); $lnk.TargetPath = '%~dp0run.bat'; $lnk.WorkingDirectory = '%~dp0.'; $lnk.IconLocation = '%~dp0assets\icon.ico'; $lnk.Description = 'Tepat - Malay language checker (local server)'; $lnk.WindowStyle = 7; try { $lnk.Save() } catch { }; if (Test-Path (Join-Path $env:TEPAT_DESKTOP $n)) { break } }" 2>nul
   if exist "%TEPAT_DESKTOP%\Tepat.lnk" (
     echo [tepat] desktop shortcut created: %TEPAT_DESKTOP%\Tepat.lnk
+  ) else if exist "%TEPAT_DESKTOP%\Tepat App.lnk" (
+    echo [tepat] desktop shortcut created: %TEPAT_DESKTOP%\Tepat App.lnk
   ) else (
-    rem PowerShell 失败（策略限制等）——退回无图标的 bat 入口
     > "%TEPAT_DESKTOP%\tepat.bat" (
       echo @echo off
       echo start "" /min "%~dp0run.bat" %%*
