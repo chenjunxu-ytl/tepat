@@ -1603,9 +1603,15 @@ class Handler(BaseHTTPRequestHandler):
                    "update_available": False, "release_url": None, "error": None,
                    "server_version": SERVER_VERSION, "server_update_available": False}
             try:
+                headers = {"Accept": "application/vnd.github+json"}
+                # 匿名 GitHub API 限流 60/h——发布/上传一忙就 403，带上
+                # token（有配置时）走 5000/h
+                tok = _gh_token()
+                if tok:
+                    headers["Authorization"] = "Bearer " + tok
                 req = urllib.request.Request(
                     f"https://api.github.com/repos/{GH_PROPOSAL_REPO}/releases/latest",
-                    headers={"Accept": "application/vnd.github+json"})
+                    headers=headers)
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     rel = json.loads(resp.read())
                 latest = str(rel.get("tag_name", "")).lstrip("v")
