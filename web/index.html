@@ -116,9 +116,31 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
 .wl-kv{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #eef2f5;font-size:13px}
 .wl-kv b{min-width:110px}
 .wl-kv span{color:#5d6977}
+/* 品牌行（h1 Tepat 右侧）：连接点 + 全局 update / restart */
+.brand-row{display:flex;align-items:center;justify-content:space-between;margin:18px 18px 6px}
+.brand-row h1{margin:0}
+.brand-actions{display:flex;align-items:center;gap:4px}
+.brand-dot{width:9px;height:9px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px #fee2e2;transition:all .25s ease}
+.brand-dot.ok{background:#22c55e;box-shadow:0 0 0 3px #dcfce7}
+.brand-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;border:none;background:transparent;cursor:pointer;color:#64748b;transition:all .15s ease;position:relative}
+.brand-btn:hover{background:#f1f5f9;color:#0f172a}
+.brand-btn.update-on{color:#2563eb}
+.brand-btn.update-on::after{content:'';position:absolute;inset:-3px;border-radius:10px;background:rgba(37,99,235,.25);animation:brandpulse 1.6s ease-out infinite;pointer-events:none}
+@keyframes brandpulse{0%{transform:scale(.75);opacity:.9}70%{transform:scale(1.25);opacity:0}100%{transform:scale(1.25);opacity:0}}
 </style></head><body>
 <aside>
- <h1>Tepat</h1>
+ <div class="brand-row">
+  <h1>Tepat</h1>
+  <span class="brand-actions">
+   <span id="brand-dot" class="brand-dot" title="server connection — green = up"></span>
+   <button class="brand-btn" id="btn-global-update" title="Update available — click to update the server" style="display:none">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+   </button>
+   <button class="brand-btn" id="btn-global-restart" title="Restart the server (applies saved .env changes)">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.64-6.36"/><polyline points="3 3 3 9 9 9"/></svg>
+   </button>
+  </span>
+ </div>
  <button class="nav active" data-tab="check">Check</button>
  <div class="side-sec">Rules</div>
  <button class="nav" data-tab="rulebook">Rule Book</button>
@@ -198,9 +220,6 @@ aside .side-sec{font-size:10px;font-weight:700;letter-spacing:.12em;text-transfo
    </button>
    <button class="head-btn head-btn-save" id="btn-env-save" title="Save to disk" style="display:none">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-   </button>
-   <button class="head-btn" id="btn-env-restart" title="Restart the server (applies saved .env changes)">
-     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
    </button>
    <span id="env-msg" class="msg"></span>
  </span></h2>
@@ -967,23 +986,65 @@ $('#btn-env-add').onclick=()=>{
   last.querySelector('.env-del').onclick=()=>last.remove();
 };
 $('#btn-env-reload').onclick=loadEnv;
-$('#btn-env-restart').onclick=async()=>{
- const msg=$('#env-msg');
+$('#btn-global-restart').onclick=async()=>{
+ const btn=$('#btn-global-restart');
  if(!await openConfirm({title:'Restart the server?',
    sub:'The server exits and relaunches with the saved .env (the launcher loop brings it back). This page keeps polling until it is up again.',
    confirmText:'Restart'}))return;
- msg.textContent='Restarting…';
+ btn.title='Restarting…';
  try{await request('/api/restart',{});}catch(e){/* 进程可能先断连接 */}
  for(let i=0;i<60;i++){
   await new Promise(r=>setTimeout(r,1000));
   try{
    const h=await fetch(API+'/api/health').then(x=>x.json());
-   msg.innerHTML=`<span class="ok">✓ server restarted (v${esc(h.server_version||'?')})</span>`;
-   loadEnv();return;
+   btn.title='Server restarted';
+   $('#brand-dot')?.classList.add('ok');
+   setTimeout(()=>btn.title='Restart the server (applies saved .env changes)',2500);
+   return;
   }catch{/* 还没起来 */}
  }
- msg.innerHTML='<span class="bad">✗ still restarting — refresh in a few seconds</span>';
+ btn.title='Still restarting — refresh in a few seconds';
 };
+// 全局 update 按钮（h1 右侧）：/api/extension-update 探测，有新版才显示并脉冲
+(async()=>{
+ try{
+  const r=await fetch(API+'/api/extension-update').then(x=>x.json());
+  if(!r.server_update_available&&!r.update_available)return;
+  const btn=$('#btn-global-update');
+  btn.style.display='';
+  btn.classList.add('update-on');
+  const what=[];
+  if(r.update_available)what.push(`extension ${r.local_version||'?'} → ${r.latest_version}`);
+  if(r.server_update_available)what.push(`server ${r.server_version||'?'} → ${r.latest_version}`);
+  btn.title=`Update available: ${what.join(' · ')} — click to update now`;
+  btn.onclick=async()=>{
+   btn.title='Updating…';
+   try{
+    const res=await request('/api/self-update',{version:r.latest_version});
+    if(!res.ok)throw new Error(res.error||'self-update unavailable');
+    btn.title='Restarting…';
+    for(let i=0;i<60;i++){
+     await new Promise(rs=>setTimeout(rs,1000));
+     try{
+      await fetch(API+'/api/health').then(x=>x.json());
+      btn.classList.remove('update-on');btn.style.display='none';
+      return;
+     }catch{}
+    }
+   }catch(e){
+    btn.title=(e.message||'update failed')+' — open the release page';
+    btn.onclick=()=>{window.open(r.release_url||'https://github.com/chenjunxu-ytl/tepat/releases','_blank');};
+   }
+  };
+ }catch{/* server 没跑 → 不显示 */}
+})();
+// 全局连接点：health 探测（与 popup 同语义）
+(async()=>{
+ for(let i=0;i<3;i++){
+  try{await fetch(API+'/api/health').then(x=>x.json());$('#brand-dot')?.classList.add('ok');return;}catch{}
+  await new Promise(r=>setTimeout(r,2000));
+ }
+})();
 $('#btn-env-save').onclick=async()=>{
  // 行 → content：每行前面回填它的注释；非法行（无 key）拦下
  const parts=[];
