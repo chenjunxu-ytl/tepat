@@ -14,10 +14,6 @@ the [install guide](INSTALL.md) and the
 
 assets/videos/tepat-promo.mp4
 
-**User guide** — every feature, step by step: check panel, highlights, deep check, flags:
-
-assets/videos/Tepat-User-Guide.mp4
-
 ## What it does
 
 - **Word-level checks** — DBP PRPM dictionary verification (rate-limited,
