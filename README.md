@@ -10,13 +10,13 @@ the [install guide](INSTALL.md) and the
 
 ## 🎬 Watch first
 
-| | |
-|---|---|
-| **[Product overview — 60s](https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/tepat-promo-v0.4.3.mp4)** | What Tepat is and how it fits into the annotation workflow |
-| **[User guide — full walkthrough](https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/Tepat-v0.4.3-User-Guide.mp4)** | Every feature, step by step: check panel, highlights, deep check, flags |
+**Product overview** — what Tepat is and how it fits into the annotation workflow:
 
-Both videos are hosted on the [v0.4.3 release](https://github.com/chenjunxu-ytl/tepat/releases/tag/v0.4.3)
-(download and play locally).
+assets/videos/tepat-promo.mp4
+
+**User guide** — every feature, step by step: check panel, highlights, deep check, flags:
+
+assets/videos/Tepat-User-Guide.mp4
 
 ## What it does
 
