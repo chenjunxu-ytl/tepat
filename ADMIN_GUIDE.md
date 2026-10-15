@@ -12,15 +12,15 @@ happens behind the scenes*, and *where the data lives*.
 Tepat is a two-part system:
 
 ```
-┌──────────────┐         ┌─────────────────────┐         ┌──────────────┐
-│  Extension   │ ──────► │  Local server       │ ──────► │  GitHub repo │
-│  (browser)   │  HTTP   │  (python server.py) │  API    │  (the single │
-│              │ 127.0.0 │  :8377              │         │  source of   │
-└──────────────┘  :8377  └──────────┬──────────┘         │  truth)      │
-                                   │                    └──────────────┘
-                          ┌────────┴────────┐
+┌──────────────┐         ┌─────────────────────┐         ┌──────────────────────────┐
+│  Extension   │ ──────► │  Local server       │ ──────► │  GitHub repo (the single │
+│  (browser)   │  HTTP   │  (python server.py) │  API    │  (source of truth)       │
+│              │ 127.0.0 │  :8377              │         └──────────────────────────┘
+└──────────────┘  :8377  └──────────┬──────────┘         
+                                    │                    
+                          ┌─────────┴───────┐
                           ▼                 ▼
-                    DBP PRPM         LLM (z.ai, glm)
+                    DBP PRPM               LLM
                     dictionary       rule translation &
                     (rate-limited,   sentence judging
                      sqlite-cached)
