@@ -12,7 +12,7 @@ the [install guide](INSTALL.md) and the
 
 **Product overview** — what Tepat is and how it fits into the annotation workflow:
 
-<video src="https://github.com/user-attachments/assets/6b4cf23c-e4b2-4253-b0ed-16a06f60a581" controls="controls" muted="muted" style="max-width: 100%;"></video>
+<video src="https://github.com/user-attachments/assets/ec780231-113e-45ec-b950-d9ad0ca27652" controls="controls" muted="muted" style="max-width: 100%;"></video>
 
 ## What it does
 
