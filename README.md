@@ -1,129 +1,122 @@
-# Tepat v2 — source-aware Malay checker
+# Tepat — Malay language checker
 
-Current release: **2.0.0-preview.1**, for evaluation. Grammar coverage is limited
-and contextual reminders still need human review. See [release notes](RELEASE_NOTES.md)
-and the [portable installation guide](INSTALL.md).
+Local service + Chrome extension that checks Malay text against DBP-standard
+rules, word lists and the PRPM dictionary, with an optional LLM layer for the
+judgements regex cannot make.
 
-Local Python service + Chrome extension. Highlights investigateable spelling,
-terminology/register and grammar signals, with source evidence. Manual rules run
-independently of dictionary and corpus matches. No automatic replacement.
+Current release: **v0.4.3** — see [release notes](RELEASE_NOTES.md),
+the [install guide](INSTALL.md) and the
+[admin guide](ADMIN_GUIDE.md).
 
-## Run
+## 🎬 Watch first
 
-From this directory:
+| | |
+|---|---|
+| **[Product overview — 60s](https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/tepat-promo-v0.4.3.mp4)** | What Tepat is and how it fits into the annotation workflow |
+| **[User guide — full walkthrough](https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/Tepat-v0.4.3-User-Guide.mp4)** | Every feature, step by step: check panel, highlights, deep check, flags |
 
-```powershell
-python server.py
+Both videos are hosted on the [v0.4.3 release](https://github.com/chenjunxu-ytl/tepat/releases/tag/v0.4.3)
+(download and play locally).
+
+## What it does
+
+- **Word-level checks** — DBP PRPM dictionary verification (rate-limited,
+  sqlite-cached), Indonesian-only vocabulary, casual/informal words, with
+  admin-reviewed overrides that beat the dictionary.
+- **Grammar rules** — the settled Rule Book, live as rules.json: comparative
+  *dari/daripada*, time prepositions, doubled copulas, English calques,
+  collocations, spelling, *antara* coordination, dangling modifiers and more.
+- **Agent rules (llm_judge)** — language points regex cannot express (word
+  order, sentence structure, animacy) run as LLM-judged rules. Each carries a
+  regex pre-filter so only sentences with the rule's keyword pay for an LLM
+  call; structure rules without a pre-filter run only in the manual deep check.
+  *Unsure never flags* — a miss is cheaper than a false alarm.
+- **Feedback loop** — every hit carries a flag button; reports land as GitHub
+  issues tagged with the rule id, and the review console jumps straight to the
+  fix. Corrections permanently become regression examples.
+- **Rule creation in plain words** — describe a language point in the Rule
+  Book playground; the built-in translation agent produces a rule, self-tests
+  it against your examples, and ships it as a trial for review.
+
+Nothing is auto-replaced. Facts are never checked. Every finding needs human
+judgement.
+
+## Install
+
+Two paths, same result ([full guide](INSTALL.md)):
+
+- **All-in-one** — download
+  [`tepat-v0.4.3-all-in-one.zip`](https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/tepat-v0.4.3-all-in-one.zip),
+  run `tepat/tepat-v2/tepat-v2.exe`, load `tepat/extension/` as an unpacked
+  extension.
+- **Source (no exe)** — download
+  [`tepat-v0.4.3-source.zip`](https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/tepat-v0.4.3-source.zip),
+  install Python 3.10+, double-click `start.bat`. Nothing to pip install.
+
+Then open http://127.0.0.1:8377, or just select text on any page and
+right-click → **Tepat**. The tray icon is the resident entry point
+("Tunjuk log" brings the console back).
+
+## How checking works
+
+```
+extension (right-click / panel)
+        │  HTTP 127.0.0.1:8377
+        ▼
+local server ──── rules.json ──► regex rules          ← every scan, instant
+        │              │
+        │              └────────► llm_judge rules     ← pre-filtered (trigger)
+        │                                              or deep-only (manual)
+        ├─── indo_words.json ─► word lists
+        ├─── word-overrides.json ─► admin verdicts (beat PRPM)
+        ├─── PRPM (prpm.dbp.gov.my, cached + rate-limited)
+        └─── LLM (rule translation & judging; optional per machine)
 ```
 
-Open http://127.0.0.1:8377. For Chrome, reload `extension/` as an unpacked extension,
-then refresh the target page. Select text and use **Semak bahasa**, or use Alt+S.
-The extension can scan the first 30,000 UTF-16 units of page text, with exact
-occurrence highlights. The standalone page supports formal/informal register.
-The service must be running; if an old Tepat owns port 8377, close it first.
+Rules and word lists live in `%APPDATA%\tepat` and sync through this repo:
+admin changes push here, every machine pulls within 5 minutes and hot-reloads.
+Unpushed local changes are never overwritten by a fetch (content-hash
+baseline). See the [admin guide](ADMIN_GUIDE.md) for the full review and
+maintenance workflow.
 
-## Evidence build
+## Repository layout
 
-```powershell
-python sync_indo.py
-python build_evidence.py --review-root ../puzzle/corpus/clean-review/20261002-v3
-```
+| Path | What it is |
+|---|---|
+| `server.py`, `checker.py`, `text_units.py`, `evidence.py` | the local service |
+| `extension/` | the Chrome extension |
+| `web/index.html` | the dashboard (scan, deep check, review console, env) |
+| `rules.json`, `indo_words.json`, `word-overrides.json` | the synced data files |
+| `tools/prepare_release.py` | builds release archives |
+| `build.bat` / `start.bat` / `create-shortcut.bat` | run helpers |
+| `ADMIN_GUIDE.md` / `INSTALL.md` / `RELEASE_NOTES.md` | docs |
 
-Builds `data/evidence.sqlite` atomically through `evidence.building.sqlite`.
-Incomplete builds cannot be loaded. A failed build leaves staging for inspection;
-choose a new output or inspect/remove only that staging file before retrying.
-Raw data, legacy `puzzle/ngrams2.db`, `words.txt` and `bigrams.txt.xz` are preserved.
-
-- DBP: 26,915 identity-supported headword candidates, dictionary definitions as
-  reference, 1,029 candidate example records.
-- TD: 865 positive example records; negative/starred examples never enter counts.
-  Explanation references can be searched locally.
-- Bench: only 39 approved nonempty training correction responses. Original
-  responses and holdout never enter counts. A response can contain many sentences.
-- Wiki: 2,324,200 structurally cleaned sentence candidates; language/grammar are
-  unverified. Supplemental evidence remains distinct from DBP/TD/Bench.
-- Hansard: retained by the cleaning pipeline for reference; excluded from this
-  runtime evidence index.
-
-The builder stores unigram, bigram and trigram occurrence/document counts,
-including single occurrences and function words, and an example with provenance.
-Exact repeated sentences are deduplicated within a source. N-grams never cross
-sentence, punctuation, unsupported-script, number or document boundaries.
-Dictionary attestation, corpus observation and unknown forms are distinct states.
-A known root is a clue requiring morphology review, never automatic proof that
-an arbitrary derived form is grammatical.
-
-## Rules and Indonesian candidates
-
-`rules.json` stays editable. Each rule has a unique `entry_id`, a rule-book `id`,
-category, register, regex, confidence, source and optional exception patterns.
-Bad regex/shape entries are skipped and reported. Add `examples.trigger` and
-`examples.clear` when extending a rule. Existing context-dependent regex matches
-are reminders, not universal grammar verdicts. Adjacent repeated pemeri is the
-remaining narrow high-confidence pattern.
-Low-confidence manual reminders and sentence usage-density clues remain in the
-results panel without inline highlights; actionable rules still mark exact spans.
-
-`puzzle/indo_blacklist.md` and its JSON companion are the maintained source;
-`sync_indo.py` checks agreement and produces `indo_words.json` for distribution.
-Current policy: 293 Indonesian candidates, 56 uncertain forms, nine shared Malay
-SMS abbreviations, five ambiguous chat/unit forms. Candidates retain the original
-research status; they have not all been freshly normatively verified. Shared
-abbreviations are classified using DBP's SMS guide:
-https://eseminar.dbp.gov.my/dokumen/khidmatsms.pdf
-
-Indonesian candidates run independently, even if they exist in Wiki or the old
-wordlist. Two-letter/digit forms are supported. Formal SMS reminders differ from
-Indonesian reminders; title case and punctuation protect `Dr.`. Suggested
-counterparts require local DBP attestation and are never applied automatically.
-The old automatically derived `blacklist.json` is preserved as a historical
-artifact, but is not loaded by the checker or distributed in new builds. Its
-generator marked all original bigrams when a correction changed the token count,
-including combinations preserved verbatim in the corrected sentence. Even a
-changed combination cannot establish a context-free grammar rule. Validated
-patterns belong in the independently maintained rules, with trigger/clear examples.
-
-## Checking scope
-
-Every result reports spelling/terminology/grammar coverage and `factuality:
-not_checked`. A low-frequency combination or absent dictionary entry is an
-investigation clue. No result certifies the whole sentence as correct.
-
-This version uses local contextual evidence and manual rules. It does not run a
-semantic language model or an autonomous web research agent. **Bukti tempatan**
-retrieves DBP definitions/examples and TD references. **PRPM** performs a manual
-online lookup; **Cari sumber** opens a Google search when clicked. Network/layout
-failures remain unverified. Explicit dictionary misses are not spelling verdicts.
-Legacy PRPM cache entries are invalidated; new hits expire after 30 days and misses
-after one day.
-
-## Validation and package
+## Development
 
 ```powershell
-python -m unittest test_evidence test_checker -v
-node test_results.js
-.\build.bat
+python -m unittest discover -s tests -p "test_*.py" -q   # unit tests
+.\build.bat                                               # portable exe build
+python tools/prepare_release.py                           # release archives
 ```
 
-The portable app is `dist/tepat-v2/tepat-v2.exe`. Keep its entire folder together;
-the database is intentionally outside the binary. External copies of rules and
-word policy beside the exe override bundled copies; restart after editing.
-Do not use the old `tepat.spec` for this version.
+The server self-updates on source deployments: the popup's update button
+downloads the latest release, replaces the running code and restarts through
+`start.bat`'s loop. The extension is updated by reloading the new chrome zip
+(browsers do not allow pages to reload extensions).
 
-After committing both the checker and its sibling corpus-cleaning repository,
-prepare the portable app, Chrome extension, corpus tools and checksums with:
+## Security notes
 
-```powershell
-python prepare_release.py
-```
+- The extension talks only to `http://127.0.0.1:8377`; no data leaves the
+  machine except DBP dictionary queries and (when configured) LLM calls.
+- CORS is limited to the extension's origin — web pages you visit cannot
+  reach the local API or read configuration.
+- Secrets (GitHub PAT, LLM key, admin token) live in `%APPDATA%\tepat\.env`
+  only, are masked in the dashboard, and are never committed.
+- The admin token decides which machine may review flags and edit rules; it
+  is compared as a hash, never stored in the clear in code.
 
-The output is under `releases/v2.0.0-preview.1/`. Preparation reads the existing
-completed database and verifies Zip64 archives; it does not rebuild evidence or
-publish to GitHub. The app archive includes the database and the entire runtime.
+## Limitations
 
-Tests cover source counts, deduplication, prohibited negative/holdout ingestion,
-function words, single occurrence support, independent rule/Indonesian matching,
-short/digit forms, register/title contexts, Unicode offsets, span overlaps, API
-failure states, and PRPM parsing/cache failures. They verify engineering behavior,
-not comprehensive linguistic accuracy. Long-distance meaning, rare correct forms,
-uncaught Indonesian forms, new terminology and factual claims remain limitations.
+Grammar coverage is the settled Rule Book plus agent rules under review;
+long-distance meaning, rare correct forms, new terminology and factual claims
+remain out of scope. Every result needs human judgement.
