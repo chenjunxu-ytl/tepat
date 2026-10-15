@@ -14,6 +14,10 @@ the [install guide](INSTALL.md) and the
 
 <video src="https://github.com/user-attachments/assets/ec780231-113e-45ec-b950-d9ad0ca27652" controls="controls" muted="muted" style="max-width: 100%;"></video>
 
+**User guide** — every feature, step by step: check panel, highlights, deep check, flags:
+
+<video src="https://github.com/user-attachments/assets/25dea465-da0a-42cf-ad9d-d89c38bec74c" controls="controls" muted="muted" style="max-width: 100%;"></video>
+
 ## What it does
 
 - **Word-level checks** — DBP PRPM dictionary verification (rate-limited,
