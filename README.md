@@ -12,7 +12,7 @@ the [install guide](INSTALL.md) and the
 
 **Product overview** — what Tepat is and how it fits into the annotation workflow:
 
-assets/videos/tepat-promo.mp4
+<video src="https://github.com/chenjunxu-ytl/tepat/releases/download/v0.4.3/tepat-promo-v0.4.3.mp4" controls="controls" muted="muted" style="max-width: 100%;"></video>
 
 ## What it does
 
